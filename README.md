@@ -41,3 +41,7 @@ python main.py --keyword "백엔드 신입" --location 101000
 | `agent/graph.py` | LangGraph 흐름과 LLM 요약 |
 | `agent/saramin.py` | 사람인 API 호출 |
 | `agent/sheets.py` | 구글 시트 저장 |
+
+## 개발 문서
+
+요구사항, UML 설계, 테스트, 회고는 [docs/](docs/)에 버전별로 정리합니다.
