@@ -1,4 +1,5 @@
 """실행 예: python main.py --keyword "백엔드 신입" --location 101000"""
+
 import argparse
 
 from dotenv import load_dotenv

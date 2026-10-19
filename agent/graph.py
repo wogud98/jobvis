@@ -1,4 +1,5 @@
 """LangGraph 흐름: 공고 가져오기 -> 자격요건 요약(LLM) -> 시트 저장."""
+
 import os
 from typing import TypedDict
 
@@ -23,10 +24,17 @@ def fetch(state: State) -> State:
     return {"job": jobs[0]}
 
 
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "너는 채용공고를 정리하는 도우미야. 주어진 정보로 자격요건을 한국어 한 줄(60자 이내)로 요약해. 없는 내용은 지어내지 마."),
-    ("human", "직무: {title}\n경력: {experience}\n학력: {education}\n키워드: {keywords}"),
-])
+SYSTEM_PROMPT = (
+    "너는 채용공고를 정리하는 도우미야. 주어진 정보로 자격요건을 한국어 한 줄(60자 이내)로 요약해. "
+    "없는 내용은 지어내지 마."
+)
+
+prompt = ChatPromptTemplate.from_messages(
+    [
+        ("system", SYSTEM_PROMPT),
+        ("human", "직무: {title}\n경력: {experience}\n학력: {education}\n키워드: {keywords}"),
+    ]
+)
 
 
 def summarize(state: State) -> State:

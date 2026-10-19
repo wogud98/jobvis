@@ -1,4 +1,5 @@
 """사람인 오픈API에서 채용공고를 가져온다."""
+
 import os
 from datetime import datetime
 
