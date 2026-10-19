@@ -1,3 +1,6 @@
+import pytest
+import requests
+
 from agent import saramin
 
 SAMPLE_JOB = {
@@ -36,8 +39,7 @@ def test_fetch_jobs_sends_keyword_and_parses(monkeypatch):
     sent = {}
 
     class FakeResponse:
-        def raise_for_status(self):
-            pass
+        ok = True
 
         def json(self):
             return {"jobs": {"job": [SAMPLE_JOB]}}
@@ -55,3 +57,43 @@ def test_fetch_jobs_sends_keyword_and_parses(monkeypatch):
     assert sent["loc_mcd"] == "101000"
     assert sent["access-key"] == "test-key"
     assert rows[0]["company"] == "테스트회사"
+
+
+def _error_response(status: int, url: str) -> requests.Response:
+    resp = requests.Response()
+    resp.status_code = status
+    resp.reason = "Server Error"
+    resp.url = url
+    return resp
+
+
+def test_http_error_does_not_leak_api_key(monkeypatch):
+    monkeypatch.setenv("SARAMIN_API_KEY", "secret-key-123")
+
+    def fake_get(url, params, headers, timeout):
+        return _error_response(500, f"{url}?access-key={params['access-key']}&keywords=x")
+
+    monkeypatch.setattr(saramin.requests, "get", fake_get)
+
+    with pytest.raises(saramin.SaraminAPIError) as exc_info:
+        saramin.fetch_jobs("백엔드")
+
+    error = exc_info.value
+    assert "500" in str(error)
+    assert "secret-key-123" not in str(error)
+    assert error.__context__ is None
+
+
+def test_network_error_does_not_leak_api_key(monkeypatch):
+    monkeypatch.setenv("SARAMIN_API_KEY", "secret-key-123")
+
+    def fake_get(url, params, headers, timeout):
+        raise requests.ConnectionError(f"Max retries exceeded with url: /job-search?access-key={params['access-key']}")
+
+    monkeypatch.setattr(saramin.requests, "get", fake_get)
+
+    with pytest.raises(saramin.SaraminAPIError) as exc_info:
+        saramin.fetch_jobs("백엔드")
+
+    assert "secret-key-123" not in str(exc_info.value)
+    assert exc_info.value.__suppress_context__

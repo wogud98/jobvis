@@ -12,6 +12,7 @@ JOBVIS는 AI 코딩 에이전트와 함께 만듭니다. AI가 빠르게 코드�
 | 편집 직후 검사 | `.claude/hooks/check-python.sh` | AI가 파이썬 파일을 고치면 바로 포맷하고 린트. 문제가 있으면 AI에게 돌려줘 스스로 고치게 함 |
 | 세션 준비 | `.claude/hooks/session-start.sh` | 클라우드 AI 세션이 시작될 때 개발 도구 설치 |
 | CI | `.github/workflows/ci.yml` | PR마다 린트, 포맷, 테스트를 GitHub에서 자동 실행 |
+| 비밀정보 검사 | `.github/workflows/ci.yml` (gitleaks) | PR마다 커밋 기록 전체에서 API 키·토큰을 찾아 있으면 CI를 막음 |
 | PR 체크리스트 | `.github/pull_request_template.md` | 요구사항 → 설계 → 테스트 과정을 PR마다 확인 |
 
 ## 흐름
@@ -25,7 +26,7 @@ flowchart LR
     H -- 통과 --> T["pytest"]
     T -- 실패 --> E
     T -- 통과 --> P["PR"]
-    P --> C{"CI<br>lint · format · test"}
+    P --> C{"CI<br>lint · format · test · secrets"}
     C -- 실패 --> E
     C -- 통과 --> M["리뷰 후 머지"]
 ```

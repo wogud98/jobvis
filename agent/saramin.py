@@ -8,6 +8,10 @@ import requests
 API_URL = "https://oapi.saramin.co.kr/job-search"
 
 
+class SaraminAPIError(Exception):
+    """사람인 API 호출 실패. 메시지에 API 키가 담긴 요청 주소를 넣지 않는다."""
+
+
 def fetch_jobs(keyword: str, location: str | None = None, count: int = 1) -> list[dict]:
     params = {
         "access-key": os.environ["SARAMIN_API_KEY"],
@@ -17,8 +21,13 @@ def fetch_jobs(keyword: str, location: str | None = None, count: int = 1) -> lis
     }
     if location:
         params["loc_mcd"] = location  # 사람인 지역 코드 (예: 101000 = 서울)
-    resp = requests.get(API_URL, params=params, headers={"Accept": "application/json"}, timeout=10)
-    resp.raise_for_status()
+    # requests의 오류 메시지는 access-key가 붙은 전체 주소를 담으므로 원본 예외를 버리고 다시 던진다.
+    try:
+        resp = requests.get(API_URL, params=params, headers={"Accept": "application/json"}, timeout=10)
+    except requests.RequestException as e:
+        raise SaraminAPIError(f"사람인 API 연결 실패 ({type(e).__name__})") from None
+    if not resp.ok:
+        raise SaraminAPIError(f"사람인 API 오류 (HTTP {resp.status_code})")
     return [_to_row(job) for job in resp.json()["jobs"]["job"]]
 
 
