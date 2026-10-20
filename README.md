@@ -1,8 +1,8 @@
 # JOBVIS
 
 자비스에서 영감받은 AI 취업 비서입니다.
-키워드로 사람인 채용공고를 가져와 LLM(기본 Gemini)으로 자격요건을 요약하고, 구글 시트에 한 줄로 저장합니다.
-LangGraph로 `공고 가져오기 → 요약(LLM) → 시트 저장` 흐름을 만들었습니다.
+조건(키워드·지역·직무·경력)에 맞는 사람인 채용공고를 여러 건 가져와 LLM(기본 Gemini)으로 자격요건을 요약하고, 구글 시트에 저장합니다. 이미 저장한 공고는 건너뜁니다.
+LangGraph로 `공고 가져오기 → 중복 거르기 → (꺼내기 → 요약 → 저장) 반복` 흐름을 만들었습니다.
 
 ## 준비물
 
@@ -19,10 +19,18 @@ LangGraph로 `공고 가져오기 → 요약(LLM) → 시트 저장` 흐름을 �
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env    # 열어서 키와 시트 ID 입력
-python main.py --keyword "백엔드 신입" --location 101000
+python main.py --keyword 백엔드 --location 서울 --job 백엔드 --career 신입 --count 10
 ```
 
-`--location`은 사람인 지역 코드입니다(101000 = 서울). 빼면 전국에서 찾습니다.
+| 옵션 | 필수 | 값 |
+| --- | --- | --- |
+| `--keyword` | O | 검색어 |
+| `--location` | | 지역 이름 (서울, 경기, 부산 …). 빼면 전국 |
+| `--job` | | 직무 이름. 사람인 IT개발·데이터 이름 그대로 (백엔드, 프론트엔드, Python …) |
+| `--career` | | `신입` 또는 `경력`. 빼면 거르지 않음 |
+| `--count` | | 가져올 공고 수 1~110, 기본 10 |
+
+모르는 이름을 넣으면 비슷한 이름과 쓸 수 있는 이름 목록을 보여주고 멈춥니다. 끝나면 `가져옴 / 새로 저장 / 건너뜀 / 실패` 수를 출력합니다.
 
 ## 모델 바꾸기
 
@@ -37,10 +45,11 @@ python main.py --keyword "백엔드 신입" --location 101000
 
 | 파일 | 역할 |
 | --- | --- |
-| `main.py` | 실행 시 키워드·지역을 받음 |
+| `main.py` | 실행 옵션을 받고 결과 집계를 출력 |
+| `agent/codes.py` | 지역·직무 이름 → 사람인 코드, 경력 거르기 |
 | `agent/graph.py` | LangGraph 흐름과 LLM 요약 |
 | `agent/saramin.py` | 사람인 API 호출 |
-| `agent/sheets.py` | 구글 시트 저장 |
+| `agent/sheets.py` | 구글 시트 저장, 저장된 공고 ID 읽기 |
 
 ## 개발 문서
 

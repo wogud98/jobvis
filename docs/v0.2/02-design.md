@@ -43,12 +43,15 @@ flowchart LR
 classDiagram
     direction LR
     class main {
-        +main()
-        -print_report(result)
+        +main(argv)
+        +parse_args(argv) Namespace
+        +to_state(args) dict
+        +print_report(result)
     }
     class codes {
         +REGIONS: dict
         +JOBS: dict
+        +JOB_ALIASES: dict
         +CAREERS: tuple
         +to_region_code(name) str
         +to_job_code(name) str
@@ -60,6 +63,7 @@ classDiagram
         +pick(state) State
         +summarize(state) State
         +save(state) State
+        +recursion_limit(count) int
         +build_graph() CompiledGraph
     }
     class State {
@@ -83,6 +87,7 @@ classDiagram
     }
     class sheets {
         +HEADER: list
+        +V01_HEADER: list
         +existing_ids() set
         +append_row(values)
         -_sheet() Worksheet
@@ -250,7 +255,7 @@ python main.py --keyword 백엔드 --location 서울 --job 백엔드 --career �
 | 이름 → 코드 변환은 그래프 밖(main)에서 | 모르는 이름이면 API 호출 전에 멈춰야 함 (F11). 그래프는 코드만 받음 | - |
 | 직무 매핑은 IT개발·데이터 코드표 전체(약 260개) | 사용자 결정(2026-10-20). 골라 넣으면 빠지는 직무가 생기고 고르는 기준이 따로 필요함. 웹 화면 추천 검색어에도 그대로 씀 | 다른 분야가 필요할 때 |
 | 경력 조건이 있으면 110건 요청 후 거름 | API에 경력 조건이 없음 (F6). 호출 수는 그대로 1번 | - |
-| 실행할 때 `recursion_limit = count × 3 + 10` | LangGraph 기본 한도 25단계. 공고 1건에 3단계(pick, summarize, save)라 8건부터 멈춤 (fetch, dedupe 2 + 8×3 = 26) | - |
+| 실행할 때 `recursion_limit = count × 3 + 10` | 실제 단계 수는 fetch, dedupe 2 + 공고마다 3(pick, summarize, save) + 마지막 pick 1. 공고 수에 맞춰 한도를 좁게 잡아 흐름이 잘못 돌 때 AI 호출이 끝없이 이어지는 것을 막음. 구현 때 확인: 설치된 LangGraph 1.2.16의 기본 한도는 25가 아니라 10007 | - |
 | 시트 연결은 실행당 1번 열어서 재사용 | v0.1은 저장마다 새로 연결함. 110건이면 인증이 110번 일어남 | - |
 | 실패 기록에 예외 메시지 대신 예외 이름만 | 메시지에 키나 인증정보가 섞일 수 있음 (보안 규칙) | - |
 | 공고 0건이면 오류 대신 집계(모두 0)를 출력하고 정상 종료 | F10의 집계 형식을 항상 지키기 위함. v0.1의 SystemExit는 없앰 | - |
@@ -266,7 +271,7 @@ python main.py --keyword 백엔드 --location 서울 --job 백엔드 --career �
 | fetch | 경력 조건 있으면 110건 요청 후 count건 | 거른 결과가 count보다 적음 |
 | dedupe | 시트에 있는 ID는 skipped | 시트가 비어 있음 |
 | 그래프 전체 | 3건 중 1건 중복 → 저장 2, 건너뜀 1 | 요약 실패 1건, 저장 실패 1건이어도 나머지 계속. 가져옴 = 저장 + 건너뜀 + 실패 |
-| 그래프 전체 | 공고 0건 → 집계 모두 0 | count 110에서 recursion_limit 안 걸림 |
+| 그래프 전체 | 공고 0건 → 집계 모두 0 | count 110에서 recursion_limit 안 걸림, 한도보다 길게 돌면 멈춤 |
 | sheets | v0.1 제목 줄을 새 제목 줄로 교체 | 제목 줄 없으면 넣음 |
 
 ## 미확인
