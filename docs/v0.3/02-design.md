@@ -58,12 +58,12 @@ classDiagram
         +main(argv)
         +parse_args(argv) Namespace
         +to_state(args) dict
-        +run_collect(args)
+        +run_collect(state)
         +run_score(mode, profile)
         +run_gaps()
         +print_report(result)
         +print_score_report(result)
-        +print_gaps(top, excluded)
+        +print_gaps(top, used, excluded)
     }
     class graph {
         +fetch(state) State
@@ -110,6 +110,7 @@ classDiagram
     }
     class sheets {
         +HEADER: list
+        +KEYS: list
         +existing_ids() set
         +append_row(values)
         +read_rows() list
@@ -189,7 +190,7 @@ sequenceDiagram
     M->>SH: read_rows()
     SH-->>M: 모든 줄
     M->>GA: analyze(rows, top=10)
-    GA-->>M: 상위 기술 목록, 뺀 줄 수
+    GA-->>M: 상위 기술 목록, 분석한 줄 수, 뺀 줄 수
     M-->>U: 기술 / 가중 합 / 공고 수 표 (F20, F21)
 ```
 
@@ -319,6 +320,8 @@ stateDiagram-v2
 2. T열을 쉼표로 나누고, 이름마다 `strip().casefold()`를 키로 묶는다 (F19). 표시 이름은 처음 나온 모양을 쓴다.
 3. 키마다 (100 − 종합점수) / 100을 더하고, 나온 공고 수를 센다 (F18).
 4. 가중 합 내림차순, 같으면 공고 수 내림차순, 그다음 이름 순으로 상위 10개 (F20).
+5. 한 줄에 같은 기술이 두 번 나오면 한 번만 센다. "공고 수"가 공고 단위이기 때문이다.
+6. 종합점수 칸에 숫자가 아닌 값(사람이 고친 값 등)이 있으면 점수 없는 줄로 본다.
 
 ## 실행 옵션
 
