@@ -190,6 +190,30 @@ def test_same_posting_on_both_sites_keeps_the_first(monkeypatch, tmp_path):
     assert_counts_add_up(result)
 
 
+def test_same_company_with_different_legal_form_is_duplicate(monkeypatch, tmp_path):
+    # 2026-10-21 PC 수집: "(주)에스투더블유"(사람인)와 "㈜에스투더블유"(잡코리아),
+    # "텔레픽스(주)"와 "텔레픽스"가 두 줄로 저장됨
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {
+            "saramin": [make_job("saramin", "1", company="텔레픽스(주)", title="Foward Deployed Engineer (FDE)")],
+            "jobkorea": [
+                make_job("jobkorea", "7", company="㈜에스투더블유", title="FDE (AI Engineering)"),
+                make_job("jobkorea", "8", company="텔레픽스", title="Foward Deployed Engineer (FDE)"),
+            ],
+        },
+        existing=(set(), {(graph.sheets.normalize_company("(주)에스투더블유"), "fdeaiengineering")}),
+    )
+
+    result = run()
+
+    assert ids(result["saved"]) == [("saramin", "1")]
+    assert ids(result["skipped"]) == [("jobkorea", "7"), ("jobkorea", "8")]
+    assert "detail:jobkorea:8" not in fakes.requested
+    assert_counts_add_up(result)
+
+
 def test_career_and_location_filters(monkeypatch, tmp_path):
     Fakes(
         monkeypatch,
