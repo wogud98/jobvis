@@ -141,8 +141,24 @@ python -m pytest        # 448 passed (432 → 448)
 
 바꾼 기존 테스트: 평가 전이 기본으로 보이게 되어(F32) 카드 수 기대값을 2 → 3으로, 토글을 켜던 테스트는 켜지 않게, `Filters(..., True)`는 `scored_only` 뜻으로 바꾸고 토글 켠 경우를 더함. `tried` 칸을 쓰던 테스트 3개는 `can_use`로 바꿈(F36). 검사 조건을 약하게 바꾼 것은 없음.
 
+## 평가 줄과 카드 체크 확인 (F38, F39)
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 70 files already formatted
+python -m pytest        # 457 passed (448 → 457)
+```
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F38 | 평가 줄 버튼 두 개와 건수, 대상 라디오 없음, 차트 아래·카드 위, 두 버튼이 checked/all로 평가 시작 | `test_run_panel_shows_collect_and_score_cards`, `test_score_bar_sits_right_above_card_list`, `test_score_bar_buttons_start_score` | 통과 |
+| F39 | 체크 칸 처음 값 = 시트, 체크·해제하면 시트에 쓰고 건수가 바뀜, 쓰기 실패면 되돌리고 오류(경로 없음), `set_check`는 K열만, `with_checks`·`Card.checked` | `test_card_check_writes_sheet_and_updates_target_count`, `test_card_check_failure_shows_error_and_keeps_sheet_value`, `test_set_check_writes_check_column_only`, `test_card_checked_and_with_checks` | 통과 |
+
+`test_run_panel_shows_collect_and_score_cards`는 라디오를 바꾸던 부분을 버튼 두 개의 건수 확인으로 바꿨다(F38). 화면: 가짜 시트로 `streamlit run` 후 크로미움에서 카드 체크를 눌러 버튼 건수가 1 → 2건으로 바뀌는 것을 봄(`/mnt/project-files/screens/v0.5.2/bar-*.png`).
+
 ## 미확인
 
+- 실제 구글 시트에서 카드 체크가 "평가" 체크박스에 반영되는지, 체크 한 번에 걸리는 시간. 가짜 시트로만 봄.
 - 실제 Gemini가 추측 금지 규칙(F34)을 따라 주소를 희망 지역에 넣지 않는지. 재리 PC에서 같은 이력서로 다시 확인 필요.
 - 재리 PC의 예전 `profile.yaml`(`tried` 있음)을 화면에서 열고 저장한 결과. 테스트 파일로만 봄.
 - 윈도우 엣지·크롬에서 네오 브루탈리즘 CSS(`:has()`, 버튼 눌림 효과)가 같게 보이는지.

@@ -1,6 +1,6 @@
 # v0.5.2 설계
 
-기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F37, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
+기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F39, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
 
 사용자 결정(2026-10-21 "진행")으로 요구사항·설계·구현을 한 PR에 담았다. 수집·평가 그래프와 시트 열은 바뀌지 않는다. `profile.yaml`은 기술 칸 `tried`가 빠진다(F36, 예전 파일도 읽음).
 
@@ -17,9 +17,12 @@ classDiagram
         +print_report / print_score_report / print_inbox_report
     }
     class app {
-        +show_run_panel(rows)
+        +show_run_panel()
         +show_collect_card()
-        +show_score_card(rows)
+        +show_inbox_card()
+        +show_score_bar(rows)
+        +toggle_check(row)
+        +reload_rows()
         +show_live_job() fragment 1초
         +show_job_result()
         +show_resume_fill(values, fill)
@@ -74,6 +77,11 @@ classDiagram
         +Filters.scored_only
         +PREVIEW
         +preview(card, limit) str
+        +Card.checked
+        +with_checks(rows, checks) list
+    }
+    class sheets {
+        +set_check(row, checked)
     }
     class profile_form {
         +TAKEN_BY
@@ -98,6 +106,7 @@ classDiagram
     resume --> graph
     reports --> graph
     app --> view
+    app --> sheets
     app --> profile_form
     profile_form --> user_profile
     resume ..> LLM : init_chat_model(llm_model())
@@ -258,6 +267,36 @@ sequenceDiagram
     A-->>U: 다룰 수 있음 = 나머지 값 그대로
 ```
 
+## 평가 줄과 카드 체크 (F38, F39)
+
+배치: 수집 카드 → (받은함, 이미지 있을 때) → 진행·결과 → 요약 4칸 → 차트·필터 → **평가 줄** → 카드 목록.
+
+```mermaid
+sequenceDiagram
+    actor U as 사용자
+    participant A as app
+    participant V as view
+    participant S as sheets
+    U->>A: 카드 "평가" 체크
+    A->>S: set_check(줄, True) → "평가" 칸만 씀
+    alt 성공
+        A->>A: session_state["check_overrides"][줄] = True
+    else 실패
+        A->>A: 체크 key 지움(시트 값으로 다시), 오류 글 남김
+    end
+    A->>V: with_checks(읽어 둔 줄, overrides)
+    V-->>A: 체크를 덮은 줄
+    A->>A: score_targets(줄, checked/all) → 평가 줄 버튼 건수
+    U->>A: 🧮 체크한 공고 평가
+    A->>A: start_score("checked") → runner.start_score
+    A->>A: 끝나면 reload_rows(): 캐시·overrides·체크 key 지움
+```
+
+- 시트는 처음 한 번만 읽고 캐시한다(F7). 체크할 때마다 다시 읽으면 느려서, 바꾼 체크는 `check_overrides`에 두고 읽어 둔 줄에 덮는다. 시트에는 이미 썼으니 새로고침·실행 끝에 버린다.
+- 체크 칸 key는 `check-<줄>`. 처음 값은 `Card.checked`(시트 `TRUE`, 대소문자 무시, `scoring.select_targets`와 같은 규칙). 실패 때 key를 지워 시트 값으로 다시 그린다(값을 직접 넣지 않아 Streamlit 경고가 없음).
+- `sheets.set_check`는 `update_cells(줄, {"평가": bool})`. 평가가 끝난 줄은 `write_result`가 "평가" 칸을 비우므로 체크가 풀린다.
+- 제외 판정이나 공고 정보가 없는 줄도 체크는 된다. 대상 수에서 정보 없는 줄은 빠진다(F16 그대로).
+
 ## 필터 (F29, F30)
 
 - `view.Filters`의 빈 목록은 "거르지 않음". `apply`는 출처·경력 목록이 비어 있으면 그 조건을 건너뛴다.
@@ -285,7 +324,7 @@ sequenceDiagram
 | 파일 | 바뀐 것 |
 | --- | --- |
 | `main.py` | `to_state` → `runner.collect_state`, 실행 → `runner.collect/score/read_inbox`, 출력 → `reports` 줄을 그대로 print. 터미널 옵션·출력 글은 그대로 (F14) |
-| `app.py` | 실행 카드, 진행 막대, 결과, 이력서 칸. 사용법 글 (F15). 빈 시트 안내를 "위 수집 카드에서…"로 |
+| `app.py` | 평가 카드 → 목록 위 평가 줄, 카드 체크 칸 (F38, F39). 실행 카드, 진행 막대, 결과, 이력서 칸. 사용법 글 (F15). 빈 시트 안내를 "위 수집 카드에서…"로 |
 | `.streamlit/config.toml`, `app.py` CSS | 무채색 바탕 + 초록 포인트 (F23), 네오 브루탈리즘 (F28) |
 | `agent/user_profile.py`, `profile.example.yaml` | `skills.tried` 뺌, 예전 파일 읽기(`upgrade`), 프롬프트 "써 본 적 있음" 줄 뺌 (F36, F37) |
 | `agent/graph.py` | `llm_model()` (F33) |

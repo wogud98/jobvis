@@ -22,10 +22,13 @@ SCORE_FIELDS = ("기술", "경력", "문화", "방향")
 CHART_HEIGHT = 230  # 필터 카드 높이와 비슷하게 차트가 카드를 채우도록 (F21)
 ACCENT = "#059669"  # .streamlit/config.toml의 primaryColor와 같게
 FILL = "profile_fill"  # 이력서에서 채운 입력란 값 (session_state 키)
+CHECKS = "check_overrides"  # 화면에서 바꾼 평가 체크 {시트 줄: 체크} (v0.5.2 F39)
+CHECK_ERROR = "check_error"
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
 POSTINGS_GUIDE = """
-1. **수집** 카드에 키워드를 넣고 수집을 누른 뒤, **평가**를 누릅니다. 30건 수집은 몇 분 걸립니다.
+1. **수집** 카드에 키워드를 넣고 수집을 누릅니다. 30건 수집은 몇 분 걸립니다.
+   공고 카드의 **평가** 칸을 체크하고 목록 위 **🧮 체크한 공고 평가**를 누릅니다(평가 전 전부도 가능).
    터미널(`python main.py --keyword 백엔드`, `--score`)로 해도 결과는 같습니다.
 2. 카드는 종합점수 높은 순입니다.
    **자세히**를 누르면 요약, 항목별 점수, 강점·부족한 점, 원문 링크가 나옵니다.
@@ -121,6 +124,27 @@ def load_rows() -> list[dict]:
     return sheets.read_rows_readonly()
 
 
+def reload_rows() -> None:
+    """시트를 다시 읽게 한다. 화면에서 바꾼 체크는 시트에 이미 썼으니 버린다."""
+    load_rows.clear()
+    st.session_state.pop(CHECKS, None)
+    for key in [key for key in st.session_state if str(key).startswith("check-")]:
+        del st.session_state[key]
+
+
+def toggle_check(row: int) -> None:
+    """카드 체크 칸을 바꾸면 시트 "평가" 칸에 바로 쓴다 (v0.5.2 F39). 실패하면 체크를 되돌린다."""
+    key = f"check-{row}"
+    checked = bool(st.session_state.get(key))
+    try:
+        sheets.set_check(row, checked)
+    except Exception as e:  # 키·경로는 보이지 않는다
+        st.session_state.pop(key, None)  # 시트 값으로 다시 그림
+        st.session_state[CHECK_ERROR] = f"체크를 시트에 쓰지 못했습니다. {runner.error_text(e)}"
+        return
+    st.session_state.setdefault(CHECKS, {})[row] = checked
+
+
 def show_upload(card: view.Card) -> None:
     files = st.file_uploader(
         "공고 이미지 넣기 (끌어다 놓거나 파일 고르기)",
@@ -155,7 +179,12 @@ def show_card(card: view.Card) -> None:
     # 시트 글자(회사·직무 등)는 HTML로 넣기 전에 escape한다
     key = f"box-{'dim-' if card.dim else ''}card-{card.row}"  # 신뢰 낮음은 흐리게 (v0.5 F34, F5)
     with st.container(border=True, key=key):
-        score, head = st.columns([1, 7], vertical_alignment="center")
+        check, score, head = st.columns([0.7, 1, 7], vertical_alignment="center")
+        # 체크하면 시트 "평가" 칸에도 체크된다. 목록 위 평가 줄 버튼으로 평가 (v0.5.2 F38, F39)
+        check.checkbox(
+            "평가", value=card.checked, key=f"check-{card.row}", on_change=toggle_check, args=(card.row,),
+            disabled=runner.running(),
+        )  # fmt: skip
         number = "-" if card.score is None else str(card.score)  # F6
         score.markdown(
             f'<div class="jv-score">{number}</div><div class="jv-muted">{escape(card.stars)}</div>',
@@ -216,7 +245,7 @@ def show_live_job() -> None:
     if job is None:
         return
     if job.finished:
-        load_rows.clear()  # 끝나면 시트를 다시 읽는다 (F6, F9)
+        reload_rows()  # 끝나면 시트를 다시 읽는다 (F6, F9). 평가한 줄은 체크가 풀려 있다
         st.rerun(scope="app")
     st.progress(
         job.done / job.total if job.total else 0.0, text=f"{job.label} 중: {job.stage} ({job.done}/{job.total})"
@@ -286,38 +315,56 @@ def show_collect_card() -> None:
             start_job(runner.start_collect, state)
 
 
-def show_score_card(rows: list[dict] | None) -> None:
+def show_inbox_card() -> None:
+    """받은함은 수집 쪽 작업이라 수집 카드 아래에 둔다. 이미지가 있을 때만 (F10, v0.5.2 F38)."""
+    images = runner.inbox_count()
+    if not images:
+        return
+    with st.container(border=True, key="box-run-inbox"):
+        st.markdown(f"**받은함** <span class='jv-muted'>공고 이미지 {images}장</span>", unsafe_allow_html=True)
+        if not ocr.available():
+            st.info(f"OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")  # F11
+        elif st.button("🖼 받은함 읽기", disabled=runner.running(), key="run-inbox"):
+            start_job(runner.start_inbox)
+
+
+def start_score(mode: str) -> None:
+    try:
+        profile = runner.load_profile(PROFILE)  # 없거나 틀리면 실행하지 않음 (F8)
+    except user_profile.ProfileError as e:
+        st.error(f"{e}\n\n프로필 탭에서 입력하고 저장해 주세요.")
+        return
+    start_job(runner.start_score, mode, profile)
+
+
+def show_score_bar(rows: list[dict]) -> None:
+    """공고 목록 바로 위 평가 줄 (v0.5.2 F38). 카드에서 체크하고 바로 누른다."""
     busy = runner.running()
-    with st.container(border=True, key="box-run-score"):
-        st.markdown("**평가** <span class='jv-muted'>저장된 프로필로 LLM 채점</span>", unsafe_allow_html=True)
-        modes = {"체크한 공고": "checked", "점수 없는 공고 전부": "all"}
-        mode = modes[st.radio("대상", list(modes), horizontal=True, label_visibility="collapsed")]
-        targets = "-" if rows is None else runner.score_targets(rows, mode)
-        if st.button(
-            f"🧮 평가 (대상 {targets}건)", disabled=busy or not targets, key="run-score", use_container_width=True
-        ):
-            try:
-                profile = runner.load_profile(PROFILE)  # 없거나 틀리면 실행하지 않음 (F8)
-            except user_profile.ProfileError as e:
-                st.error(f"{e}\n\n프로필 탭에서 입력하고 저장해 주세요.")
-                return
-            start_job(runner.start_score, mode, profile)
-
-        images = runner.inbox_count()
-        if images:  # 받은함에 이미지가 있을 때만 (F10)
-            st.markdown(f"**받은함** <span class='jv-muted'>이미지 {images}장</span>", unsafe_allow_html=True)
-            if not ocr.available():
-                st.info(f"OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")  # F11
-            elif st.button("🖼 받은함 읽기", disabled=busy, key="run-inbox", use_container_width=True):
-                start_job(runner.start_inbox)
+    checked, unscored = runner.score_targets(rows, "checked"), runner.score_targets(rows, "all")
+    with st.container(border=True, key="box-score-bar"):
+        note, left, right = st.columns([2, 1.2, 1.2], vertical_alignment="center")
+        note.markdown(
+            "**평가** <span class='jv-muted'>카드의 평가 칸을 체크하고 누릅니다. 저장된 프로필로 LLM 채점</span>",
+            unsafe_allow_html=True,
+        )
+        if left.button(
+            f"🧮 체크한 공고 평가 ({checked}건)", type="primary", disabled=busy or not checked,
+            key="run-score", use_container_width=True,
+        ):  # fmt: skip
+            start_score("checked")
+        if right.button(
+            f"평가 전 전부 평가 ({unscored}건)", disabled=busy or not unscored,
+            key="run-score-all", use_container_width=True,
+        ):  # fmt: skip
+            start_score("all")
+        error = st.session_state.pop(CHECK_ERROR, None)
+        if error:
+            st.error(error)
 
 
-def show_run_panel(rows: list[dict] | None) -> None:
-    left, right = st.columns([2, 1])
-    with left:
-        show_collect_card()
-    with right:
-        show_score_card(rows)
+def show_run_panel() -> None:
+    show_collect_card()
+    show_inbox_card()
     if runner.running():
         show_live_job()
     show_job_result()
@@ -329,7 +376,7 @@ def show_postings() -> None:
         rows, error = load_rows(), None
     except Exception as e:
         rows, error = None, e
-    show_run_panel(rows)
+    show_run_panel()
     if error is not None:
         st.error(view.error_message(error))  # v0.5 F9
         return
@@ -337,6 +384,7 @@ def show_postings() -> None:
         st.info("공고 없음, 위 수집 카드에서 키워드를 넣고 수집하세요.")  # v0.5 F10
         return
 
+    rows = view.with_checks(rows, st.session_state.get(CHECKS, {}))  # 화면에서 바꾼 체크 (F39)
     items = view.cards(rows)
     for index, (column, (label, value, note)) in enumerate(zip(st.columns(4), view.summary(items), strict=True)):
         with column.container(border=True, key=f"box-summary-{index}"):  # 칸마다 색 (F28)
@@ -369,6 +417,7 @@ def show_postings() -> None:
         else:
             st.caption("점수 있는 공고가 없습니다.")
 
+    show_score_bar(rows)  # 목록 바로 위. 대상 수는 필터와 상관없이 전체 시트 기준 (F38)
     st.caption(f"{len(shown)}건 / 전체 {len(items)}건")
     for card in shown:
         show_card(card)
@@ -540,7 +589,7 @@ def main() -> None:
         unsafe_allow_html=True,
     )  # F20
     if refresh.button("🔄 새로고침", use_container_width=True):
-        load_rows.clear()
+        reload_rows()
     postings_tab, profile_tab = st.tabs(["📋 공고", "👤 프로필"])  # v0.5 F1
     with postings_tab:
         show_postings()

@@ -173,9 +173,9 @@ def test_run_panel_shows_collect_and_score_cards(app):
 
     assert not at.exception
     assert at.button(key="run-collect").label == "🔎 수집"  # F1
-    assert at.button(key="run-score").label == "🧮 평가 (대상 1건)"  # 체크한 공고 (F7)
-    next(r for r in at.radio if r.label == "대상").set_value("점수 없는 공고 전부").run()
-    assert at.button(key="run-score").label == "🧮 평가 (대상 2건)"  # --score all (F7)
+    assert at.button(key="run-score").label == "🧮 체크한 공고 평가 (1건)"  # 체크한 공고 (F7)
+    assert at.button(key="run-score-all").label == "평가 전 전부 평가 (2건)"  # --score all (F7)
+    assert not [r for r in at.radio if r.label == "대상"]  # 수집 옆 평가 카드 없음 (v0.5.2 F38)
     keyword = next(s for s in at.selectbox if s.label == "키워드 *")
     assert set(runner.JOB_NAMES) <= set(keyword.options)  # 직무 이름이 추천 검색어 (F3)
     assert any("**수집** 카드에 키워드를 넣고" in m.value for m in at.markdown)  # 사용법 (F15)
@@ -395,3 +395,59 @@ def test_skill_in_main_cannot_be_picked_in_can_use(app, tmp_path):
     at.button(key="profile-save").click().run()
     saved = yaml.safe_load((tmp_path / "profile.yaml").read_text(encoding="utf-8"))
     assert saved["skills"] == {"main": ["Python", "Git"], "can_use": ["Docker", "Java"], "certificates": []}
+
+
+# ---- v0.5.2 평가 줄과 카드 체크 ----
+
+
+def test_card_check_writes_sheet_and_updates_target_count(app, monkeypatch):
+    written = []
+    monkeypatch.setattr(sheets, "set_check", lambda row, checked: written.append((row, checked)))
+    at = app([scorable(2), scorable(3, check="TRUE")])
+    assert [c.value for c in at.checkbox if c.key.startswith("check-")] == [False, True]  # 시트 체크 그대로
+
+    at.checkbox(key="check-2").check().run()
+
+    assert written == [(2, True)]  # 시트 "평가" 칸에 바로 씀 (F39)
+    assert at.button(key="run-score").label == "🧮 체크한 공고 평가 (2건)"  # 시트를 다시 읽지 않고 맞춤
+    at.checkbox(key="check-3").uncheck().run()
+    assert written[-1] == (3, False)
+    assert at.button(key="run-score").label == "🧮 체크한 공고 평가 (1건)"
+
+
+def test_card_check_failure_shows_error_and_keeps_sheet_value(app, monkeypatch):
+    def broken(row, checked):
+        raise FileNotFoundError("C:/secret/service_account.json")
+
+    monkeypatch.setattr(sheets, "set_check", broken)
+    at = app([scorable(2)])
+
+    at.checkbox(key="check-2").check().run()
+
+    assert not at.exception
+    assert "체크를 시트에 쓰지 못했습니다" in at.error[0].value and "secret" not in at.error[0].value
+    assert at.checkbox(key="check-2").value is False  # 되돌림
+    assert at.button(key="run-score").label == "🧮 체크한 공고 평가 (0건)"
+
+
+@pytest.mark.parametrize(("key", "mode"), [("run-score", "checked"), ("run-score-all", "all")])
+def test_score_bar_buttons_start_score(app, monkeypatch, tmp_path, key, mode):
+    started = []
+    monkeypatch.setattr(runner, "start_score", lambda mode, profile: started.append(mode))
+    text = "skills: {main: [Python]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
+    at = app([scorable(2, check="TRUE"), scorable(3)])
+
+    at.button(key=key).click().run()
+
+    assert started == [mode]  # F38
+
+
+def test_score_bar_sits_right_above_card_list(app):
+    at = app([scorable(2)])
+
+    texts = [m.value for m in at.markdown]
+    bar = next(i for i, v in enumerate(texts) if v.startswith("**평가**"))
+    first_card = next(i for i, v in enumerate(texts) if "회사2" in v)
+    chart = next(i for i, v in enumerate(texts) if v == "**종합점수**")
+    assert chart < bar < first_card  # 차트·필터 아래, 카드 바로 위 (F38)

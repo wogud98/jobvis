@@ -197,6 +197,11 @@ def update_cells(row_number: int, changes: dict) -> None:
     _sheet().batch_update(data)
 
 
+def set_check(row_number: int, checked: bool) -> None:
+    """화면 카드의 체크 칸을 "평가" 열 체크박스에 쓴다 (v0.5.2 F39). 다른 칸은 건드리지 않는다."""
+    update_cells(row_number, {"평가": bool(checked)})
+
+
 def _span(row_number: int, first: int, last: int) -> str:
     return f"{gspread.utils.rowcol_to_a1(row_number, first)}:{gspread.utils.rowcol_to_a1(row_number, last)}"
 
