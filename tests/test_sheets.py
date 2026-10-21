@@ -34,6 +34,8 @@ class FakeWorksheet:
 
     def append_row(self, values):
         self.rows.append(values)
+        number = len(self.rows)
+        return {"updates": {"updatedRange": f"'시트1'!A{number}:AC{number}"}}  # gspread 응답 모양
 
     def get_all_values(self):
         return [list(row) for row in self.rows]
@@ -88,14 +90,17 @@ def test_existing_keys_reads_ids_and_names_and_treats_blank_source_as_saramin(wo
             ["회사", "직무", "요약", "마감", "url"],  # v0.1 줄: ID 없음
             ["(주)가나다", "백엔드 개발자 [신입]", "요약", "마감", "url", "123", "시각"],  # v0.3까지: 출처 없음
             ["라마바", "AI Engineer", "", "마감", "url", "77", "시각", "신입", "", "", "FALSE", *blank, "잡코리아"],
+            ["마바사", "FDE", "", "마감", "url", "88", "시각", "신입", "", "", "FALSE", *blank, "", "", "본문 미확보"],
         ]
     )
 
-    ids, names = sheets.existing_keys()
+    ids, names, missing = sheets.existing_keys()
 
-    assert ids == {("saramin", "123"), ("jobkorea", "77")}
+    assert ids == {("saramin", "123"), ("jobkorea", "77"), ("saramin", "88")}
     # 공백·기호를 지우고 소문자로 비교 (F9). 회사명의 "(주)"는 통째로 지운다.
-    assert names == {("회사", "직무"), ("가나다", "백엔드개발자신입"), ("라마바", "aiengineer")}
+    assert names == {("회사", "직무"), ("가나다", "백엔드개발자신입"), ("라마바", "aiengineer"), ("마바사", "fde")}
+    # 본문 미확보 줄은 다른 사이트 본문으로 채울 수 있게 줄 번호와 함께 (v0.5 F46)
+    assert missing == {("마바사", "fde"): {"row": 5, "source": "saramin", "id": "88"}}
 
 
 def test_normalize_drops_spaces_symbols_and_case():
@@ -211,19 +216,78 @@ def test_write_result_writes_summary_result_and_body_summary_columns_only(worksh
     values = [False, 71, "★★★★☆", "추천", 72, 60, "-", 80, "강점", "Docker", "2026-10-20 09:00"]
     extra = ["API 개발", "AWS 경험", "Java, Spring"]
 
-    sheets.write_result(5, "신입, Java 필수", values, extra)
+    sheets.write_result(5, "신입, Java 필수", values, extra, ["높음", "경력 75→60 (3년 요구, 2년)"])
 
     # 수집 칸인 V–X(출처·지역·본문)는 건드리지 않는다
     assert sheet.updates == [
         {"range": "C5", "values": [["신입, Java 필수"]]},
         {"range": "K5:U5", "values": [values]},
         {"range": "Y5:AA5", "values": [extra]},
+        {"range": "AB5:AC5", "values": [["높음", "경력 75→60 (3년 요구, 2년)"]]},
     ]
 
 
+def test_write_result_for_excluded_row_keeps_summary_and_body_summary(worksheet):
+    sheet, _ = worksheet([sheets.HEADER])
+    values = [False, "", "", "제외 (경력 요구)", "", "", "", "", "", "", "2026-10-21 09:00"]
+
+    sheets.write_result(5, None, values, None, ["", ""])
+
+    assert sheet.updates == [
+        {"range": "K5:U5", "values": [values]},
+        {"range": "AB5:AC5", "values": [["", ""]]},
+    ]
+
+
+def test_v04_header_is_extended_without_new_checkbox_rule(worksheet):
+    sheet, _ = worksheet([sheets.V04_HEADER])
+
+    sheets.read_rows()
+
+    assert sheet.rows[0] == sheets.HEADER
+    assert sheet.spreadsheet.requests == []
+
+
+def test_append_row_returns_row_number(worksheet):
+    worksheet([sheets.HEADER, ["a"] * 7])
+
+    assert sheets.append_row(["b"] * 7) == 3
+
+
+def test_append_row_without_range_in_response_returns_none(worksheet, monkeypatch):
+    sheet, _ = worksheet([sheets.HEADER])
+    monkeypatch.setattr(sheet, "append_row", lambda values: None)
+
+    assert sheets.append_row(["b"] * 7) is None
+
+
+def test_update_cells_writes_named_columns_only(worksheet):
+    sheet, _ = worksheet([sheets.HEADER])
+
+    sheets.update_cells(7, {"본문": "글자+이미지", "평가": True, "출처": "잡코리아"})
+
+    assert sheet.updates == [
+        {"range": "X7", "values": [["글자+이미지"]]},
+        {"range": "K7", "values": [[True]]},
+        {"range": "V7", "values": [["잡코리아"]]},
+    ]
+
+
+def test_read_rows_readonly_does_not_touch_old_header(worksheet):
+    old_row = ["회사", "직무", "요약", "2026-11-01", "url", "1", "시각"]
+    sheet, _ = worksheet([sheets.V02_HEADER, old_row])
+
+    rows = sheets.read_rows_readonly()
+
+    assert sheet.rows[0] == sheets.V02_HEADER  # 화면은 시트에 쓰지 않는다 (v0.5 F8)
+    assert sheet.spreadsheet.requests == []
+    assert rows[0]["company"] == "회사" and rows[0]["trust"] == ""
+
+
 def test_header_and_keys_line_up():
-    assert len(sheets.HEADER) == len(sheets.KEYS) == 27
+    assert len(sheets.HEADER) == len(sheets.KEYS) == 29
     assert sheets.HEADER[sheets.KEYS.index("gaps")] == "부족한점"
     assert sheets.HEADER[sheets.KEYS.index("check")] == "평가"
-    assert sheets.HEADER[21:] == ["출처", "지역", "본문", "주요업무", "우대사항", "기술스택"]  # V–AA
+    assert sheets.HEADER[21:27] == ["출처", "지역", "본문", "주요업무", "우대사항", "기술스택"]  # V–AA
+    assert sheets.HEADER[27:] == ["신뢰", "보정"]  # AB–AC (v0.5 F32)
     assert sheets.HEADER[sheets.KEYS.index("body")] == "본문"

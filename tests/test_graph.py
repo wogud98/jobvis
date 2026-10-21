@@ -25,7 +25,7 @@ def make_job(source: str, job_id: str, **changes) -> dict:
 class Fakes:
     """사이트 모듈, crawler, OCR, 시트를 가짜로 바꾼다. 실제 요청 없음."""
 
-    def __init__(self, monkeypatch, tmp_path, lists, details=None, existing=((), ()), fail_save_ids=()):
+    def __init__(self, monkeypatch, tmp_path, lists, details=None, existing=((), (), {}), fail_save_ids=()):
         self.lists = lists  # 출처 -> 공고 목록 또는 예외
         self.details = details or {}  # 공고ID -> Detail 또는 예외
         self.images = {}  # 이미지 주소 -> bytes 또는 예외
@@ -34,6 +34,7 @@ class Fakes:
         self.requested = []
         self.ocr_read = []
         self.rows = []
+        self.updated = []  # (줄 번호, 바꾼 칸)
         self.fail_save_ids = set(fail_save_ids)
         self.search_filters = {}
 
@@ -68,14 +69,21 @@ class Fakes:
             if row[5] in self.fail_save_ids:
                 raise ConnectionError("시트 연결 끊김")
             self.rows.append(row)
+            return len(self.rows) + 1  # 제목 줄 다음부터
+
+        def fake_update(row_number, changes):
+            self.updated.append((row_number, changes))
 
         monkeypatch.setattr(graph.crawler, "get_text", fake_get_text)
         monkeypatch.setattr(graph.crawler, "get_bytes", fake_get_bytes)
         monkeypatch.setattr(graph.ocr, "read", fake_read)
         monkeypatch.setattr(graph.ocr, "size", lambda image: self.sizes.get(image, (800, 1200)))
         monkeypatch.setattr(graph.postings, "DIR", tmp_path / "postings")
-        monkeypatch.setattr(graph.sheets, "existing_keys", lambda: (set(existing[0]), set(existing[1])))
+        monkeypatch.setattr(
+            graph.sheets, "existing_keys", lambda: (set(existing[0]), set(existing[1]), dict(existing[2]))
+        )
         monkeypatch.setattr(graph.sheets, "append_row", fake_append)
+        monkeypatch.setattr(graph.sheets, "update_cells", fake_update)
         # 수집은 LLM을 부르지 않는다 (N7)
         monkeypatch.setattr(graph, "init_chat_model", lambda *a, **k: pytest.fail("수집에서 LLM을 부르면 안 됨"))
 
@@ -112,7 +120,7 @@ def ids(jobs):
 def assert_counts_add_up(result):
     # OCR 실패는 줄을 저장한 채 실패 목록에만 남으므로 셈에서 뺀다. 목록 실패는 공고가 없다.
     failed = [f for f in result.get("failed", []) if f["step"] not in ("OCR", "목록")]
-    total = len(result.get("saved", [])) + len(result.get("skipped", [])) + len(failed)
+    total = len(result.get("saved", [])) + len(result.get("skipped", [])) + len(failed) + len(result.get("filled", []))
     assert sum(result["fetched"].values()) == total
 
 
@@ -156,7 +164,7 @@ def test_duplicate_by_source_id_skips_detail_request(monkeypatch, tmp_path):
         monkeypatch,
         tmp_path,
         {"saramin": [make_job("saramin", "1"), make_job("saramin", "2", title="다른 공고")], "jobkorea": []},
-        existing=({("saramin", "1"), ("jobkorea", "2")}, set()),
+        existing=({("saramin", "1"), ("jobkorea", "2")}, set(), {}),
     )
     fakes.lists["jobkorea"] = [make_job("jobkorea", "3", title="또 다른 공고")]
 
@@ -179,13 +187,14 @@ def test_same_posting_on_both_sites_keeps_the_first(monkeypatch, tmp_path):
                 make_job("jobkorea", "8", company="라마바", title="Backend"),
             ],
         },
-        existing=(set(), {("라마바", "backend")}),  # 시트에 이미 있는 회사+제목 (대소문자 무시)
+        existing=(set(), {("라마바", "backend")}, {}),  # 시트에 이미 있는 회사+제목 (대소문자 무시)
     )
 
     result = run()
 
     assert ids(result["saved"]) == [("saramin", "1")]
-    assert ids(result["skipped"]) == [("jobkorea", "7"), ("jobkorea", "8")]
+    # 7은 이번 실행 중복이라 앞 공고 저장 뒤(본문 있음) 건너뛰고, 8은 시트 중복이라 바로 건너뛴다
+    assert sorted(ids(result["skipped"])) == [("jobkorea", "7"), ("jobkorea", "8")]
     assert "detail:jobkorea:7" not in fakes.requested
     assert_counts_add_up(result)
 
@@ -203,7 +212,7 @@ def test_same_company_with_different_legal_form_is_duplicate(monkeypatch, tmp_pa
                 make_job("jobkorea", "8", company="텔레픽스", title="Foward Deployed Engineer (FDE)"),
             ],
         },
-        existing=(set(), {(graph.sheets.normalize_company("(주)에스투더블유"), "fdeaiengineering")}),
+        existing=(set(), {(graph.sheets.normalize_company("(주)에스투더블유"), "fdeaiengineering")}, {}),
     )
 
     result = run()
@@ -529,3 +538,111 @@ def test_posting_status_constants_match_sheet_values():
         "이미지 일부 못 읽음",
         "본문 미확보",
     }
+
+
+# ---- 다른 사이트 본문으로 채우기 (v0.5 F46) ----
+
+
+def _missing_row(company="회사1", title="백엔드 개발자", row=5, source="saramin", job_id="1"):
+    name = (graph.sheets.normalize_company(company), graph.sheets.normalize(title))
+    return {name: {"row": row, "source": source, "id": job_id}}
+
+
+def test_missing_row_in_sheet_is_replaced_by_other_site_posting(monkeypatch, tmp_path):
+    old = tmp_path / "postings" / "saramin_1.txt"
+    old.parent.mkdir(parents=True)
+    old.write_text("짧은 본문", encoding="utf-8")
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"jobkorea": [make_job("jobkorea", "2", company="회사1", education="대졸")]},
+        existing=({("saramin", "1")}, set(_missing_row()), _missing_row()),
+    )
+
+    result = run(sources=("jobkorea",))
+
+    assert result["filled"] == [{"source": "jobkorea", "company": "회사1", "title": "백엔드 개발자"}]
+    assert fakes.rows == []  # 새 줄은 만들지 않는다
+    row_number, changes = fakes.updated[0]
+    assert row_number == 5
+    assert changes == {
+        "링크": "https://jobkorea.test/2",
+        "공고ID": "2",
+        "마감일": "2026-11-01",
+        "경력": "신입",
+        "출처": "잡코리아",
+        "지역": "서울 강남구",
+        "본문": "글자",
+        "평가": True,
+        "학력": "대졸",
+    }
+    assert not old.exists()  # 예전 원문은 지운다
+    assert (tmp_path / "postings" / "jobkorea_2.txt").read_text(encoding="utf-8") == LONG
+    assert_counts_add_up(result)
+
+
+def test_missing_row_stays_when_new_body_is_also_missing(monkeypatch, tmp_path):
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"jobkorea": [make_job("jobkorea", "2", company="회사1")]},
+        details={"2": Detail("짧음")},
+        existing=({("saramin", "1")}, set(_missing_row()), _missing_row()),
+    )
+
+    result = run(sources=("jobkorea",))
+
+    assert ids(result["skipped"]) == [("jobkorea", "2")]
+    assert fakes.updated == [] and fakes.rows == []
+    assert not (tmp_path / "postings" / "jobkorea_2.txt").exists()
+    assert_counts_add_up(result)
+
+
+def test_same_run_second_site_fills_first_missing_posting(monkeypatch, tmp_path):
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": [make_job("saramin", "1")], "jobkorea": [make_job("jobkorea", "2", company="회사1")]},
+        details={"1": Detail("이미지뿐인 공고")},
+    )
+
+    result = run()
+
+    assert ids(result["saved"]) == [("saramin", "1")]
+    assert len(fakes.rows) == 1
+    assert fakes.updated[0][0] == 2  # 방금 붙인 줄 번호
+    assert fakes.updated[0][1]["출처"] == "잡코리아"
+    assert len(result["filled"]) == 1
+    assert not (tmp_path / "postings" / "saramin_1.txt").exists()
+    assert (tmp_path / "postings" / "jobkorea_2.txt").exists()
+    assert_counts_add_up(result)
+
+
+def test_same_run_second_site_is_skipped_when_first_has_body(monkeypatch, tmp_path):
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": [make_job("saramin", "1")], "jobkorea": [make_job("jobkorea", "2", company="회사1")]},
+    )
+
+    result = run()
+
+    assert ids(result["skipped"]) == [("jobkorea", "2")]
+    assert "detail:jobkorea:2" not in fakes.requested
+    assert fakes.updated == []
+    assert_counts_add_up(result)
+
+
+def test_same_run_second_site_is_saved_when_first_detail_fails(monkeypatch, tmp_path):
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": [make_job("saramin", "1")], "jobkorea": [make_job("jobkorea", "2", company="회사1")]},
+        details={"1": crawler.CrawlError("www.saramin.co.kr 연결 실패 (Timeout)")},
+    )
+
+    result = run()
+
+    assert ids(result["saved"]) == [("jobkorea", "2")]
+    assert fakes.rows[0][5] == "2"
+    assert_counts_add_up(result)

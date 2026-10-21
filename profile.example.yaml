@@ -1,0 +1,31 @@
+# 내 프로필 (예시)
+# 이 파일을 profile.yaml 로 복사해서 내 내용으로 바꿔 주세요. profile.yaml 은 개인정보라 커밋되지 않습니다.
+# 화면(streamlit run app.py)의 프로필 탭에서 입력해도 됩니다.
+# 칸은 채점 항목(기술, 경력, 방향, 문화)에 맞춘 것입니다. 필수 칸: skills.main, experience.years, direction.jobs
+
+# 기술 점수에 씀
+skills:
+  main: [Python, SQL]          # 주력 (1개 이상 필수)
+  can_use: [Java, Git, Linux]  # 다룰 수 있음
+  tried: [Docker, FastAPI]     # 써 본 적 있음
+  certificates: [정보처리기사]  # 자격증
+
+# 경력 점수에 씀
+experience:
+  years: 0                     # 경력 연수, 신입은 0 (필수)
+  projects:
+    - LangGraph로 채용공고 수집·평가 에이전트 개발 (JOBVIS)
+  degree: 대학교 졸업(4년), 컴퓨터공학   # 최종 학력과 전공
+  training:
+    - ○○ 부트캠프 백엔드 과정 수료
+
+# 방향 점수에 씀
+direction:
+  jobs: [백엔드 개발, AI 서비스 개발]   # 희망 직무 (1개 이상 필수)
+  goals: LLM을 활용한 서비스 개발, API 서버 설계
+  locations: [서울, 경기]       # 희망 근무 지역
+
+# 문화 점수에 씀 (비워도 됨)
+culture:
+  - 코드 리뷰와 문서화를 하는 팀
+  - 신입 교육이나 멘토링이 있는 곳

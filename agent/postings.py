@@ -60,6 +60,20 @@ def compose(text: str, ocr_texts: list[str]) -> str:
     return f"{text}\n\n{OCR_MARK}\n{ocr}" if ocr else text
 
 
+def split(content: str) -> tuple[str, list[str]]:
+    """원문을 글자 본문과 이미지 글자로 나눈다. compose의 반대."""
+    text, mark, ocr = content.partition(f"\n\n{OCR_MARK}\n")
+    if not mark and content.startswith(f"{OCR_MARK}\n"):  # 글자 본문이 빈 원문
+        text, ocr = "", content[len(OCR_MARK) + 1 :]
+    return text, [ocr] if ocr.strip() else []
+
+
+def add_ocr(content: str | None, texts: list[str]) -> str:
+    """원문의 이미지 글자 뒤에 새로 읽은 글자를 붙인다. 원문이 없으면 글자 본문은 빈칸 (v0.5 F39)."""
+    text, ocr = split(content or "")
+    return compose(text, ocr + texts)
+
+
 def save(source: str, job_id: str, content: str) -> None:
     DIR.mkdir(parents=True, exist_ok=True)
     path(source, job_id).write_text(content, encoding="utf-8")
@@ -68,6 +82,10 @@ def save(source: str, job_id: str, content: str) -> None:
 def load(source: str, job_id: str) -> str | None:
     file = path(source, job_id)
     return file.read_text(encoding="utf-8") if file.exists() else None
+
+
+def remove(source: str, job_id: str) -> None:
+    path(source, job_id).unlink(missing_ok=True)
 
 
 def status(text: str, ocr_texts: list[str], unread: int) -> str:

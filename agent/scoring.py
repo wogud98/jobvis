@@ -1,13 +1,25 @@
-"""적합도: LLM 응답 검증, 종합 점수·별점·판정 계산, 평가할 줄 고르기."""
+"""적합도: LLM 응답 검증, 종합 점수·별점·판정 계산, 점수 보정, 평가할 줄 고르기."""
 
 import math
+from dataclasses import dataclass
 
 from langchain_core.output_parsers import JsonOutputParser
 from pydantic import BaseModel, Field, field_validator
 
+from agent import postings
+
 # ai-job-search 원본 가중치 (F11)
 WEIGHTS = {"skills": 30, "experience": 25, "culture": 15, "career": 30}
 MAX_ITEMS = 3  # 강점·부족한 점 최대 개수 (F9)
+
+# 점수 보정 (v0.5 F26–F29). 부족 연수 → 경력점수 상한. 3년 이상 부족은 모두 30.
+EXPERIENCE_CAPS = {1: 60, 2: 45, 3: 30}
+CAP_SHORT = 79  # 경력이 부족한 공고의 종합 상한 (F27)
+CAP_LOW_TRUST = 69  # 신뢰 낮음 공고의 종합 상한 (F29)
+EXCLUDED = "제외 (경력 요구)"  # 신입 제외 판정 (F36)
+
+# "신뢰" 열 값 (F28)
+HIGH, MEDIUM, LOW = "높음", "보통", "낮음"
 
 
 class Evaluation(BaseModel):
@@ -22,6 +34,8 @@ class Evaluation(BaseModel):
     duties: str = ""
     preferred: str = ""
     stack: str = ""
+    # 공고가 요구하는 최소 경력 연수 (v0.5 F25). 신입·무관은 0, 공고에 없거나 빠지면 null
+    required_years: int | None = Field(default=None, ge=0)
 
     @field_validator("summary")
     @classmethod
@@ -73,12 +87,64 @@ def stars(score: int) -> str:
     return "★" * filled + "☆" * (5 - filled)
 
 
+def trust(body: str, with_body: bool) -> str:
+    """원문으로 채점하지 못했으면 낮음, 이미지 일부 못 읽음이면 보통, 나머지는 높음 (F28)."""
+    if not with_body:
+        return LOW
+    return MEDIUM if body == postings.PARTLY_UNREAD else HIGH
+
+
+def excluded(experience: str, years: int) -> bool:
+    """신입(0년)인데 경력 칸에 신입·무관이 없으면 평가하지 않는다. 경력 칸이 비면 평가한다 (F36)."""
+    text = experience.strip()
+    return years == 0 and bool(text) and "신입" not in text and "무관" not in text
+
+
+@dataclass
+class Adjusted:
+    experience: int
+    total: int
+    stars: str
+    verdict: str
+    note: str  # "보정" 열 문구 (F32). 적용한 것이 없으면 빈칸
+
+
+def adjust(evaluation: Evaluation, years: int, trust_level: str) -> Adjusted:
+    """경력 상한 → 종합점수 → 종합 상한 → 별점·판정 순서로 계산한다 (F35)."""
+    notes = []
+    experience = evaluation.experience
+    required = evaluation.required_years
+    short = 0 if required is None else required - years
+    if short >= 1:
+        cap = EXPERIENCE_CAPS[min(short, 3)]
+        if experience > cap:  # LLM 점수가 상한보다 높을 때만 낮춘다 (F26)
+            notes.append(f"경력 {experience}→{cap} ({required}년 요구, {years}년)")
+            experience = cap
+    total = overall(evaluation.model_copy(update={"experience": experience}))
+    caps = []
+    if short >= 1:
+        caps.append((CAP_SHORT, "경력 부족"))
+    if trust_level == LOW:
+        caps.append((CAP_LOW_TRUST, "신뢰 낮음"))
+    if caps:
+        cap, reason = min(caps)  # 둘 다 걸리면 낮은 쪽 하나만
+        if total > cap:
+            notes.append(f"종합 {total}→{cap} ({reason})")
+            total = cap
+    return Adjusted(experience, total, stars(total), verdict(total), ", ".join(notes))
+
+
 def select_targets(rows: list[dict], mode: str) -> tuple[list[dict], list[dict]]:
-    """mode가 checked면 체크한 줄(F7), all이면 점수 없는 줄(F8). 공고 정보가 없는 줄은 건너뛴다(F16)."""
+    """mode가 checked면 체크한 줄(F7), all이면 점수 없는 줄(F8). 공고 정보가 없는 줄은 건너뛴다(F16).
+
+    all은 신입 제외 줄을 고르지 않는다. 점수 칸이 비어 매번 다시 골라지기 때문이다 (v0.5 설계).
+    """
     if mode == "checked":
         chosen = [row for row in rows if row.get("check", "").strip().upper() == "TRUE"]
     else:
-        chosen = [row for row in rows if not row.get("score", "").strip()]
+        chosen = [
+            row for row in rows if not row.get("score", "").strip() and row.get("verdict", "").strip() != EXCLUDED
+        ]
     targets, skipped = [], []
     for row in chosen:
         has_info = any(row.get(key, "").strip() for key in ("experience", "education", "keywords"))
