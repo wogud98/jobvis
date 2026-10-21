@@ -18,6 +18,7 @@ from agent import inbox, profile_form, sheets, user_profile, view
 PROFILE = user_profile.DEFAULT
 SUMMARY_FIELDS = ("요약", "주요업무", "우대사항", "기술스택")
 SCORE_FIELDS = ("기술", "경력", "문화", "방향")
+CHART_HEIGHT = 230  # 필터 카드 높이와 비슷하게 차트가 카드를 채우도록 (F21)
 ACCENT = "#6d5ef5"  # .streamlit/config.toml의 primaryColor와 같게
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
@@ -52,6 +53,19 @@ div[class*="st-key-glass"], div[data-testid="stExpander"] details {
 div[class*="st-key-glass"] { padding: 18px 20px; }
 div[class*="st-key-glass-dim"] { opacity: 0.55; }
 div[class*="st-key-glass"] div[class*="st-key-glass"] { box-shadow: none; }
+/* 종합점수·필터 카드 높이를 맞춘다 (F21). 열은 이미 같은 높이라 카드가 열을 채우게 한다 */
+div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-glass-chart"]),
+div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-glass-filters"]) { flex: 1 1 auto; }
+div[class*="st-key-glass-chart"], div[class*="st-key-glass-filters"] { height: 100%; }
+/* 고르기 칸의 키워드 아무 데나 눌러도 지워지게, 삭제 버튼이 키워드 전체를 덮는다 (F22) */
+div[data-testid="stMultiSelect"] [data-tag] { position: relative; cursor: pointer; padding-right: 22px; }
+div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0 7px;
+  display: flex; align-items: center; justify-content: flex-end;
+  background: transparent; border: 0; border-radius: inherit; cursor: pointer;
+}
+div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg { width: 0.7em; height: 0.7em; }
+div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
 div[data-testid="stMetricValue"] { font-size: 2.1rem; font-weight: 700; color: #3b2f8f; }
 .jv-hero h1 { margin: 0; padding: 0; font-size: 2.2rem; color: #2c2370; }
 .jv-hero p { margin: 0; color: #5a5680; }
@@ -175,6 +189,7 @@ def show_postings() -> None:
                 y="종합점수",
                 horizontal=True,
                 color=ACCENT,
+                height=CHART_HEIGHT,
             )
         else:
             st.caption("점수 있는 공고가 없습니다.")
