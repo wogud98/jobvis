@@ -71,7 +71,7 @@ def load(source: str, job_id: str) -> str | None:
 
 
 def status(text: str, ocr_texts: list[str], unread: int) -> str:
-    """unread는 못 읽은 이미지 수 (robots 금지, 오류). 300px 미만 작은 이미지는 넣지 않는다."""
+    """unread는 받거나 읽다가 오류가 난 이미지 수. robots 금지, 300px 미만, OCR 미설치는 넣지 않는다."""
     ocr_length = sum(len(t.strip()) for t in ocr_texts)
     if len(text.strip()) + ocr_length < MIN_TEXT:
         return MISSING

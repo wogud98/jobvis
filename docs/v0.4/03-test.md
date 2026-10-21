@@ -30,7 +30,7 @@ python -m pytest        # 188 passed
 | F12 | 300px 미만 이미지 건너뜀(못 읽음에 안 셈), 공고당 10장까지, OCR 글자를 본문 뒤에 붙임 | `test_ocr_reads_large_images_and_appends_text`, `test_small_image_only_is_not_counted_as_unread`, `test_ocr_reads_at_most_ten_images` | 통과 |
 | F13 | OCR 미설치면 이미지를 받지 않고 설치 안내를 한 번 출력. OCR 예외는 그 이미지만 건너뜀 | `test_without_ocr_images_are_not_downloaded`, `test_first_run_prints_personal_use_notice_and_ocr_hint`, `test_ocr_error_skips_only_that_image_and_keeps_row`, `test_available_follows_installed_package` | 통과 |
 | F14 | 원문은 `data/postings/{출처}_{ID}.txt`에만, 시트에는 없음 | `test_collects_both_sites_and_saves_rows_and_posting_files`, `test_save_and_load_in_data_folder` | 통과 |
-| F15, F15a | V–X열에 출처·지역·본문 상태. 상태 4가지, 200자 경계(199/200) | `test_collects_both_sites_*`, `test_status`, `test_banned_image_marks_partly_unread` | 통과 |
+| F15, F15a | V–X열에 출처·지역·본문 상태. 상태 4가지, 200자 경계(199/200). 금지·작은 이미지는 못 읽음에 안 셈, 받기 오류는 셈 | `test_collects_both_sites_*`, `test_status`, `test_banned_and_small_images_are_not_counted_as_unread`, `test_download_error_marks_partly_unread` | 통과 |
 | F16 | 원문 앞 6,000자만 LLM에. 원문이 있으면 시트 정보 칸을 넣지 않음. 출처 빈 줄은 사람인 파일 | `test_long_posting_is_cut_to_6000_chars`, `test_posting_file_is_used_instead_of_sheet_info`, `test_blank_source_reads_saramin_file` | 통과 |
 | F17 | 원문 없음·본문 미확보 → 시트 정보(지역 포함)로 채점, 판정에 "(본문 미확보)" | `test_missing_body_status_uses_sheet_info_even_if_file_exists`, `test_scores_and_writes_each_row` | 통과 |
 | F18 | 주요업무·우대사항·기술스택을 Y–AA열에. 빠지거나 null이면 빈 문자열(실패 아님) | `test_posting_file_is_used_instead_of_sheet_info`, `test_null_body_fields_are_blank_not_failures`, `test_write_result_writes_summary_result_and_body_summary_columns_only` | 통과 |

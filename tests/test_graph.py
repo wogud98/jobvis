@@ -353,12 +353,12 @@ def test_ocr_reads_large_images_and_appends_text(monkeypatch, tmp_path):
     assert fakes.ocr_read == [b"big", b"big"]
     content = (tmp_path / "postings" / "saramin_1.txt").read_text(encoding="utf-8")
     assert content == "짧은 본문\n\n--- 이미지 글자 ---\nOCR:big"
-    # 본문+OCR이 200자 미만 → 본문 미확보. 1번은 금지 이미지가 있지만 길이 규칙이 먼저다.
+    # 본문+OCR이 200자 미만 → 본문 미확보. 금지·작은 이미지는 못 읽음에 세지 않는다.
     assert [job["body"] for job in result["saved"]] == ["본문 미확보", "글자+이미지"]
     assert fakes.rows[0][-1] == "본문 미확보"
 
 
-def test_banned_image_marks_partly_unread(monkeypatch, tmp_path):
+def test_banned_and_small_images_are_not_counted_as_unread(monkeypatch, tmp_path):
     fakes = Fakes(
         monkeypatch,
         tmp_path,
@@ -371,8 +371,25 @@ def test_banned_image_marks_partly_unread(monkeypatch, tmp_path):
 
     result = run(sources=["saramin"])
 
-    assert result["saved"][0]["body"] == "이미지 일부 못 읽음"
+    # robots 금지 이미지는 크기를 몰라 아이콘일 수 있어 세지 않음 (2026-10-21 사용자 결정)
+    assert result["saved"][0]["body"] == "글자"
     assert result.get("failed", []) == []  # 금지는 실패가 아님
+    assert "https://pds.test/a.png" in fakes.requested  # 받기를 시도하고 crawler가 금지로 막음
+
+
+def test_download_error_marks_partly_unread(monkeypatch, tmp_path):
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": [make_job("saramin", "1")]},
+        details={"1": Detail(LONG, ["https://img.test/a.png"])},
+    )
+    fakes.images = {"https://img.test/a.png": crawler.CrawlError("img.test 오류 (HTTP 500)")}
+
+    result = run(sources=["saramin"])
+
+    assert result["saved"][0]["body"] == "이미지 일부 못 읽음"
+    assert [(f["step"], f["error"]) for f in result["failed"]] == [("OCR", "CrawlError: img.test 오류 (HTTP 500)")]
 
 
 def test_small_image_only_is_not_counted_as_unread(monkeypatch, tmp_path):

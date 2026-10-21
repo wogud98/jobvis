@@ -130,7 +130,9 @@ def _read_images(urls: list[str]) -> tuple[list[str], int, Exception | None]:
                 continue  # 작은 이미지는 장식으로 보고 못 읽음에도 넣지 않는다
             texts.append(ocr.read(image))
         except crawler.Disallowed:
-            unread += 1  # robots 금지 이미지는 받지 않는다. 우회하지 않음
+            # robots 금지 이미지는 받지 않는다. 우회하지 않음. 크기를 알 수 없어 아이콘일 수도 있으므로
+            # 못 읽음으로도 세지 않는다 (2026-10-21 사용자 결정). 이미지뿐인 공고는 200자 규칙에 걸린다.
+            continue
         except Exception as e:  # 그 이미지만 건너뛴다
             unread += 1
             error = error or e
