@@ -94,11 +94,41 @@ def test_options_and_filters():
     sources, experiences = view.options(items)
 
     assert sources == ["사람인", "잡코리아", "미상"]
-    assert experiences == ["신입", "경력 3년↑", "(없음)"]
-    assert [c.row for c in view.apply(items, view.Filters(sources, experiences))] == [2, 3]  # 평가 전은 기본으로 숨김
-    assert [c.row for c in view.apply(items, view.Filters(sources, experiences, show_unscored=True))] == [2, 3, 4]
-    assert [c.row for c in view.apply(items, view.Filters(["잡코리아"], experiences, True))] == [3]
-    assert [c.row for c in view.apply(items, view.Filters(sources, ["(없음)"], True))] == [4]
+    assert experiences == ["신입", "경력", "(없음)"]  # 글자 그대로가 아니라 묶음 (v0.5.2 F30)
+    assert [c.row for c in view.apply(items, view.Filters([], []))] == [2, 3]  # 비면 전체, 평가 전은 숨김 (F29)
+    assert [c.row for c in view.apply(items, view.Filters([], [], show_unscored=True))] == [2, 3, 4]
+    assert [c.row for c in view.apply(items, view.Filters(sources, experiences, True))] == [2, 3, 4]
+    assert [c.row for c in view.apply(items, view.Filters(["잡코리아"], [], True))] == [3]
+    assert [c.row for c in view.apply(items, view.Filters([], ["경력"], True))] == [3]
+    assert [c.row for c in view.apply(items, view.Filters([], ["(없음)"], True))] == [4]
+    assert [c.row for c in view.apply(items, view.Filters(["사람인"], ["경력"], True))] == []
+
+
+@pytest.mark.parametrize(
+    ("text", "groups"),
+    [
+        ("신입", ["신입"]),
+        ("경력 3년↑", ["경력"]),
+        ("3~5년", ["경력"]),
+        ("경력무관", ["무관"]),
+        ("신입·경력", ["신입", "경력"]),
+        ("신입/경력(연차무관)", ["신입", "경력", "무관"]),
+        ("신입 · 경력 1년↑", ["신입", "경력"]),
+        ("인턴", ["기타"]),
+        ("", ["(없음)"]),
+        ("(없음)", ["(없음)"]),
+    ],
+)
+def test_career_groups(text, groups):
+    assert view.career_groups(text) == groups
+
+
+def test_mixed_career_posting_matches_both_groups():
+    items = view.cards([scored(2, 80, experience="신입·경력"), scored(3, 70, experience="경력무관")])
+
+    assert [c.row for c in view.apply(items, view.Filters([], ["신입"]))] == [2]
+    assert [c.row for c in view.apply(items, view.Filters([], ["경력", "무관"]))] == [2, 3]
+    assert view.options(items)[1] == ["신입", "경력", "무관"]
 
 
 def test_chart_has_scored_cards_only_and_unique_names():

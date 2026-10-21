@@ -324,8 +324,9 @@ def show_postings() -> None:
     with filter_box.container(border=True, key="box-filters"):
         st.markdown("**필터**")
         filters = view.Filters(
-            sources=st.multiselect("출처", sources, default=sources),
-            experiences=st.multiselect("경력", experiences, default=experiences),
+            # 처음엔 비워 두고 "전체"로 보인다. 고른 것이 있을 때만 거른다 (v0.5.2 F29)
+            sources=st.multiselect("출처", sources, placeholder="전체"),
+            experiences=st.multiselect("경력", experiences, placeholder="전체", help="신입·경력·무관으로 묶음"),
             show_unscored=st.toggle("평가 전 공고 보기"),
         )
     shown = view.apply(items, filters)
