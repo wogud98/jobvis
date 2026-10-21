@@ -6,8 +6,7 @@
 # 기술 점수에 씀
 skills:
   main: [Python, SQL]          # 주력 (1개 이상 필수)
-  can_use: [Java, Git, Linux]  # 다룰 수 있음
-  tried: [Docker, FastAPI]     # 써 본 적 있음
+  can_use: [Java, Git, Linux, Docker, FastAPI]  # 다룰 수 있음 (써 본 것 포함, 주력과 겹치지 않게)
   certificates: [정보처리기사]  # 자격증
 
 # 경력 점수에 씀

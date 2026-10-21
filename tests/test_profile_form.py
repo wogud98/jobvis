@@ -7,6 +7,7 @@ from agent import profile_form, user_profile
 ROOT = Path(__file__).parent.parent
 MAIN, YEARS, DEGREE = ("skills", "main"), ("experience", "years"), ("experience", "degree")
 JOBS, CULTURE, PROJECTS = ("direction", "jobs"), ("culture",), ("experience", "projects")
+CAN_USE = ("skills", "can_use")
 
 
 def blank() -> dict:
@@ -36,10 +37,39 @@ def test_form_defaults_for_missing_or_wrong_values():
 
 
 def test_single_text_in_pick_field_becomes_one_item():
-    values = profile_form.to_form({"skills": {"main": "Python", "tried": [None, " ", "Go", "Go"]}})
+    values = profile_form.to_form({"skills": {"main": "Python", "can_use": [None, " ", "Go", "Go"]}})
 
     assert values[MAIN] == ["Python"]
-    assert values[("skills", "tried")] == ["Go"]  # 빈 항목·겹치는 항목 지움
+    assert values[CAN_USE] == ["Go"]  # 빈 항목·겹치는 항목 지움
+
+
+def test_old_tried_joins_can_use_and_main_is_removed():
+    data = {"skills": {"main": ["Python"], "can_use": "Java", "tried": ["Docker", "Python", "Java"]}}
+
+    values = profile_form.to_form(data)
+
+    assert values[CAN_USE] == ["Java", "Docker"]  # 써 본 적 있음은 다룰 수 있음으로 (v0.5.2 F36), 주력과 겹침 뺌 (F37)
+    assert ("skills", "tried") not in values
+    assert data["skills"]["tried"] == ["Docker", "Python", "Java"]  # 받은 dict는 바꾸지 않음
+
+
+def test_from_form_removes_skills_already_in_main():
+    values = blank() | {MAIN: ["Python", "SQL"], CAN_USE: ["SQL", "Git", "Git"], YEARS: 1}
+
+    data = profile_form.from_form(values)
+
+    assert data["skills"]["main"] == ["Python", "SQL"]
+    assert data["skills"]["can_use"] == ["Git"]  # 칸 사이 중복도 지움 (F37)
+    assert "tried" not in data["skills"]
+
+
+def test_taken_and_without_taken():
+    values = {MAIN: ["Python"], CAN_USE: ["Python", "Go"]}
+
+    assert profile_form.taken(values, CAN_USE) == ["Python"]
+    assert profile_form.taken(values, MAIN) == []  # 주력은 다른 칸에 막히지 않음
+    assert profile_form.without_taken(values)[CAN_USE] == ["Go"]
+    assert values[CAN_USE] == ["Python", "Go"]  # 받은 값은 바꾸지 않음
 
 
 def test_options_keep_file_values_not_in_suggestions():
@@ -121,6 +151,6 @@ def test_every_file_field_has_one_input_in_a_group():
     groups = {group for group, _, _ in profile_form.GROUPS}
 
     assert all(field.keys[0] in groups for field in profile_form.FIELDS)  # 4묶음 (F9)
-    assert len({field.keys for field in profile_form.FIELDS}) == len(profile_form.FIELDS) == 12
+    assert len({field.keys for field in profile_form.FIELDS}) == len(profile_form.FIELDS) == 11
     assert [field.label for field in profile_form.FIELDS if field.required] == ["주력 기술", "경력 연수", "희망 직무"]
     assert all(field.suggestions for field in profile_form.FIELDS if field.kind in ("pick", "culture"))

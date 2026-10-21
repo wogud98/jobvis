@@ -2,7 +2,7 @@ import gspread
 import pytest
 import requests
 
-from agent import sheets, view
+from agent import postings, sheets, view
 
 
 def make_row(number: int, **changes) -> dict:
@@ -95,13 +95,14 @@ def test_options_and_filters():
 
     assert sources == ["사람인", "잡코리아", "미상"]
     assert experiences == ["신입", "경력", "(없음)"]  # 글자 그대로가 아니라 묶음 (v0.5.2 F30)
-    assert [c.row for c in view.apply(items, view.Filters([], []))] == [2, 3]  # 비면 전체, 평가 전은 숨김 (F29)
-    assert [c.row for c in view.apply(items, view.Filters([], [], show_unscored=True))] == [2, 3, 4]
-    assert [c.row for c in view.apply(items, view.Filters(sources, experiences, True))] == [2, 3, 4]
-    assert [c.row for c in view.apply(items, view.Filters(["잡코리아"], [], True))] == [3]
-    assert [c.row for c in view.apply(items, view.Filters([], ["경력"], True))] == [3]
-    assert [c.row for c in view.apply(items, view.Filters([], ["(없음)"], True))] == [4]
-    assert [c.row for c in view.apply(items, view.Filters(["사람인"], ["경력"], True))] == []
+    assert [c.row for c in view.apply(items, view.Filters([], []))] == [2, 3, 4]  # 비면 전체, 평가 전도 (F29, F32)
+    assert [c.row for c in view.apply(items, view.Filters([], [], scored_only=True))] == [2, 3]
+    assert [c.row for c in view.apply(items, view.Filters(sources, experiences))] == [2, 3, 4]
+    assert [c.row for c in view.apply(items, view.Filters(["잡코리아"], []))] == [3]
+    assert [c.row for c in view.apply(items, view.Filters([], ["경력"]))] == [3]
+    assert [c.row for c in view.apply(items, view.Filters([], ["(없음)"]))] == [4]
+    assert [c.row for c in view.apply(items, view.Filters([], ["(없음)"], True))] == []
+    assert [c.row for c in view.apply(items, view.Filters(["사람인"], ["경력"]))] == []
 
 
 @pytest.mark.parametrize(
@@ -180,3 +181,25 @@ def test_error_message_hides_details(error, expected):
 
     assert expected in message
     assert "secret" not in message and "abc" not in message  # 경로·키를 보이지 않는다 (F9)
+
+
+def test_card_info_has_collected_fields_only():
+    card = view.cards([make_row(2, location="서울 강남구", education="대졸", keywords="Python, AWS", deadline="")])[0]
+
+    assert card.info == {"지역": "서울 강남구", "경력": "신입", "학력": "대졸", "키워드": "Python, AWS"}  # v0.5.2 F31
+
+
+def test_preview_reads_saved_body_and_cuts(tmp_path, monkeypatch):
+    monkeypatch.setattr(postings, "DIR", tmp_path)
+    card = view.cards([make_row(2, source="사람인")])[0]
+    postings.save(card.source_code, card.job_id, postings.compose("가" * 30, ["이미지 글자"]))
+
+    assert view.preview(card) == "가" * 30 + "\n이미지 글자"  # 이미지 글자도 이어 붙임 (F31)
+    assert view.preview(card, limit=10) == "가" * 10 + " …"
+
+
+def test_preview_without_saved_body_or_id_is_blank(tmp_path, monkeypatch):
+    monkeypatch.setattr(postings, "DIR", tmp_path)
+    no_file, no_id = view.cards([make_row(2), make_row(3, id="")])
+
+    assert view.preview(no_file) == "" and view.preview(no_id) == ""

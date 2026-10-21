@@ -7,7 +7,7 @@ import streamlit as st
 import yaml
 from streamlit.testing.v1 import AppTest
 
-from agent import ocr, profile_form, runner, sheets
+from agent import ocr, postings, profile_form, runner, sheets
 
 APP = str(Path(__file__).parent.parent / "app.py")
 
@@ -49,7 +49,7 @@ def test_postings_tab_shows_guide_summary_and_scored_cards(app):
     rows = [
         make_row(2, score="80", verdict="강력 추천", trust="높음", body="글자"),
         make_row(3, score="60", verdict="추천", trust="낮음", body="본문 미확보"),
-        make_row(4),  # 평가 전: 기본으로 숨김
+        make_row(4),  # 평가 전도 기본으로 보임 (v0.5.2 F32)
     ]
 
     at = app(rows)
@@ -64,10 +64,14 @@ def test_postings_tab_shows_guide_summary_and_scored_cards(app):
         ("본문 미확보", "1"),
     ]  # 필터와 상관없이 전체 (F2)
     heads = [m.value for m in at.markdown if "회사" in m.value]
-    assert len(heads) == 2
+    assert len(heads) == 3
     assert heads[0].startswith("**회사2 · 백엔드**") and "신뢰 높음" in heads[0]
     assert "jv-low" in heads[1]  # 신뢰 낮음 배지 색 (F5)
-    assert [e.label for e in at.expander].count("자세히") == 2  # F4
+    assert "평가 전" in heads[2]  # 점수 순, 평가 전은 뒤
+    assert [e.label for e in at.expander].count("자세히") == 3  # F4
+
+    at.toggle[0].set_value(True).run()  # 평가된 공고만 보기 (F32)
+    assert sum("회사" in m.value for m in at.markdown) == 2
 
 
 def test_filters_start_empty_meaning_all(app):
@@ -83,8 +87,7 @@ def test_filters_start_empty_meaning_all(app):
 
 
 def test_unscored_card_shows_dash_and_sheet_text_is_escaped(app):
-    at = app([make_row(2, company="<b>회사</b>")])
-    at.toggle[0].set_value(True).run()
+    at = app([make_row(2, company="<b>회사</b>")])  # 평가 전도 기본으로 보임 (F32)
 
     assert any('<div class="jv-score">-</div>' in m.value for m in at.markdown)  # F6
     head = next(m.value for m in at.markdown if "회사" in m.value)
@@ -335,3 +338,60 @@ def test_resume_section_notes_llm_transfer_and_disables_button_without_files(app
     assert any("LLM 제공자" in c.value for c in at.caption)  # N3
     assert at.button(key="resume-fill").disabled
     assert next(t for t in at.toggle if t.label == "이미 적은 칸도 바꾸기").value is False  # F19 기본
+
+
+# ---- v0.5.2 보완: 평가 전 카드, 입력 필요, 기술 칸 ----
+
+
+def test_unscored_card_shows_collected_info_and_body_preview(app, tmp_path, monkeypatch):
+    monkeypatch.setattr(postings, "DIR", tmp_path / "postings")
+    postings.save("saramin", "2", postings.compose("자격요건 Python 3년", []))
+    at = app([make_row(2, location="서울", experience="신입", keywords="Python"), make_row(3, body="본문 미확보")])
+
+    assert not at.exception
+    assert any("아직 평가 전입니다" in i.value for i in at.info)  # v0.5.2 F31
+    info = next(m.value for m in at.markdown if "지역" in m.value and "jv-badge" not in m.value)
+    assert "서울" in info and "Python" in info
+    assert any(t.value == "자격요건 Python 3년" for t in at.text)  # 원문 앞부분
+    assert any("본문이 없습니다" in w.value for w in at.warning)  # 본문 없는 카드는 이미지 넣기 안내
+
+
+def test_resume_fill_shows_input_needed_badges(app):
+    values = profile_form.to_form(None)
+    values[("skills", "main")] = ["Python"]
+    at = app([])
+    at.session_state["profile_fill"] = {
+        "values": values,
+        "filled": ["주력 기술"],
+        "missing": ["희망 직무", "희망 지역"],
+    }
+    at.run()
+
+    needed = next(m.value for m in at.markdown if "이력서에 없어 비워 둠" in m.value)
+    assert 'jv-mid">입력 필요 · 희망 직무<' in needed and "입력 필요 · 희망 지역" in needed  # F35
+
+
+def skill(at, name):
+    return next(m for m in at.multiselect if m.label.startswith(name))
+
+
+def test_skill_in_main_cannot_be_picked_in_can_use(app, tmp_path):
+    text = (
+        "skills: {main: [Python], can_use: [Git], tried: [Docker]}\n"
+        "experience: {years: 1}\ndirection: {jobs: [백엔드 개발]}\n"
+    )
+    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
+    at = app([])
+
+    assert "써 본 적 있음" not in [m.label for m in at.multiselect]  # 칸 하나로 (v0.5.2 F36)
+    assert skill(at, "다룰 수 있음").value == ["Git", "Docker"]  # 예전 tried도 보임
+    assert "Python" not in skill(at, "다룰 수 있음").options  # 주력에 고른 것은 보기에서 빠짐 (F37)
+
+    skill(at, "다룰 수 있음").select("Java").run()
+    skill(at, "주력 기술").select("Git").run()  # 다룰 수 있음에 있던 것을 주력으로
+
+    assert skill(at, "다룰 수 있음").value == ["Docker", "Java"]  # 겹친 것만 빠지고 고른 값은 남음
+    assert "Git" not in skill(at, "다룰 수 있음").options
+    at.button(key="profile-save").click().run()
+    saved = yaml.safe_load((tmp_path / "profile.yaml").read_text(encoding="utf-8"))
+    assert saved["skills"] == {"main": ["Python", "Git"], "can_use": ["Docker", "Java"], "certificates": []}

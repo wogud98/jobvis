@@ -119,8 +119,32 @@ python -m pytest        # 432 passed (420 → 432)
 
 `test_options_and_filters`는 경력 보기가 글자 그대로에서 묶음으로 바뀌어 기대값을 바꿨고, 빈 필터·묶음 필터·출처와 경력을 함께 고르는 경우를 더했다.
 
+## 보완 2 확인 (F31–F37)
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 70 files already formatted
+python -m pytest        # 448 passed (432 → 448)
+```
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F31 | 평가 전 카드에 평가 전 안내, 수집 정보, 원문 앞부분, 원문 없으면 이미지 안내. `Card.info`는 빈 칸 뺌, `preview`는 이미지 글자를 붙이고 자르고, 파일·공고ID 없으면 빈 글자 | `test_unscored_card_shows_collected_info_and_body_preview`, `test_card_info_has_collected_fields_only`, `test_preview_reads_saved_body_and_cuts`, `test_preview_without_saved_body_or_id_is_blank` | 통과 |
+| F32 | 처음엔 평가 전까지 3건, 토글을 켜면 2건 | `test_postings_tab_shows_guide_summary_and_scored_cards`, `test_options_and_filters`, `test_unscored_card_shows_dash_and_sheet_text_is_escaped` | 통과 |
+| F33 | 모델 없음 안내에 `LLM_MODEL` 이름 | `test_llm_hint_names_the_model` | 통과 |
+| F34 | 프롬프트에 추측 금지·애매하면 비움·주소로 지역 정하지 않음 | `test_prompt_forbids_guessing_location_from_address` | 통과 |
+| F35 | 빈 칸 이름(필수 먼저), 경력 연수 0을 찾았거나 사용자가 적었으면 빠짐, 화면 "입력 필요" 노란 배지 | `test_missing_lists_blank_fields_required_first`, `test_missing_years_found_zero_is_not_missing`, `test_resume_fill_shows_input_needed_badges` | 통과 |
+| F36 | 예전 `tried`를 `can_use`로 읽고 경고 없음, 다시 저장하면 `tried` 없음, 프롬프트 한 줄, 입력란 칸 11개 | `test_old_tried_is_read_into_can_use_without_warning`, `test_to_prompt_has_one_can_use_line`, `test_old_tried_joins_can_use_and_main_is_removed`, `test_every_file_field_has_one_input_in_a_group` | 통과 |
+| F37 | 주력에 고른 기술은 다룰 수 있음 보기·값에서 빠지고 나머지 값은 남음, 저장값에 겹침 없음, 이력서 채우기·파일 읽기에서도 겹침 지움 | `test_skill_in_main_cannot_be_picked_in_can_use`, `test_from_form_removes_skills_already_in_main`, `test_taken_and_without_taken`, `test_merge_moves_skill_out_of_can_use_when_resume_puts_it_in_main` | 통과 |
+
+화면: 가짜 시트(6건, 평가 전 1건은 저장 원문 있음)·가짜 LLM(이력서에 지역 없음, 주력에 Git)·예전 `tried`가 있는 `profile.yaml`로 `streamlit run`하고 크로미움으로 캡처(`/mnt/project-files/screens/v0.5.2/fix2-*.png`). 평가 전 카드에 안내·수집 정보·원문 앞부분이 보이고, 프로필 탭에 예전 `tried`(Docker)가 다룰 수 있음에 보이고, 이력서 채우기 뒤 "입력 필요" 배지 5개, 주력에 들어간 Git이 다룰 수 있음에서 빠진 것을 봄.
+
+바꾼 기존 테스트: 평가 전이 기본으로 보이게 되어(F32) 카드 수 기대값을 2 → 3으로, 토글을 켜던 테스트는 켜지 않게, `Filters(..., True)`는 `scored_only` 뜻으로 바꾸고 토글 켠 경우를 더함. `tried` 칸을 쓰던 테스트 3개는 `can_use`로 바꿈(F36). 검사 조건을 약하게 바꾼 것은 없음.
+
 ## 미확인
 
+- 실제 Gemini가 추측 금지 규칙(F34)을 따라 주소를 희망 지역에 넣지 않는지. 재리 PC에서 같은 이력서로 다시 확인 필요.
+- 재리 PC의 예전 `profile.yaml`(`tried` 있음)을 화면에서 열고 저장한 결과. 테스트 파일로만 봄.
 - 윈도우 엣지·크롬에서 네오 브루탈리즘 CSS(`:has()`, 버튼 눌림 효과)가 같게 보이는지.
 
 - 실제 사람인·잡코리아 수집을 화면 버튼으로 돌린 것. 그래프는 터미널과 같지만 실제 사이트로는 안 돌림.

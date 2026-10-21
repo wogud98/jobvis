@@ -96,3 +96,12 @@ def test_llm_hint():
     assert "LLM_MODEL" in reports.llm_hint(["GoogleModelNotFoundError", "ModelNotFoundError"])
     assert "GOOGLE_API_KEY" in reports.llm_hint("ModelAuthenticationError")
     assert reports.llm_hint(["ValueError", "Exception"]) == ""
+
+
+def test_llm_hint_names_the_model(monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "google_genai:gemini-2.5-flash")
+
+    hint = reports.llm_hint(["ModelNotFoundError"])
+
+    assert "LLM 모델(google_genai:gemini-2.5-flash)을 찾지 못했습니다" in hint  # v0.5.2 F33
+    assert "gemini-flash-lite-latest" in hint

@@ -128,7 +128,7 @@ def test_missing_library_says_how_to_install(monkeypatch):
 # ---- LLM 응답 ----
 
 ANSWER = {
-    "skills": {"main": ["C++"], "can_use": ["Python"], "tried": [], "certificates": ["SQLD"]},
+    "skills": {"main": ["C++"], "can_use": ["Python"], "certificates": ["SQLD"]},
     "experience": {"years": 2, "degree": "대학교 졸업(4년), 지능로봇공학", "projects": ["JOBVIS"], "training": []},
     "direction": {"jobs": ["FDE"], "goals": "", "locations": ["서울"]},
     "culture": ["몰입 환경"],
@@ -231,3 +231,41 @@ def test_merge_years_zero_from_resume_means_new_grad():
     merged, filled = resume.merge(form(experience__years=0), {"experience": {"years": 0}})
 
     assert merged[("experience", "years")] == 0 and filled == []  # 같은 값이면 채웠다고 하지 않음
+
+
+# ---- v0.5.2 보완: 추측하지 않기, 입력 필요 ----
+
+
+def test_prompt_forbids_guessing_location_from_address():
+    system = resume.prompt.format_messages(text="x")[0].content
+
+    assert "추측하지 마" in system and "애매하면 비워" in system  # F34
+    assert "주소·거주지" in system  # 주소를 희망 지역으로 넣지 않음
+    assert "tried" not in system  # 기술 칸 둘로 (F36)
+
+
+def test_missing_lists_blank_fields_required_first():
+    found = {"skills": {"main": ["C++"]}, "experience": {"years": None}, "direction": {"locations": []}}
+    merged, _ = resume.merge(form(), found)
+
+    labels = resume.missing(merged, found)
+
+    assert labels[:2] == ["경력 연수", "희망 직무"]  # 필수 칸 먼저 (F35)
+    assert "희망 지역" in labels and "최종 학력" in labels
+    assert "주력 기술" not in labels
+
+
+def test_missing_years_found_zero_is_not_missing():
+    found = {"experience": {"years": 0}}
+
+    assert "경력 연수" not in resume.missing(form(), found)  # 이력서에 신입이라 적힘
+    assert "경력 연수" not in resume.missing(form(experience__years=2), {})  # 사용자가 이미 적음
+
+
+def test_merge_moves_skill_out_of_can_use_when_resume_puts_it_in_main():
+    values = form(skills__can_use=["C++", "Git"])
+
+    merged, _ = resume.merge(values, ANSWER)
+
+    assert merged[("skills", "main")] == ["C++"]
+    assert merged[("skills", "can_use")] == ["Git", "Python"]  # 주력과 겹치지 않음 (F37)
