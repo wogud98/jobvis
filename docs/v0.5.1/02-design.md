@@ -1,6 +1,6 @@
 # v0.5.1 설계
 
-기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F20, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5 구현(PR #24).
+기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F22, N1–N5. F21–F22는 보완). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5 구현(PR #24).
 
 화면만 바꾸는 작은 버전이라 사용자 결정(2026-10-21)으로 설계와 구현을 한 PR에 담았다. 수집·평가·시트·`profile.yaml` 형식은 v0.5 그대로다.
 
@@ -129,6 +129,8 @@ sequenceDiagram
   - 배경: 연보라 → 하늘 → 민트 대각선 그라데이션.
   - 글래스 카드: `st.container(border=True, key="glass-…")`가 붙이는 `st-key-glass-…` 클래스와 `stExpander`에 반투명 흰색(55%), `backdrop-filter: blur(14px)`, 둥근 모서리 20px, 옅은 그림자.
   - Streamlit 내부 클래스(`st-emotion-cache-…`)에는 걸지 않는다 (N5).
+- 카드 높이 맞추기 (F21): 열(`stColumn`)은 이미 같은 높이로 늘어나 있어서, 종합점수·필터 카드를 감싼 `stLayoutWrapper`에 `flex: 1`, 카드에 `height: 100%`를 준다(`:has()` 선택자). 차트 높이는 `CHART_HEIGHT = 230`으로 카드를 채운다.
+- 키워드 눌러 지우기 (F22): Streamlit 고르기 칸의 키워드는 `[data-tag]` 안에 `button[aria-label^="Remove"]`가 있다. 이 버튼을 키워드 전체를 덮게(`position: absolute; inset: 0`) 늘려서 아무 데나 눌러도 지운다. x 표시는 오른쪽에 그대로 두고, 마우스를 올리면 어둡게 하고 취소선을 긋는다. Streamlit 동작은 바꾸지 않고 CSS만 쓴다.
 - 벤토 그리드는 `st.columns` 비율로: 요약 1:1:1:1, 차트 2 : 필터 1, 프로필 2×2 (F19).
 
 ## 설계 결정
