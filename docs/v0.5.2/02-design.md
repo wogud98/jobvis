@@ -1,6 +1,6 @@
 # v0.5.2 설계
 
-기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F28, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
+기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F30, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
 
 사용자 결정(2026-10-21 "진행")으로 요구사항·설계·구현을 한 PR에 담았다. 수집·평가 그래프, 시트 열, `profile.yaml` 형식은 바뀌지 않는다.
 
@@ -183,6 +183,13 @@ classDiagram
 - 평가 `problems`: 실패 수. 실패 이유가 LLM 오류 하나로 모이면 고칠 방법을 바로 붙이고, 섞이면 "자세히를 확인해 주세요".
 - LLM 오류 구분 (F26): 예외 이름에 `ModelNotFound`, `Authentication`, `PermissionDenied`, `RateLimit`이 들어가는지 본다. 실행 중 예외는 클래스 계보(`__mro__`) 이름 전체로 보므로 LangChain 공통 오류(`ModelNotFoundError` 등)를 상속한 제공자 오류가 모두 걸린다. 평가 실패는 그래프가 예외 이름만 남기므로(`GoogleModelNotFoundError`) 그 이름으로 본다. `FileNotFoundError`와 섞이지 않게 `NotFound`가 아니라 `ModelNotFound`로 찾는다.
 - 라이브러리 없음 (F27): `resume._need`가 import 실패를 `ResumeError`(설치 방법)로 바꾼다.
+
+## 필터 (F29, F30)
+
+- `view.Filters`의 빈 목록은 "거르지 않음". `apply`는 출처·경력 목록이 비어 있으면 그 조건을 건너뛴다.
+- `view.career_groups(경력 글자)`: 띄어쓰기를 지우고 "무관"이 있으면 무관, "경력무관"·"무관"을 지운 나머지에 "신입"이 있으면 신입, "경력"이나 "숫자+년"이 있으면 경력. 하나도 없으면 기타, 빈 칸은 (없음). 공고는 여러 묶음에 들어갈 수 있고, 고른 묶음과 하나라도 겹치면 보인다. 수집 때 쓰는 `codes.matches_career`와 같은 글자 규칙(무관, 신입, 경력, 숫자+년).
+- `view.options`는 경력 보기를 신입·경력·무관·기타·(없음) 순서로, 실제 공고에 있는 것만 돌려준다.
+- 화면: `st.multiselect(..., placeholder="전체")`, 기본값 없음.
 
 ## 네오 브루탈리즘 (F28)
 

@@ -3,6 +3,7 @@
 Streamlit을 import하지 않는다. app.py는 이 결과를 그리기만 해서, 규칙은 가짜 데이터로 테스트한다 (N5).
 """
 
+import re
 from dataclasses import dataclass, field
 
 import gspread
@@ -12,6 +13,8 @@ from agent import postings, scoring, sheets
 
 UNKNOWN_SOURCE = "미상"  # 출처 칸이 빈 예전 줄 (F6)
 BLANK_EXPERIENCE = "(없음)"  # 경력 칸이 빈 줄의 필터 값
+CAREER_GROUPS = ("신입", "경력", "무관")  # 경력 필터 보기 (v0.5.2 F30)
+OTHER_CAREER = "기타"  # 묶음으로 나누지 못한 경력 글자 (예: 인턴)
 NOT_SCORED = "평가 전"
 NONE = "없음"  # 빈 칸 표시 (F3)
 RECOMMENDED = ("강력 추천", "추천")  # 요약 칸 "추천 이상" (v0.5.1 F2)
@@ -48,8 +51,10 @@ class Card:
 
 @dataclass
 class Filters:
+    """비어 있는 목록은 거르지 않음(전체) (v0.5.2 F29)."""
+
     sources: list[str]
-    experiences: list[str]
+    experiences: list[str]  # CAREER_GROUPS 중에서
     show_unscored: bool = False
 
 
@@ -116,19 +121,33 @@ def cards(rows: list[dict]) -> list[Card]:
     return scored + unscored
 
 
+def career_groups(experience: str) -> list[str]:
+    """경력 글자를 신입·경력·무관 묶음으로 (v0.5.2 F30). "신입·경력"처럼 둘 다면 둘 다, 못 나누면 기타."""
+    text = experience.replace(" ", "")
+    if not text or experience == BLANK_EXPERIENCE:
+        return [BLANK_EXPERIENCE]
+    groups = ["무관"] if "무관" in text else []
+    rest = text.replace("경력무관", "").replace("무관", "")
+    if "신입" in rest:
+        groups.append("신입")
+    if "경력" in rest or re.search(r"\d+년", rest):
+        groups.append("경력")
+    return [group for group in CAREER_GROUPS if group in groups] or [OTHER_CAREER]
+
+
 def options(items: list[Card]) -> tuple[list[str], list[str]]:
-    """필터에 보일 (출처 목록, 경력 목록). 나온 순서대로 한 번씩."""
+    """필터에 보일 (출처 목록, 경력 묶음 목록). 출처는 나온 순서, 경력은 정해진 순서로 있는 것만."""
     sources = list(dict.fromkeys(card.source for card in items))
-    experiences = list(dict.fromkeys(card.experience for card in items))
-    return sources, experiences
+    found = {group for card in items for group in career_groups(card.experience)}
+    return sources, [group for group in (*CAREER_GROUPS, OTHER_CAREER, BLANK_EXPERIENCE) if group in found]
 
 
 def apply(items: list[Card], filters: Filters) -> list[Card]:
     return [
         card
         for card in items
-        if card.source in filters.sources
-        and card.experience in filters.experiences
+        if (not filters.sources or card.source in filters.sources)
+        and (not filters.experiences or set(career_groups(card.experience)) & set(filters.experiences))
         and (filters.show_unscored or card.score is not None)
     ]
 

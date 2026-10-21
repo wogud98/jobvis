@@ -104,6 +104,21 @@ ruff format --check .   # 통과
 python -m pytest        # 420 passed (변경 없음)
 ```
 
+## 필터 확인 (F29, F30)
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 통과
+python -m pytest        # 432 passed (420 → 432)
+```
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F29 | 필터가 빈 채로 시작, 비면 전체, 고르면 거름 | `test_filters_start_empty_meaning_all`, `test_options_and_filters` | 통과 |
+| F30 | 경력 글자 → 묶음 10가지(신입·경력 둘 다, 무관, 숫자+년, 기타, 빈 칸), 둘 다인 공고는 두 묶음에 | `test_career_groups`, `test_mixed_career_posting_matches_both_groups` | 통과 |
+
+`test_options_and_filters`는 경력 보기가 글자 그대로에서 묶음으로 바뀌어 기대값을 바꿨고, 빈 필터·묶음 필터·출처와 경력을 함께 고르는 경우를 더했다.
+
 ## 미확인
 
 - 윈도우 엣지·크롬에서 네오 브루탈리즘 CSS(`:has()`, 버튼 눌림 효과)가 같게 보이는지.

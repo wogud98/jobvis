@@ -70,6 +70,18 @@ def test_postings_tab_shows_guide_summary_and_scored_cards(app):
     assert [e.label for e in at.expander].count("자세히") == 2  # F4
 
 
+def test_filters_start_empty_meaning_all(app):
+    rows = [make_row(n, score="70", experience=e) for n, e in ((2, "신입"), (3, "경력 3년↑"), (4, "경력무관"))]
+    at = app(rows)
+
+    source, career = (next(m for m in at.multiselect if m.label == name) for name in ("출처", "경력"))
+    assert source.value == [] and career.value == []  # 처음엔 아무것도 안 고름 (v0.5.2 F29)
+    assert career.options == ["신입", "경력", "무관"]  # 묶음 (F30)
+    assert sum("회사" in m.value for m in at.markdown) == 3  # 비어 있어도 전체가 보임
+    career.set_value(["경력"]).run()
+    assert sum("회사" in m.value for m in at.markdown) == 1
+
+
 def test_unscored_card_shows_dash_and_sheet_text_is_escaped(app):
     at = app([make_row(2, company="<b>회사</b>")])
     at.toggle[0].set_value(True).run()
