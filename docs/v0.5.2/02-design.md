@@ -1,6 +1,6 @@
 # v0.5.2 설계
 
-기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F39, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
+기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F44, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
 
 사용자 결정(2026-10-21 "진행")으로 요구사항·설계·구현을 한 PR에 담았다. 수집·평가 그래프와 시트 열은 바뀌지 않는다. `profile.yaml`은 기술 칸 `tried`가 빠진다(F36, 예전 파일도 읽음).
 
@@ -22,6 +22,8 @@ classDiagram
         +show_inbox_card()
         +show_score_bar(rows)
         +toggle_check(row)
+        +toggle_hidden(row, hidden)
+        +show_pager(number, pages)
         +reload_rows()
         +show_live_job() fragment 1초
         +show_job_result()
@@ -78,10 +80,21 @@ classDiagram
         +PREVIEW
         +preview(card, limit) str
         +Card.checked
-        +with_checks(rows, checks) list
+        +Card.hidden
+        +Filters.lowest_first, hidden_only
+        +PAGE_SIZE, TOP
+        +with_checks(rows, checks, hidden) list
+        +page(items, number) (카드, 쪽, 쪽 수)
+        +chart(items, limit) list
     }
     class sheets {
         +set_check(row, checked)
+        +set_hidden(row, hidden)
+        +V05_HEADER
+    }
+    class scoring {
+        +is_true(value) bool
+        +select_targets(rows, mode)
     }
     class profile_form {
         +TAKEN_BY
@@ -296,6 +309,24 @@ sequenceDiagram
 - 체크 칸 key는 `check-<줄>`. 처음 값은 `Card.checked`(시트 `TRUE`, 대소문자 무시, `scoring.select_targets`와 같은 규칙). 실패 때 key를 지워 시트 값으로 다시 그린다(값을 직접 넣지 않아 Streamlit 경고가 없음).
 - `sheets.set_check`는 `update_cells(줄, {"평가": bool})`. 평가가 끝난 줄은 `write_result`가 "평가" 칸을 비우므로 체크가 풀린다.
 - 제외 판정이나 공고 정보가 없는 줄도 체크는 된다. 대상 수에서 정보 없는 줄은 빠진다(F16 그대로).
+
+## 목록 정리 (F40–F44)
+
+```mermaid
+flowchart LR
+    R[시트 줄] --> W[with_checks: 화면에서 바꾼 체크·관심 없음 덮기]
+    W --> C[cards: 점수 높은 순, 평가 전 뒤]
+    C --> A["apply: 출처·경력·평가된 것만·관심 없음 거르기, 낮은 순이면 다시 정렬"]
+    A --> T["chart: 높은 5건 (F42)"]
+    A --> P["page: 10건씩 (F41)"]
+    P --> L[카드 목록 + 쪽 넘기기]
+```
+
+- 정렬(F40): `Filters.lowest_first`. `cards()`가 이미 높은 순이라 낮은 순일 때만 점수 있는 카드를 (점수, 줄)로 다시 정렬하고 평가 전을 뒤에 붙인다.
+- 페이지(F41): `session_state["page"]`. 필터 값(`Filters`, dataclass라 비교 가능)을 `page_filters`에 두고 달라지면 1쪽으로. 쪽 넘기기 버튼은 `on_click`으로 번호를 바꿔 다시 그릴 때 바로 그 쪽이 보인다. `view.page`가 범위 밖 번호를 처음·끝 쪽으로 맞춘다(뺀 공고가 생겨 쪽 수가 줄 때).
+- TOP 5(F42): `view.chart(items, limit=TOP)`가 점수 높은 순으로 5개를 고른다. `st.bar_chart`는 기본으로 막대를 이름순으로 정렬해서(예: 회사20이 회사3 앞) `sort="-종합점수"`로 높은 점수가 위에 오게 한다.
+- 문장(F43): `app.TAGLINE`.
+- 관심 없음(F44): 시트 맨 끝 AD "관심없음"(`KEYS` "hidden"). 예전 29열 시트(`V05_HEADER`)는 제목 줄만 늘린다(체크박스 규칙은 걸지 않음, 값은 TRUE/FALSE). `sheets.set_hidden`은 그 칸만 쓴다. `write_result`의 신뢰·보정 범위는 `len(HEADER)` 대신 tail 길이로 끝을 정해 AD를 건드리지 않는다. `scoring.select_targets`가 관심 없음 줄을 먼저 빼서 화면·터미널 평가 모두에서 빠진다. 화면에서 바꾼 값은 체크(F39)처럼 `hidden_overrides`에 두고 새로고침·실행 끝에 버린다. 기본 목록은 `card.hidden == False`, "관심 없는 공고만 보기"는 `True`만.
 
 ## 필터 (F29, F30)
 

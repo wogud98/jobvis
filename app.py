@@ -23,7 +23,11 @@ CHART_HEIGHT = 230  # 필터 카드 높이와 비슷하게 차트가 카드를 �
 ACCENT = "#059669"  # .streamlit/config.toml의 primaryColor와 같게
 FILL = "profile_fill"  # 이력서에서 채운 입력란 값 (session_state 키)
 CHECKS = "check_overrides"  # 화면에서 바꾼 평가 체크 {시트 줄: 체크} (v0.5.2 F39)
+HIDDEN = "hidden_overrides"  # 화면에서 바꾼 관심 없음 {시트 줄: 뺌} (v0.5.2 F44)
 CHECK_ERROR = "check_error"
+PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
+TAGLINE = "채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다"  # JOBVIS 아래 문장 (v0.5.2 F43)
+SORTS = {"점수 높은 순": False, "점수 낮은 순": True}  # 낮은 순이면 True (F40)
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
 POSTINGS_GUIDE = """
@@ -128,6 +132,7 @@ def reload_rows() -> None:
     """시트를 다시 읽게 한다. 화면에서 바꾼 체크는 시트에 이미 썼으니 버린다."""
     load_rows.clear()
     st.session_state.pop(CHECKS, None)
+    st.session_state.pop(HIDDEN, None)
     for key in [key for key in st.session_state if str(key).startswith("check-")]:
         del st.session_state[key]
 
@@ -143,6 +148,16 @@ def toggle_check(row: int) -> None:
         st.session_state[CHECK_ERROR] = f"체크를 시트에 쓰지 못했습니다. {runner.error_text(e)}"
         return
     st.session_state.setdefault(CHECKS, {})[row] = checked
+
+
+def toggle_hidden(row: int, hidden: bool) -> None:
+    """관심 없음으로 빼거나 되돌린다. 시트 "관심없음" 칸에 바로 쓴다 (v0.5.2 F44)."""
+    try:
+        sheets.set_hidden(row, hidden)
+    except Exception as e:  # 키·경로는 보이지 않는다
+        st.session_state[CHECK_ERROR] = f"관심 없음을 시트에 쓰지 못했습니다. {runner.error_text(e)}"
+        return
+    st.session_state.setdefault(HIDDEN, {})[row] = hidden
 
 
 def show_upload(card: view.Card) -> None:
@@ -179,7 +194,7 @@ def show_card(card: view.Card) -> None:
     # 시트 글자(회사·직무 등)는 HTML로 넣기 전에 escape한다
     key = f"box-{'dim-' if card.dim else ''}card-{card.row}"  # 신뢰 낮음은 흐리게 (v0.5 F34, F5)
     with st.container(border=True, key=key):
-        check, score, head = st.columns([0.7, 1, 7], vertical_alignment="center")
+        check, score, head, hide = st.columns([0.7, 1, 6, 1.1], vertical_alignment="center")
         # 체크하면 시트 "평가" 칸에도 체크된다. 목록 위 평가 줄 버튼으로 평가 (v0.5.2 F38, F39)
         check.checkbox(
             "평가", value=card.checked, key=f"check-{card.row}", on_change=toggle_check, args=(card.row,),
@@ -199,6 +214,11 @@ def show_card(card: view.Card) -> None:
             f"{badges}<span class='jv-muted'>{escape(meta)}</span>",
             unsafe_allow_html=True,
         )
+        # 뺀 공고는 목록에서 사라지고 평가 대상에서도 빠진다. "관심 없는 공고만 보기"에서 되돌림 (v0.5.2 F44)
+        hide.button(
+            "되돌리기" if card.hidden else "관심 없음", key=f"hide-{card.row}", on_click=toggle_hidden,
+            args=(card.row, not card.hidden), disabled=runner.running(), use_container_width=True,
+        )  # fmt: skip
         with st.expander("자세히"):
             if card.score is None:  # 평가 전·제외: 수집 칸과 원문 앞부분 (v0.5.2 F31)
                 show_unscored_details(card)
@@ -384,7 +404,8 @@ def show_postings() -> None:
         st.info("공고 없음, 위 수집 카드에서 키워드를 넣고 수집하세요.")  # v0.5 F10
         return
 
-    rows = view.with_checks(rows, st.session_state.get(CHECKS, {}))  # 화면에서 바꾼 체크 (F39)
+    # 화면에서 바꾼 체크·관심 없음 (F39, F44)
+    rows = view.with_checks(rows, st.session_state.get(CHECKS, {}), st.session_state.get(HIDDEN, {}))
     items = view.cards(rows)
     for index, (column, (label, value, note)) in enumerate(zip(st.columns(4), view.summary(items), strict=True)):
         with column.container(border=True, key=f"box-summary-{index}"):  # 칸마다 색 (F28)
@@ -400,17 +421,20 @@ def show_postings() -> None:
             sources=st.multiselect("출처", sources, placeholder="전체"),
             experiences=st.multiselect("경력", experiences, placeholder="전체", help="신입·경력·무관으로 묶음"),
             scored_only=st.toggle("평가된 공고만 보기"),  # 기본은 전체 (v0.5.2 F32)
+            hidden_only=st.toggle("관심 없는 공고만 보기", help="관심 없음으로 뺀 공고. 되돌리기로 목록에 다시 넣음"),
+            lowest_first=SORTS[st.selectbox("정렬", list(SORTS), help="평가 전 공고는 늘 아래")],  # F40
         )
     shown = view.apply(items, filters)
     with chart_box.container(border=True, key="box-chart"):
-        st.markdown("**종합점수**")
-        data = view.chart(shown)
+        st.markdown(f"**종합점수 TOP {view.TOP}**")
+        data = view.chart(shown)  # 필터를 지난 공고 중 높은 5개 (F42)
         if data:  # 필터를 지난 공고만 (v0.5 F5)
             st.bar_chart(
                 {"공고": [name for name, _ in data], "종합점수": [score for _, score in data]},
                 x="공고",
                 y="종합점수",
                 horizontal=True,
+                sort="-종합점수",  # 기본은 이름순이라 높은 점수가 위로 오게 (F42)
                 color=ACCENT,
                 height=CHART_HEIGHT,
             )
@@ -418,9 +442,30 @@ def show_postings() -> None:
             st.caption("점수 있는 공고가 없습니다.")
 
     show_score_bar(rows)  # 목록 바로 위. 대상 수는 필터와 상관없이 전체 시트 기준 (F38)
-    st.caption(f"{len(shown)}건 / 전체 {len(items)}건")
-    for card in shown:
+    if st.session_state.get(PAGE_FILTERS) != filters:  # 필터·정렬을 바꾸면 1쪽부터 (F41)
+        st.session_state[PAGE_FILTERS], st.session_state[PAGE] = filters, 1
+    cards, number, pages = view.page(shown, st.session_state.get(PAGE, 1))
+    first = (number - 1) * view.PAGE_SIZE
+    where = f" · {first + 1}–{first + len(cards)}번째" if pages > 1 else ""
+    st.caption(f"{len(shown)}건 / 전체 {len(items)}건{where}")
+    for card in cards:
         show_card(card)
+    if pages > 1:
+        show_pager(number, pages)
+
+
+def go_page(number: int) -> None:
+    st.session_state[PAGE] = number
+
+
+def show_pager(number: int, pages: int) -> None:
+    """목록 아래 쪽 넘기기 (v0.5.2 F41). 누르면 다시 그리기 전에 쪽 번호를 바꾼다."""
+    _, back, label, forward, _ = st.columns([2, 1, 1, 1, 2], vertical_alignment="center")
+    back.button("◀ 이전", key="page-back", disabled=number <= 1, on_click=go_page, args=(number - 1,),
+                use_container_width=True)  # fmt: skip
+    label.markdown(f"<div style='text-align:center'><b>{number}</b> / {pages}쪽</div>", unsafe_allow_html=True)
+    forward.button("다음 ▶", key="page-forward", disabled=number >= pages, on_click=go_page, args=(number + 1,),
+                   use_container_width=True)  # fmt: skip
 
 
 def pick_key(field: profile_form.Field, default: list[str]) -> str:
@@ -585,7 +630,7 @@ def main() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
     title, refresh = st.columns([6, 1], vertical_alignment="center")
     title.markdown(
-        '<div class="jv-hero"><h1>JOBVIS</h1><p>채용공고를 모아 내 프로필과 맞춰 본 결과</p></div>',
+        f'<div class="jv-hero"><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',
         unsafe_allow_html=True,
     )  # F20
     if refresh.button("🔄 새로고침", use_container_width=True):

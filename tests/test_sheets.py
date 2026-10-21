@@ -285,11 +285,12 @@ def test_read_rows_readonly_does_not_touch_old_header(worksheet):
 
 
 def test_header_and_keys_line_up():
-    assert len(sheets.HEADER) == len(sheets.KEYS) == 29
+    assert len(sheets.HEADER) == len(sheets.KEYS) == 30
     assert sheets.HEADER[sheets.KEYS.index("gaps")] == "부족한점"
     assert sheets.HEADER[sheets.KEYS.index("check")] == "평가"
     assert sheets.HEADER[21:27] == ["출처", "지역", "본문", "주요업무", "우대사항", "기술스택"]  # V–AA
-    assert sheets.HEADER[27:] == ["신뢰", "보정"]  # AB–AC (v0.5 F32)
+    assert sheets.HEADER[27:29] == ["신뢰", "보정"]  # AB–AC (v0.5 F32)
+    assert sheets.HEADER[29:] == ["관심없음"]  # AD (v0.5.2 F44)
     assert sheets.HEADER[sheets.KEYS.index("body")] == "본문"
 
 
@@ -300,3 +301,31 @@ def test_set_check_writes_check_column_only(worksheet, checked, value):
     sheets.set_check(5, checked)
 
     assert sheet.updates == [{"range": "K5", "values": [[value]]}]  # "평가" 체크박스 (v0.5.2 F39)
+
+
+def test_v05_header_is_extended_with_hidden_column(worksheet):
+    old_row = ["회사"] + [""] * 28
+    sheet, _ = worksheet([sheets.V05_HEADER, old_row])
+
+    rows = sheets.read_rows()
+
+    assert sheet.rows[0] == sheets.HEADER  # 맨 끝에 "관심없음" (v0.5.2 F44)
+    assert sheet.spreadsheet.requests == []
+    assert rows[0]["hidden"] == ""  # 예전 줄은 빈칸
+
+
+def test_set_hidden_writes_hidden_column_only(worksheet):
+    sheet, _ = worksheet([sheets.HEADER])
+
+    sheets.set_hidden(5, True)
+    sheets.set_hidden(6, False)
+
+    assert sheet.updates == [{"range": "AD5", "values": [[True]]}, {"range": "AD6", "values": [[False]]}]
+
+
+def test_write_result_does_not_touch_hidden_column(worksheet):
+    sheet, _ = worksheet([sheets.HEADER])
+
+    sheets.write_result(5, None, [""] * 11, None, ["높음", ""])
+
+    assert sheet.updates[-1] == {"range": "AB5:AC5", "values": [["높음", ""]]}  # AD는 그대로

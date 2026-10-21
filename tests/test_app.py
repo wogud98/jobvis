@@ -449,5 +449,88 @@ def test_score_bar_sits_right_above_card_list(app):
     texts = [m.value for m in at.markdown]
     bar = next(i for i, v in enumerate(texts) if v.startswith("**평가**"))
     first_card = next(i for i, v in enumerate(texts) if "회사2" in v)
-    chart = next(i for i, v in enumerate(texts) if v == "**종합점수**")
+    chart = next(i for i, v in enumerate(texts) if v == "**종합점수 TOP 5**")  # v0.5.2 F42
     assert chart < bar < first_card  # 차트·필터 아래, 카드 바로 위 (F38)
+
+
+# ---- v0.5.2 정렬·페이지·TOP 5·소개 문장 ----
+
+
+def names(at) -> list[str]:
+    return [m.value.split("**")[1].split(" · ")[0] for m in at.markdown if m.value.startswith("**회사")]
+
+
+def test_sort_select_reorders_cards(app):
+    at = app([scorable(2, score="60"), scorable(3, score="90"), scorable(4)])
+
+    assert names(at) == ["회사3", "회사2", "회사4"]
+    next(s for s in at.selectbox if s.label == "정렬").set_value("점수 낮은 순").run()
+
+    assert names(at) == ["회사2", "회사3", "회사4"]  # 평가 전은 아래 (F40)
+
+
+def test_pages_of_ten_and_filter_change_goes_back_to_first_page(app):
+    rows = [scorable(n, score=str(100 - n)) for n in range(2, 25)]  # 23건
+    at = app(rows)
+
+    assert len(names(at)) == 10 and names(at)[0] == "회사2"  # F41
+    assert any("1–10번째" in c.value for c in at.caption)
+    assert at.button(key="page-back").disabled
+    at.button(key="page-forward").click().run()
+    assert names(at)[0] == "회사12"
+    at.button(key="page-forward").click().run()
+    assert len(names(at)) == 3 and at.button(key="page-forward").disabled
+
+    next(s for s in at.selectbox if s.label == "정렬").set_value("점수 낮은 순").run()
+    assert names(at)[0] == "회사24"  # 정렬을 바꾸면 1쪽
+
+
+def test_no_pager_for_ten_or_fewer(app):
+    at = app([scorable(n, score="70") for n in range(2, 12)])
+
+    assert len(names(at)) == 10
+    assert not [b for b in at.button if b.key in ("page-back", "page-forward")]
+
+
+def test_hero_tagline(app):
+    at = app([])
+
+    assert any("채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다" in m.value for m in at.markdown)
+
+
+# ---- v0.5.2 관심 없는 공고 빼기 ----
+
+
+def test_hide_card_moves_it_to_hidden_view_and_back(app, monkeypatch):
+    written = []
+    monkeypatch.setattr(sheets, "set_hidden", lambda row, hidden: written.append((row, hidden)))
+    at = app([scorable(2, score="80"), scorable(3)])
+    assert names(at) == ["회사2", "회사3"]
+    assert at.button(key="run-score-all").label == "평가 전 전부 평가 (1건)"
+
+    at.button(key="hide-3").click().run()
+
+    assert written == [(3, True)]  # 시트 "관심없음" 칸에 씀 (F44)
+    assert names(at) == ["회사2"]
+    assert at.button(key="run-score-all").label == "평가 전 전부 평가 (0건)"  # 평가 대상에서도 빠짐
+    next(t for t in at.toggle if t.label == "관심 없는 공고만 보기").set_value(True).run()
+    assert names(at) == ["회사3"] and at.button(key="hide-3").label == "되돌리기"
+
+    at.button(key="hide-3").click().run()
+    assert written[-1] == (3, False) and names(at) == []
+    next(t for t in at.toggle if t.label == "관심 없는 공고만 보기").set_value(False).run()
+    assert names(at) == ["회사2", "회사3"]
+
+
+def test_hide_failure_keeps_card_and_shows_error(app, monkeypatch):
+    def broken(row, hidden):
+        raise KeyError("GOOGLE_SHEET_ID")
+
+    monkeypatch.setattr(sheets, "set_hidden", broken)
+    at = app([scorable(2)])
+
+    at.button(key="hide-2").click().run()
+
+    assert not at.exception
+    assert names(at) == ["회사2"]
+    assert any("관심 없음을 시트에 쓰지 못했습니다" in e.value for e in at.error)

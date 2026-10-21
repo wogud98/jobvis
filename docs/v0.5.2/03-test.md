@@ -156,8 +156,29 @@ python -m pytest        # 457 passed (448 → 457)
 
 `test_run_panel_shows_collect_and_score_cards`는 라디오를 바꾸던 부분을 버튼 두 개의 건수 확인으로 바꿨다(F38). 화면: 가짜 시트로 `streamlit run` 후 크로미움에서 카드 체크를 눌러 버튼 건수가 1 → 2건으로 바뀌는 것을 봄(`/mnt/project-files/screens/v0.5.2/bar-*.png`).
 
+## 목록 정리 확인 (F40–F44)
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 통과
+python -m pytest        # 471 passed (457 → 471)
+```
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F40 | 높은 순·낮은 순, 같은 점수는 줄 순, 평가 전은 아래, 화면 정렬 칸 | `test_sort_lowest_first_keeps_unscored_last`, `test_sort_select_reorders_cards` | 통과 |
+| F41 | 23건 → 10·10·3, 범위 밖 쪽 번호, 이전·다음 버튼 잠금, 정렬 바꾸면 1쪽, 10건 이하면 쪽 넘기기 없음 | `test_page_splits_and_clamps`, `test_pages_of_ten_and_filter_change_goes_back_to_first_page`, `test_no_pager_for_ten_or_fewer` | 통과 |
+| F42 | 낮은 순이어도 높은 5건, 제목 TOP 5 | `test_chart_shows_top_five_by_score_whatever_the_sort`, `test_score_bar_sits_right_above_card_list` | 통과 |
+| F43 | 새 문장 | `test_hero_tagline` | 통과 |
+| F44 | AD열만 씀, 예전 29열 시트 제목 늘림, 신뢰·보정 쓰기가 AD를 안 건드림, 뺀 줄은 두 평가 대상에서 빠짐, 화면에서 빼기·관심 없는 공고만 보기·되돌리기, 쓰기 실패 | `test_set_hidden_writes_hidden_column_only`, `test_v05_header_is_extended_with_hidden_column`, `test_write_result_does_not_touch_hidden_column`, `test_hidden_rows_are_never_targets`, `test_hidden_cards_only_in_hidden_view`, `test_hide_card_moves_it_to_hidden_view_and_back`, `test_hide_failure_keeps_card_and_shows_error` | 통과 |
+
+화면: 가짜 시트 20건으로 `streamlit run` 후 크로미움 캡처(`/mnt/project-files/screens/v0.5.2/list-*.png`). TOP 5 막대가 점수 높은 순(처음엔 이름순으로 회사20이 회사3 앞에 와서 `sort` 지정으로 고침), 1–10번째, 쪽 넘기기, 관심 없음 버튼을 봄.
+
+바꾼 기존 테스트: 시트 열 수 29 → 30과 AD열 확인(`test_header_and_keys_line_up`), 차트 제목 "종합점수" → "종합점수 TOP 5"(`test_score_bar_sits_right_above_card_list`).
+
 ## 미확인
 
+- 실제 구글 시트에 AD "관심없음" 제목이 붙고 값이 쓰이는지(재리 시트는 29열이라 처음 수집·평가 때 제목 줄이 늘어남). 가짜 시트로만 봄.
 - 실제 구글 시트에서 카드 체크가 "평가" 체크박스에 반영되는지, 체크 한 번에 걸리는 시간. 가짜 시트로만 봄.
 - 실제 Gemini가 추측 금지 규칙(F34)을 따라 주소를 희망 지역에 넣지 않는지. 재리 PC에서 같은 이력서로 다시 확인 필요.
 - 재리 PC의 예전 `profile.yaml`(`tried` 있음)을 화면에서 열고 저장한 결과. 테스트 파일로만 봄.

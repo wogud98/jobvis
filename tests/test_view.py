@@ -213,3 +213,46 @@ def test_card_checked_and_with_checks():
     changed = view.with_checks(rows, {2: False, 4: True})
     assert [row["check"] for row in changed] == ["FALSE", "false", "TRUE"]  # 바꾼 줄만 덮음
     assert rows[0]["check"] == "TRUE"  # 받은 줄은 바꾸지 않음
+
+
+# ---- v0.5.2 정렬·페이지·TOP 5 ----
+
+
+def test_sort_lowest_first_keeps_unscored_last():
+    items = view.cards([scored(2, 70), make_row(3), scored(4, 85), scored(5, 70), make_row(6)])
+
+    assert [c.row for c in view.apply(items, view.Filters([], []))] == [4, 2, 5, 3, 6]  # 높은 순 (기본)
+    low = view.apply(items, view.Filters([], [], lowest_first=True))
+    assert [c.row for c in low] == [2, 5, 4, 3, 6]  # 낮은 순, 같은 점수는 줄 순, 평가 전은 아래 (F40)
+    assert [c.row for c in view.apply(items, view.Filters([], [], True, True))] == [2, 5, 4]
+
+
+def test_page_splits_and_clamps():
+    items = view.cards([scored(n, 50) for n in range(2, 25)])  # 23건
+
+    first, number, pages = view.page(items, 1)
+    assert (len(first), number, pages) == (10, 1, 3)  # F41
+    last, number, _ = view.page(items, 3)
+    assert (len(last), number) == (3, 3)
+    assert view.page(items, 9)[1] == 3 and view.page(items, 0)[1] == 1  # 범위 밖은 끝·처음 쪽
+    assert view.page([], 1) == ([], 1, 1)
+
+
+def test_chart_shows_top_five_by_score_whatever_the_sort():
+    items = view.cards([scored(n, 40 + n) for n in range(2, 10)] + [make_row(10)])
+    low = view.apply(items, view.Filters([], [], lowest_first=True))
+
+    assert [score for _, score in view.chart(low)] == [49, 48, 47, 46, 45]  # 높은 5개 (F42)
+    assert len(view.chart(low, limit=10)) == 8
+
+
+def test_hidden_cards_only_in_hidden_view():
+    rows = [scored(2, 80), scored(3, 70, hidden="TRUE"), make_row(4, hidden="true")]
+    items = view.cards(rows)
+
+    assert [c.hidden for c in items] == [False, True, True]
+    assert [c.row for c in view.apply(items, view.Filters([], []))] == [2]  # 기본은 뺀 공고 숨김 (F44)
+    assert [c.row for c in view.apply(items, view.Filters([], [], hidden_only=True))] == [3, 4]
+
+    changed = view.with_checks(rows, {}, {2: True, 3: False})
+    assert [row["hidden"] for row in changed] == ["TRUE", "FALSE", "true"]
