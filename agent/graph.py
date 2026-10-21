@@ -155,7 +155,10 @@ def detail(state: State) -> State:
         if error:  # 줄은 저장하고 실패 목록에만 남긴다
             failed.append(_failure(job, "OCR", error))
     else:
-        texts, unread = [], len(parsed.images)  # OCR이 없으면 이미지를 받지 않는다 (F13)
+        # OCR이 없으면 이미지를 받지 않고, 크기를 알 수 없어 못 읽음으로도 세지 않는다 (F13).
+        # 아이콘·배너까지 세면 거의 모든 공고가 "이미지 일부 못 읽음"이 됨 (2026-10-21 PC 시험, 사용자 결정).
+        # 이미지뿐인 공고는 글자가 200자 미만이라 "본문 미확보"로 걸러진다.
+        texts, unread = [], 0
     content = postings.compose(parsed.text, texts)
     return {"detail": {"content": content, "status": postings.status(parsed.text, texts, unread)}, "failed": failed}
 

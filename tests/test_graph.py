@@ -428,7 +428,20 @@ def test_without_ocr_images_are_not_downloaded(monkeypatch, tmp_path):
     result = run(sources=["saramin"], ocr_ready=False)
 
     assert "https://img.test/a.png" not in fakes.requested
-    assert result["saved"][0]["body"] == "이미지 일부 못 읽음"
+    assert result["saved"][0]["body"] == "글자"  # 아이콘일 수도 있어 못 읽음으로 세지 않음
+
+
+def test_without_ocr_image_only_posting_is_missing(monkeypatch, tmp_path):
+    Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": [make_job("saramin", "1")]},
+        details={"1": Detail("", ["https://pds.test/whole-posting.png"])},
+    )
+
+    result = run(sources=["saramin"], ocr_ready=False)
+
+    assert result["saved"][0]["body"] == "본문 미확보"
 
 
 def test_no_jobs_ends_without_reading_sheet(monkeypatch, tmp_path):
