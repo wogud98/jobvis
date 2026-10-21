@@ -24,14 +24,24 @@ class ResumeError(Exception):
     """파일을 읽지 못했거나 LLM 응답이 형식에 맞지 않음. 이유만 담고 파일 내용은 담지 않는다 (N2)."""
 
 
+def _need(module: str, package: str):
+    """라이브러리를 불러온다. 없으면 설치 방법을 알려 준다 (F27)."""
+    try:
+        return __import__(module, fromlist=["_"])
+    except ImportError:
+        raise ResumeError(
+            f"{package}가 설치돼 있지 않음. pip install -r requirements.txt 후 화면을 다시 켜 주세요"
+        ) from None
+
+
 def _pdf(data: bytes) -> str:
-    from pypdf import PdfReader
+    PdfReader = _need("pypdf", "pypdf").PdfReader  # noqa: N806
 
     return "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
 
 
 def _docx(data: bytes) -> str:
-    from docx import Document
+    Document = _need("docx", "python-docx").Document  # noqa: N806
 
     document = Document(BytesIO(data))
     lines = [paragraph.text for paragraph in document.paragraphs]

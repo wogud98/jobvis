@@ -68,11 +68,38 @@ Streamlit 1.66.0, pypdf 6.17.0, python-docx 1.2.0. 새 테스트 파일: `tests/
 | 프로필 탭에 실제 .docx 파일을 올리고 이력서로 채우기 → 입력란 11칸 채움, 배지, 경력 연수 안내 | 확인 (`v052-profile-filled.png`) |
 | 테마(F23): 초록은 버튼·차트·고른 키워드·카드 점수에만, 바탕·글자·요약 숫자·판정 배지는 무채색 | 확인 (`point-done.png`, `point-profile-filled.png`) |
 
+## 보완 확인 (F24–F27)
+
+2026-10-21 보완 PR. 재리 PC에서 화면으로 실제 수집(사람인 14건·잡코리아 3건 저장)과 이력서 PDF 채우기를 써 본 뒤 나온 의견을 반영했다.
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 70 files already formatted
+python -m pytest        # 420 passed (408 → 420)
+```
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F24 | 결과 한 줄만 기본, 할 일·문제는 있을 때만, 터미널 줄은 접힌 자세히 | `test_finished_job_shows_headline_todo_problems_and_folded_details`, `test_finished_job_without_todo_or_problems_shows_only_headline`, `test_collect_summary_hides_log_lines_behind_details`, `test_collect_summary_nothing_new`, `test_score_summary_counts`, `test_inbox_summary` | 통과 |
+| F24 | 수집 멈춤·실패는 문제, OCR 실패는 문제 아님 | `test_collect_summary_problems_for_blocked_and_failed_but_not_ocr` | 통과 |
+| F25 | 본문 없는 공고 안내에 `--inbox` 없음 | `test_collect_summary_hides_log_lines_behind_details`, AppTest | 통과 |
+| F26 | 모델 없음·키·한도 오류는 고칠 방법, `FileNotFoundError`는 기존 인증 문구 | `test_error_text`(5가지), `test_score_summary_with_llm_model_error_says_how_to_fix`, `test_score_summary_mixed_failures_point_to_details`, `test_llm_hint`, `test_score_sheet_error_is_shown_as_message` | 통과 |
+| F27 | pypdf 없으면 설치 방법 | `test_missing_library_says_how_to_install` | 통과 |
+
+`tests/test_runner.py`의 결과 검사는 `job.lines`에서 `job.result.headline`·`details`로 바꿨다. 터미널 줄 검사 내용은 `details`에 그대로 남아 있다. `test_app.py`의 결과 escape 테스트는 한 줄·할 일·문제·자세히를 모두 보는 테스트로 바꿨다(escape 검사 유지).
+
+고장 내기: `ModelNotFound`를 `NotFound`로 넓힘(1개 실패, 파일 없음 오류가 모델 오류로 보임), 자세히 접기를 끔(1개), LLM 고칠 방법을 끔(2개). 모두 되돌린 뒤 420개 통과.
+
+화면 확인(가짜 수집 그래프): 결과 칸이 "새 공고 6건을 저장했습니다." 한 줄 + 노란 "본문 없는 공고 2건" 안내 + 접힌 "자세히"로 보임(`/mnt/project-files/screens/v0.5.2/summary-folded.png`, `summary-open.png`).
+
+재리가 올린 실제 이력서 PDF(한글, 4쪽)를 이 환경의 pypdf 6.17로 읽어 4,955자를 뽑았다. 한글 PDF 글자 뽑기는 이 파일 하나로는 확인됨. 재리 PC의 첫 실패는 pypdf 미설치로 추정(이후 PDF는 읽히고 LLM 모델 404로 바뀜).
+
 ## 미확인
 
 - 실제 사람인·잡코리아 수집을 화면 버튼으로 돌린 것. 그래프는 터미널과 같지만 실제 사이트로는 안 돌림.
 - 실제 LLM(Gemini)으로 이력서를 읽은 결과. 양식이 다른 실제 이력서에서 칸을 얼마나 잘 찾는지, 응답이 형식에 맞는지는 재리 PC에서 확인 필요.
-- 한글 PDF 글자 뽑기. 테스트 PDF는 영문 글꼴만 썼다. 한글 글꼴이 들어간 실제 PDF에서 pypdf가 글자를 제대로 뽑는지 확인 필요.
+- 한글 PDF 글자 뽑기는 실제 이력서 PDF 1개로만 확인(보완 확인 참고). 다른 PDF 생성기(한글 HWP 변환 등)는 미확인.
+- `gemini-flash-lite-latest`로 바꾼 뒤 재리 PC에서 이력서 채우기·평가가 되는지.
 - 실제 구글 시트로 평가·받은함을 화면에서 돌린 것, 끝난 뒤 시트를 다시 읽어 카드가 바뀌는 것(가짜 시트로만 봄).
 - 윈도우 PC 모니터에서 테마 색과 글자 대비. 크로미움 캡처로만 봄.
 - 윈도우 PC 브라우저(엣지·크롬)에서 진행 막대가 1초마다 바뀌는 것, 수집 중 다른 탭·입력란을 눌러도 끊기지 않는 것.

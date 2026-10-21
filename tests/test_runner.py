@@ -4,8 +4,9 @@ import threading
 
 import pytest
 import requests
+from langchain_core.exceptions import ModelNotFoundError
 
-from agent import codes, inbox, ocr, runner, scoring, sheets, user_profile
+from agent import codes, inbox, ocr, reports, runner, scoring, sheets, user_profile
 
 
 @pytest.fixture(autouse=True)
@@ -86,29 +87,31 @@ def test_keyword_options_without_profile_are_job_names():
 # ---- 실행 잠금 ----
 
 
-def test_start_runs_work_and_keeps_lines():
-    job = runner.start("collect", lambda job: ["끝"], wait=True)
+def test_start_runs_work_and_keeps_result():
+    job = runner.start("collect", lambda job: reports.Summary("끝"), wait=True)
 
-    assert job.finished and job.lines == ["끝"] and not job.error
+    assert job.finished and job.result.headline == "끝" and not job.error
     assert runner.current() is job and not runner.running()
 
 
 def test_second_start_while_running_is_refused():
     release = threading.Event()
-    first = runner.start("collect", lambda job: [release.wait(5) and "끝"])
+    first = runner.start("collect", lambda job: reports.Summary(release.wait(5) and "끝"))
     try:
         assert runner.running()
         for kind in runner.KINDS:  # 세 버튼 모두 (F12)
             with pytest.raises(runner.RunError, match="수집을 실행하는 중"):
-                runner.start(kind, lambda job: [])
+                runner.start(kind, lambda job: reports.Summary(""))
     finally:
         release.set()
     for _ in range(100):
         if first.finished:
             break
         threading.Event().wait(0.05)
-    assert first.finished and first.lines == ["끝"]
-    assert runner.start("score", lambda job: ["다음"], wait=True).lines == ["다음"]  # 끝나면 다시 실행 가능
+    assert first.finished and first.result.headline == "끝"
+    assert (
+        runner.start("score", lambda job: reports.Summary("다음"), wait=True).result.headline == "다음"
+    )  # 끝나면 다시 실행 가능
 
 
 def test_error_in_work_becomes_message_without_details():
@@ -128,6 +131,8 @@ def test_error_in_work_becomes_message_without_details():
         (runner.RunError("키워드를 입력해 주세요."), "키워드를 입력해 주세요."),
         (requests.ConnectionError("host"), "네트워크 오류입니다"),
         (RuntimeError("API key AIza-secret invalid"), "실행하지 못했습니다 (RuntimeError)"),
+        (type("GoogleModelNotFoundError", (ModelNotFoundError,), {})("404 AIza-secret"), "LLM_MODEL"),  # F26
+        (type("AnthropicRateLimitError", (Exception,), {})("AIza"), "사용 한도"),
     ],
 )
 def test_error_text(error, expected):
@@ -159,7 +164,8 @@ def test_collect_streams_graph_and_reports_progress(monkeypatch):
 
     assert not job.error
     assert (job.done, job.total) == (2, 2)  # F5
-    assert job.lines == ["사람인 가져옴 3 / 새로 저장 1 / 건너뜀 0 / 실패 0"]  # 터미널과 같은 글
+    assert job.result.headline == "새 공고 1건을 저장했습니다."  # F24
+    assert job.result.details == ["사람인 가져옴 3 / 새로 저장 1 / 건너뜀 0 / 실패 0"]  # 터미널과 같은 글은 자세히에
     sent, config, modes = graph.calls[0]
     assert sent["ocr_ready"] is True and config["recursion_limit"] == runner.recursion_limit(3)
     assert modes == ["updates", "values"]
@@ -171,7 +177,9 @@ def test_collect_without_ocr_says_so(monkeypatch):
 
     job = runner.start_collect(runner.collect_state("백엔드"), wait=True)
 
-    assert job.lines[0].startswith("이미지 OCR 없음") and ocr.INSTALL_HINT in job.lines[0]
+    first = job.result.details[0]
+    assert first.startswith("이미지 OCR 없음") and ocr.INSTALL_HINT in first
+    assert not job.result.todo and not job.result.problems  # 참고라 자세히에만
 
 
 def test_collect_progress_grows_total_for_late_duplicates():
@@ -220,7 +228,8 @@ def test_score_runs_graph_on_targets(monkeypatch):
 
     assert not job.error
     assert (job.done, job.total) == (1, 1)  # F9
-    assert job.lines[0] == "평가 대상 2 / 완료 1 / 제외 0 / 건너뜀 1 / 실패 0"
+    assert job.result.headline == "공고 1건을 평가했습니다."
+    assert job.result.details[0] == "평가 대상 2 / 완료 1 / 제외 0 / 건너뜀 1 / 실패 0"
     state = graph.calls[0][0]
     assert [row["company"] for row in state["queue"]] == ["가"] and state["years"] == 1
 
@@ -280,4 +289,9 @@ def test_start_inbox_reports_result(monkeypatch):
     job = runner.start_inbox(wait=True)
 
     assert job.total == 1
-    assert job.lines == ["읽은 이미지 1장 / 본문을 채운 공고 0건 / 건너뜀 1", "  건너뜀: a.png (시트에 없는 공고)"]
+    assert job.result.headline == "이미지 1장을 읽어 공고 0건의 본문을 채웠습니다."
+    assert job.result.problems == ["이미지 1장을 건너뛰었습니다. 자세히를 확인해 주세요."]
+    assert job.result.details == [
+        "읽은 이미지 1장 / 본문을 채운 공고 0건 / 건너뜀 1",
+        "  건너뜀: a.png (시트에 없는 공고)",
+    ]
