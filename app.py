@@ -39,28 +39,58 @@ PROFILE_GUIDE = """
 - **저장**을 누르면 `profile.yaml`에 씁니다. 파일을 직접 고쳐도 됩니다(주석은 화면에서 저장하면 사라짐).
 """
 
-# 글래스모피즘 카드와 그라데이션 배경 (F17–F19). Streamlit 내부 클래스 대신 key로 붙는 st-key-* 클래스와
-# data-testid에만 건다 (N5)
+# 네오 브루탈리즘 (v0.5.2 F28): 굵은 검정 테두리, 흐림 없는 딱딱한 그림자, 단색 면, 초록 포인트 하나.
+# 카드는 key가 "box-"로 시작하는 컨테이너. Streamlit 내부 클래스 대신 key로 붙는 st-key-* 클래스와
+# data-testid에만 건다 (v0.5.1 N5)
 CSS = """
 <style>
-.stApp { background: linear-gradient(160deg, #f8f9fb 0%, #eef1f5 60%, #e9f5f0 100%); }
+:root { --jv-ink: #111111; --jv-paper: #fffdf5; --jv-green: #059669; }
+.stApp { background: var(--jv-paper); }
 [data-testid="stHeader"] { background: transparent; }
 .block-container { max-width: 1200px; padding-top: 2rem; }
-div[class*="st-key-glass"], div[data-testid="stExpander"] details {
-  background: rgba(255, 255, 255, 0.72) !important;
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(255, 255, 255, 0.75) !important; border-radius: 20px !important;
-  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+/* 카드: 흰 면 + 3px 검정 테두리 + 오른쪽 아래 딱 떨어지는 그림자 */
+div[class*="st-key-box"] {
+  background: #ffffff !important; border: 3px solid var(--jv-ink) !important; border-radius: 8px !important;
+  box-shadow: 6px 6px 0 var(--jv-ink); padding: 18px 20px;
 }
-div[class*="st-key-glass"] { padding: 18px 20px; }
-div[class*="st-key-glass-dim"] { opacity: 0.55; }
-div[class*="st-key-glass"] div[class*="st-key-glass"] { box-shadow: none; }
-/* 종합점수·필터 카드 높이를 맞춘다 (F21). 열은 이미 같은 높이라 카드가 열을 채우게 한다 */
-div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-glass-chart"]),
-div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-glass-filters"]) { flex: 1 1 auto; }
-div[class*="st-key-glass-chart"], div[class*="st-key-glass-filters"] { height: 100%; }
-/* 고르기 칸의 키워드 아무 데나 눌러도 지워지게, 삭제 버튼이 키워드 전체를 덮는다 (F22) */
-div[data-testid="stMultiSelect"] [data-tag] { position: relative; cursor: pointer; padding-right: 22px; }
+div[class*="st-key-box"] div[class*="st-key-box"] { box-shadow: 3px 3px 0 var(--jv-ink); }
+div[class*="st-key-box-dim"] { opacity: 0.55; }
+/* 요약 칸 4개는 단색 면으로 구분한다 */
+div[class*="st-key-box-summary-0"] { background: #ffe066 !important; }
+div[class*="st-key-box-summary-1"] { background: #a5d8ff !important; }
+div[class*="st-key-box-summary-2"] { background: #8ce99a !important; }
+div[class*="st-key-box-summary-3"] { background: #ffc9c9 !important; }
+div[data-testid="stExpander"] details {
+  background: #ffffff; border: 2px solid var(--jv-ink) !important; border-radius: 6px !important;
+  box-shadow: 3px 3px 0 var(--jv-ink);
+}
+div[data-testid="stExpander"] summary { font-weight: 700; }
+/* 버튼: 테두리·그림자, 누르면 그림자만큼 눌린다 */
+div[data-testid="stButton"] button, div[data-testid="stLinkButton"] a {
+  border: 2px solid var(--jv-ink) !important; border-radius: 6px; box-shadow: 4px 4px 0 var(--jv-ink);
+  font-weight: 700; transition: transform 80ms, box-shadow 80ms;
+}
+div[data-testid="stButton"] button:hover:not(:disabled), div[data-testid="stLinkButton"] a:hover {
+  transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--jv-ink);
+}
+div[data-testid="stButton"] button:active:not(:disabled) { transform: translate(4px, 4px); box-shadow: none; }
+div[data-testid="stButton"] button:disabled { box-shadow: none; border-style: dashed !important; }
+/* 입력란 */
+div[data-baseweb="select"] > div, div[data-baseweb="input"], div[data-baseweb="textarea"],
+div[data-testid="stFileUploaderDropzone"] {
+  border: 2px solid var(--jv-ink) !important; border-radius: 6px !important; background: #ffffff !important;
+}
+div[data-testid="stAlert"] > div {
+  border: 2px solid var(--jv-ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--jv-ink);
+}
+/* 종합점수·필터 카드 높이를 맞춘다 (v0.5.1 F21). 열은 이미 같은 높이라 카드가 열을 채우게 한다 */
+div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-chart"]),
+div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-filters"]) { flex: 1 1 auto; }
+div[class*="st-key-box-chart"], div[class*="st-key-box-filters"] { height: 100%; }
+/* 고르기 칸의 키워드 아무 데나 눌러도 지워지게, 삭제 버튼이 키워드 전체를 덮는다 (v0.5.1 F22) */
+div[data-testid="stMultiSelect"] [data-tag] {
+  position: relative; cursor: pointer; padding-right: 22px; border: 2px solid var(--jv-ink); border-radius: 4px;
+}
 div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
   position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0 7px;
   display: flex; align-items: center; justify-content: flex-end;
@@ -68,17 +98,18 @@ div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
 }
 div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg { width: 0.7em; height: 0.7em; }
 div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
-div[data-testid="stMetricValue"] { font-size: 2.1rem; font-weight: 700; color: #111827; }
-.jv-hero h1 { margin: 0; padding: 0; font-size: 2.2rem; color: #111827; letter-spacing: -0.02em; }
-.jv-hero p { margin: 0; color: #6b7280; }
-.jv-score { font-size: 2rem; font-weight: 800; line-height: 1; color: #059669; }
-.jv-muted { color: #6b7280; font-size: 0.9rem; }
-.jv-badge { display: inline-block; margin-right: 6px; padding: 2px 10px; border-radius: 999px;
-  font-size: 0.82rem; font-weight: 600; }
-.jv-verdict { background: #eef0f3; color: #374151; }
-.jv-high { background: #d9f5e6; color: #11734a; }
-.jv-mid { background: #fff1cc; color: #7a5600; }
-.jv-low { background: #fde4e4; color: #a12d2d; }
+div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: var(--jv-ink); }
+.jv-hero h1 { margin: 0; padding: 0 6px; font-size: 2.6rem; font-weight: 900; color: var(--jv-ink);
+  letter-spacing: -0.03em; display: inline-block; background: linear-gradient(transparent 58%, #6ee7b7 58%); }
+.jv-hero p { margin: 4px 0 0; color: #333333; font-weight: 600; }
+.jv-score { font-size: 2.2rem; font-weight: 900; line-height: 1; color: var(--jv-green); }
+.jv-muted { color: #444444; font-size: 0.9rem; }
+.jv-badge { display: inline-block; margin-right: 6px; padding: 1px 9px; border: 2px solid var(--jv-ink);
+  border-radius: 4px; font-size: 0.8rem; font-weight: 800; }
+.jv-verdict { background: #ffffff; color: var(--jv-ink); }
+.jv-high { background: #8ce99a; color: var(--jv-ink); }
+.jv-mid { background: #ffe066; color: var(--jv-ink); }
+.jv-low { background: #ffa8a8; color: var(--jv-ink); }
 </style>
 """
 
@@ -121,7 +152,7 @@ def badge(text: str, kind: str) -> str:
 
 def show_card(card: view.Card) -> None:
     # 시트 글자(회사·직무 등)는 HTML로 넣기 전에 escape한다
-    key = f"glass-{'dim-' if card.dim else ''}card-{card.row}"  # 신뢰 낮음은 흐리게 (v0.5 F34, F5)
+    key = f"box-{'dim-' if card.dim else ''}card-{card.row}"  # 신뢰 낮음은 흐리게 (v0.5 F34, F5)
     with st.container(border=True, key=key):
         score, head = st.columns([1, 7], vertical_alignment="center")
         number = "-" if card.score is None else str(card.score)  # F6
@@ -202,7 +233,7 @@ def start_job(starter, *args) -> None:
 
 def show_collect_card() -> None:
     busy = runner.running()  # 한 번에 하나만 (F12)
-    with st.container(border=True, key="glass-run-collect"):
+    with st.container(border=True, key="box-run-collect"):
         st.markdown(
             "**수집** <span class='jv-muted'>사람인·잡코리아 공개 페이지, 요청 간격 3초</span>", unsafe_allow_html=True
         )
@@ -233,7 +264,7 @@ def show_collect_card() -> None:
 
 def show_score_card(rows: list[dict] | None) -> None:
     busy = runner.running()
-    with st.container(border=True, key="glass-run-score"):
+    with st.container(border=True, key="box-run-score"):
         st.markdown("**평가** <span class='jv-muted'>저장된 프로필로 LLM 채점</span>", unsafe_allow_html=True)
         modes = {"체크한 공고": "checked", "점수 없는 공고 전부": "all"}
         mode = modes[st.radio("대상", list(modes), horizontal=True, label_visibility="collapsed")]
@@ -283,14 +314,14 @@ def show_postings() -> None:
         return
 
     items = view.cards(rows)
-    for column, (label, value, note) in zip(st.columns(4), view.summary(items), strict=True):  # F2
-        with column.container(border=True, key=f"glass-summary-{label}"):
+    for index, (column, (label, value, note)) in enumerate(zip(st.columns(4), view.summary(items), strict=True)):
+        with column.container(border=True, key=f"box-summary-{index}"):  # 칸마다 색 (F28)
             st.metric(label, value)
             st.caption(note)
 
     chart_box, filter_box = st.columns([2, 1])  # F3, F19
     sources, experiences = view.options(items)
-    with filter_box.container(border=True, key="glass-filters"):
+    with filter_box.container(border=True, key="box-filters"):
         st.markdown("**필터**")
         filters = view.Filters(
             sources=st.multiselect("출처", sources, default=sources),
@@ -298,7 +329,7 @@ def show_postings() -> None:
             show_unscored=st.toggle("평가 전 공고 보기"),
         )
     shown = view.apply(items, filters)
-    with chart_box.container(border=True, key="glass-chart"):
+    with chart_box.container(border=True, key="box-chart"):
         st.markdown("**종합점수**")
         data = view.chart(shown)
         if data:  # 필터를 지난 공고만 (v0.5 F5)
@@ -415,7 +446,7 @@ def show_profile() -> None:
         except user_profile.ProfileError as e:
             st.warning(f"지금 파일에 고칠 칸이 있습니다.\n\n{e}")
 
-    fill_box = st.container(border=True, key="glass-resume")  # 맨 위에 두고 입력란을 그린 뒤 채운다
+    fill_box = st.container(border=True, key="box-resume")  # 맨 위에 두고 입력란을 그린 뒤 채운다
     badges = st.empty()  # 입력란을 그린 뒤 채운다 (F8)
     fill = st.session_state.get(FILL)  # 이력서에서 채운 값. 저장 전까지 파일 대신 입력란 기본값 (v0.5.2 F18)
     defaults = fill["values"] if fill else profile_form.to_form(raw)
@@ -424,7 +455,7 @@ def show_profile() -> None:
     # key를 주지 않아 파일이 바뀌면 입력란이 새 값으로 그려진다 (v0.5 F21)
     for row in (profile_form.GROUPS[:2], profile_form.GROUPS[2:]):  # 2×2 (F9, F19)
         for column, (group, title, note) in zip(st.columns(2), row, strict=True):
-            with column.container(border=True, key=f"glass-profile-{group}"):
+            with column.container(border=True, key=f"box-profile-{group}"):
                 st.markdown(f"#### {title} <span class='jv-muted'>{note}</span>", unsafe_allow_html=True)
                 for field in profile_form.group_fields(group):
                     values[field.keys] = show_field(field, defaults[field.keys])
