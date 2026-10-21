@@ -1,4 +1,4 @@
-"""화면에 보일 내용 만들기: 공고 카드, 정렬, 필터, 차트 자료, 오류 문구 (v0.5 F2–F10, F34, F47).
+"""화면에 보일 내용 만들기: 공고 카드, 정렬, 필터, 차트 자료, 요약 칸, 오류 문구 (v0.5 F2–F10, F34, F47, v0.5.1 F2).
 
 Streamlit을 import하지 않는다. app.py는 이 결과를 그리기만 해서, 규칙은 가짜 데이터로 테스트한다 (N5).
 """
@@ -14,6 +14,7 @@ UNKNOWN_SOURCE = "미상"  # 출처 칸이 빈 예전 줄 (F6)
 BLANK_EXPERIENCE = "(없음)"  # 경력 칸이 빈 줄의 필터 값
 NOT_SCORED = "평가 전"
 NONE = "없음"  # 빈 칸 표시 (F3)
+RECOMMENDED = ("강력 추천", "추천")  # 요약 칸 "추천 이상" (v0.5.1 F2)
 UPLOADABLE = (postings.MISSING, postings.PARTLY_UNREAD)  # 이미지 넣는 칸을 보일 본문 상태 (F47)
 
 
@@ -142,6 +143,16 @@ def chart(items: list[Card]) -> list[tuple[str, int]]:
         used[name] = used.get(name, 0) + 1
         data.append((name if used[name] == 1 else f"{name} ({used[name]})", card.score))
     return data
+
+
+def summary(items: list[Card]) -> list[tuple[str, int, str]]:
+    """요약 칸 4개 [(이름, 수, 설명)]. 필터와 상관없이 시트 전체 기준 (v0.5.1 F2)."""
+    return [
+        ("전체 공고", len(items), "시트에 있는 공고"),
+        ("평가 완료", sum(card.score is not None for card in items), "점수가 있는 공고"),
+        ("추천 이상", sum(card.verdict in RECOMMENDED for card in items), "강력 추천 + 추천"),
+        ("본문 미확보", sum(card.body == postings.MISSING for card in items), "이미지를 넣으면 채워짐"),
+    ]
 
 
 def error_message(error: Exception) -> str:

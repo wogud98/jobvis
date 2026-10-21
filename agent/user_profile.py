@@ -179,24 +179,6 @@ def save(profile: Profile, path: str) -> None:
         raise
 
 
-# 프로필 탭 입력란 (F17–F19). (칸 경로, 이름, 종류). 목록은 한 줄에 하나씩 적는다.
-FORM_FIELDS = [
-    (("skills", "main"), "주력 기술 (필수)", "list"),
-    (("skills", "can_use"), "다룰 수 있는 기술", "list"),
-    (("skills", "tried"), "써 본 기술", "list"),
-    (("skills", "certificates"), "자격증", "list"),
-    (("experience", "years"), "경력 연수 (년, 필수)", "years"),
-    (("experience", "degree"), "최종 학력과 전공", "text"),
-    (("experience", "projects"), "프로젝트", "list"),
-    (("experience", "training"), "교육 이수", "list"),
-    (("direction", "jobs"), "희망 직무 (필수)", "list"),
-    (("direction", "goals"), "하고 싶은 일", "text"),
-    (("direction", "locations"), "희망 지역", "list"),
-    (("culture",), "선호하는 일하는 방식", "list"),
-]
-SLIDER_MAX = 30  # 경력 슬라이더 최댓값 (F18). 파일 값이 더 크면 그 값까지 늘린다
-
-
 def read_raw(path: str) -> dict | None:
     """화면용. 파일 내용을 검사 없이 dict로 (없으면 None). 깨진 YAML이면 ProfileError (F21)."""
     file = Path(path)
@@ -207,41 +189,6 @@ def read_raw(path: str) -> dict | None:
     except yaml.YAMLError:
         raise ProfileError("프로필 YAML 형식이 깨져서 화면에서 저장하지 않습니다. 파일을 직접 고쳐 주세요.") from None
     return data if isinstance(data, dict) else {}
-
-
-def _get(data, keys: tuple[str, ...]):
-    for key in keys:
-        data = data.get(key) if isinstance(data, dict) else None
-    return data
-
-
-def to_form(data: dict | None) -> dict[tuple[str, ...], str | int]:
-    """파일 내용(검사 전)을 입력란 기본값으로. 목록은 줄바꿈으로 잇고, 연수는 정수가 아니면 0."""
-    values = {}
-    for keys, _, kind in FORM_FIELDS:
-        value = _get(data or {}, keys)
-        if kind == "years":
-            ok = isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= MAX_YEARS
-            values[keys] = value if ok else 0
-        elif kind == "list":
-            values[keys] = "\n".join(_as_list(value)) if isinstance(value, (str, list)) else ""
-        else:
-            values[keys] = "" if value is None or isinstance(value, (dict, list)) else str(value)
-    return values
-
-
-def from_form(values: dict[tuple[str, ...], str | int]) -> dict:
-    """입력란 값을 프로필 dict로. 목록 칸은 줄마다 한 항목 (F19). 검사는 validate가 한다."""
-    data: dict = {}
-    for keys, _, kind in FORM_FIELDS:
-        value = values.get(keys, "")
-        if kind == "list":
-            value = [line.strip() for line in str(value).splitlines() if line.strip()]
-        target = data
-        for key in keys[:-1]:
-            target = target.setdefault(key, {})
-        target[keys[-1]] = value
-    return data
 
 
 def _join(values: list[str]) -> str:
