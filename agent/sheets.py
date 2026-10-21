@@ -2,6 +2,7 @@
 
 import functools
 import os
+import re
 
 import gspread
 
@@ -106,9 +107,18 @@ def _sheet() -> gspread.Worksheet:
     return sheet
 
 
+# 사이트마다 "(주)회사", "㈜회사", "회사(주)", "주식회사 회사"처럼 다르게 적는다 (2026-10-21 PC 수집)
+_LEGAL_FORM = re.compile(r"[(（]\s*[주유사재]\s*[)）]|[㈜㈝㈔㈕]|주식회사|유한회사|사단법인|재단법인")
+
+
 def normalize(text: str) -> str:
     """사이트 간 같은 공고를 알아보려고 공백·기호를 지운다 (F9)."""
     return "".join(ch for ch in text if ch.isalnum()).casefold()
+
+
+def normalize_company(name: str) -> str:
+    """회사명은 법인 표기를 먼저 지우고 normalize한다 (F9)."""
+    return normalize(_LEGAL_FORM.sub("", name))
 
 
 def source_code(name: str) -> str:
@@ -122,7 +132,7 @@ def existing_keys() -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
         if row["id"]:
             ids.add((source_code(row["source"]), row["id"]))
         if row["company"] or row["title"]:
-            names.add((normalize(row["company"]), normalize(row["title"])))
+            names.add((normalize_company(row["company"]), normalize(row["title"])))
     return ids, names
 
 

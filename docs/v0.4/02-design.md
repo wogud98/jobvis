@@ -122,6 +122,7 @@ classDiagram
         +HEADER
         +existing_keys() (ID 쌍, 이름 쌍)
         +normalize(text) str
+        +normalize_company(name) str
         +source_code(name) str
         +append_row(values)
         +read_rows() list
@@ -369,7 +370,7 @@ v0.3의 A–U열은 그대로 두고 뒤에 붙인다.
 
 - 첫 줄이 v0.3 제목 줄이면 v0.4 제목 줄로 바꾼다. v0.1·v0.2 제목 줄도 바로 v0.4로 바꾼다.
 - V열이 빈 기존 줄은 출처를 사람인으로 본다. v0.3까지는 사람인 API만 썼고, API의 공고ID는 크롤링의 `rec_idx`와 같다 (추정).
-- `existing_keys()`는 `(출처, 공고ID)` 쌍과 `(회사명 정규화, 제목 정규화)` 쌍을 함께 돌려준다. 정규화는 공백·기호를 지우고 `casefold()` (F9).
+- `existing_keys()`는 `(출처, 공고ID)` 쌍과 `(회사명 정규화, 제목 정규화)` 쌍을 함께 돌려준다. 정규화는 공백·기호를 지우고 `casefold()` (F9). 회사명은 `normalize_company()`로 (주)·㈜·주식회사·(유)·유한회사·(사)·사단법인·(재)·재단법인 표기를 먼저 지운다. 사람인 "(주)에스투더블유"와 잡코리아 "㈜에스투더블유"를 다른 회사로 본 일 때문(2026-10-21). 제목에는 쓰지 않는다.
 - 평가 결과는 `write_result`가 C열, K–U열, Y–AA열을 한 번의 `batch_update`로 쓴다.
 
 ## LLM 입출력 (F16–F18)

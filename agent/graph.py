@@ -99,7 +99,7 @@ def dedupe(state: State) -> State:
     ids, names = sheets.existing_keys()
     new, skipped = [], []
     for job in state["queue"]:
-        name = (sheets.normalize(job["company"]), sheets.normalize(job["title"]))
+        name = (sheets.normalize_company(job["company"]), sheets.normalize(job["title"]))
         # 출처+ID가 시트에 있거나(F8), 회사+제목이 같은 공고가 이미 있거나 이번에 먼저 나왔으면(F9) 건너뛴다.
         if (job["source"], job["id"]) in ids or name in names:
             skipped.append(job)

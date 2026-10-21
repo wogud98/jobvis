@@ -94,12 +94,39 @@ def test_existing_keys_reads_ids_and_names_and_treats_blank_source_as_saramin(wo
     ids, names = sheets.existing_keys()
 
     assert ids == {("saramin", "123"), ("jobkorea", "77")}
-    # 공백·기호를 지우고 소문자로 비교 (F9). "(주)"의 괄호만 지워지고 글자는 남는다.
-    assert names == {("회사", "직무"), ("주가나다", "백엔드개발자신입"), ("라마바", "aiengineer")}
+    # 공백·기호를 지우고 소문자로 비교 (F9). 회사명의 "(주)"는 통째로 지운다.
+    assert names == {("회사", "직무"), ("가나다", "백엔드개발자신입"), ("라마바", "aiengineer")}
 
 
 def test_normalize_drops_spaces_symbols_and_case():
     assert sheets.normalize("(주) 가나다 · Backend!") == sheets.normalize("(주)가나다backend")
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "(주)에스투더블유",
+        "㈜에스투더블유",
+        "에스투더블유(주)",
+        "주식회사 에스투더블유",
+        "( 주 ) 에스투더블유",
+        "에스투더블유",
+    ],
+)
+def test_normalize_company_drops_legal_form(name):
+    # 2026-10-21 PC 수집: 사람인 "(주)에스투더블유"와 잡코리아 "㈜에스투더블유"를 다른 회사로 봄
+    assert sheets.normalize_company(name) == "에스투더블유"
+
+
+def test_normalize_company_keeps_other_letters():
+    assert sheets.normalize_company("(유)한빛") == sheets.normalize_company("유한회사 한빛") == "한빛"
+    assert sheets.normalize_company("주원테크") == "주원테크"  # 회사명 속 "주"는 남긴다
+    assert sheets.normalize_company("") == ""
+
+
+def test_normalize_keeps_legal_form_letters_in_title():
+    # 제목에는 법인 표기 제거를 쓰지 않는다
+    assert sheets.normalize("주식회사 소개 담당") == "주식회사소개담당"
 
 
 def test_v03_header_is_extended_without_new_checkbox_rule(worksheet):
