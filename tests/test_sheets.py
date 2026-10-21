@@ -291,3 +291,12 @@ def test_header_and_keys_line_up():
     assert sheets.HEADER[21:27] == ["출처", "지역", "본문", "주요업무", "우대사항", "기술스택"]  # V–AA
     assert sheets.HEADER[27:] == ["신뢰", "보정"]  # AB–AC (v0.5 F32)
     assert sheets.HEADER[sheets.KEYS.index("body")] == "본문"
+
+
+@pytest.mark.parametrize(("checked", "value"), [(True, True), (False, False), (1, True)])
+def test_set_check_writes_check_column_only(worksheet, checked, value):
+    sheet, _ = worksheet([sheets.HEADER])
+
+    sheets.set_check(5, checked)
+
+    assert sheet.updates == [{"range": "K5", "values": [[value]]}]  # "평가" 체크박스 (v0.5.2 F39)

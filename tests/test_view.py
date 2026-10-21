@@ -203,3 +203,13 @@ def test_preview_without_saved_body_or_id_is_blank(tmp_path, monkeypatch):
     no_file, no_id = view.cards([make_row(2), make_row(3, id="")])
 
     assert view.preview(no_file) == "" and view.preview(no_id) == ""
+
+
+def test_card_checked_and_with_checks():
+    rows = [make_row(2, check="TRUE"), make_row(3, check="false"), make_row(4)]
+
+    assert [c.checked for c in view.cards(rows)] == [True, False, False]  # v0.5.2 F39
+
+    changed = view.with_checks(rows, {2: False, 4: True})
+    assert [row["check"] for row in changed] == ["FALSE", "false", "TRUE"]  # 바꾼 줄만 덮음
+    assert rows[0]["check"] == "TRUE"  # 받은 줄은 바꾸지 않음

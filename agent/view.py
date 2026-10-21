@@ -41,6 +41,7 @@ class Card:
     body: str
     details: dict[str, str] = field(default_factory=dict)
     info: dict[str, str] = field(default_factory=dict)  # 수집 때 받은 칸. 평가 전에도 보인다 (v0.5.2 F31)
+    checked: bool = False  # 시트 "평가" 체크박스 (v0.5.2 F39)
 
     @property
     def dim(self) -> bool:
@@ -120,6 +121,7 @@ def _card(row: dict) -> Card:
         body=row["body"],
         details={name: _or_none(value) for name, value in details.items()},
         info={name: value.strip() for name, value in info.items() if value.strip()},
+        checked=row.get("check", "").strip().upper() == "TRUE",  # scoring.select_targets와 같은 규칙
     )
 
 
@@ -131,6 +133,11 @@ def preview(card: Card, limit: int = PREVIEW) -> str:
     text, ocr = postings.split(content)
     whole = "\n".join(part.strip() for part in (text, *ocr) if part.strip())
     return whole if len(whole) <= limit else whole[:limit].rstrip() + " …"
+
+
+def with_checks(rows: list[dict], checks: dict[int, bool]) -> list[dict]:
+    """화면에서 바꾼 체크를 읽어 둔 시트 줄에 덮는다. 시트를 다시 읽지 않고 대상 수를 맞춘다 (v0.5.2 F39)."""
+    return [row | {"check": "TRUE" if checks[row["row"]] else "FALSE"} if row["row"] in checks else row for row in rows]
 
 
 def cards(rows: list[dict]) -> list[Card]:
