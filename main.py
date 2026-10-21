@@ -14,8 +14,8 @@ import argparse
 
 from dotenv import load_dotenv
 
-from agent import codes, gaps, inbox, ocr, postings, scoring, sheets, user_profile
-from agent.graph import MAX_COUNT, SOURCES, build_graph, build_score_graph, recursion_limit
+from agent import codes, gaps, inbox, ocr, postings, reports, runner, sheets, user_profile
+from agent.graph import MAX_COUNT, SOURCES
 
 GAPS_TOP = 10  # 스킬 갭 출력 개수 (F20)
 NOTICE = "개인 사용만. 수집한 공고를 공유·공개·판매하지 않음 (사이트 약관)"  # v0.4 N6
@@ -60,56 +60,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def to_state(args: argparse.Namespace) -> dict:
-    # 모르는 이름이면 사이트에 요청하기 전에 여기서 멈춘다 (v0.2 F11).
-    region_code = codes.to_region_code(args.location) if args.location else None
-    return {
-        "keyword": args.keyword,
-        "sources": [args.source] if args.source else list(SOURCES),
-        "location": args.location,
-        "region_code": region_code,
-        "job_code": codes.to_job_code(args.job) if args.job else None,
-        "career": args.career,
-        "count": args.count,
-    }
-
-
-def _print_failures(failed: list[dict]) -> None:
-    for job in failed:
-        site = SOURCES[job["source"]].NAME if job.get("source") else ""
-        # 목록 실패는 회사·제목이 빈칸이라 사이트 이름만 남는다.
-        where = " | ".join(part for part in (site, job["company"], job["title"]) if part)
-        print(f"  실패({job['step']}): {where} ({job['error']})")
+    # 모르는 이름이면 사이트에 요청하기 전에 여기서 멈춘다 (v0.2 F11). 화면과 같은 함수 (v0.5.2 F14)
+    sources = [args.source] if args.source else None
+    return runner.collect_state(args.keyword, args.location, args.job, args.career, sources, args.count)
 
 
 def print_report(result: dict) -> None:
-    saved, skipped, failed = result.get("saved", []), result.get("skipped", []), result.get("failed", [])
-    for source, fetched in result.get("fetched", {}).items():
-        mine = [len([job for job in jobs if job.get("source") == source]) for jobs in (saved, skipped)]
-        # OCR 실패는 줄을 저장했으므로 실패 수에 넣지 않고 아래 줄로만 알린다.
-        lost = len([job for job in failed if job.get("source") == source and job["step"] != "OCR"])
-        name = SOURCES[source].NAME
-        print(f"{name} 가져옴 {fetched} / 새로 저장 {mine[0]} / 건너뜀 {mine[1]} / 실패 {lost}")
-    for stop in result.get("blocked", []):
-        print(f"  {SOURCES[stop['source']].NAME} 수집 멈춤: {stop['reason']}")
-    _print_failures(failed)
-    for job in result.get("filled", []):
-        # 사이트별 "새로 저장"·"건너뜀"에는 넣지 않고 따로 알린다 (v0.5 F46)
-        print(f"본문 채움: {SOURCES[job['source']].NAME} 공고 본문으로 바꿈 ({job['company']} | {job['title']})")
-    missing = [job for job in saved if job.get("body") == postings.MISSING]
-    if missing:
-        print(f"본문 미확보 {len(missing)}건: 공고 이미지를 data/inbox/나 화면 카드에 넣고 --inbox를 실행하세요")
+    for line in reports.collect(result):
+        print(line)
 
 
 def print_score_report(result: dict) -> None:
-    done, skipped, failed = result.get("done", []), result.get("skipped", []), result.get("failed", [])
-    excluded = result.get("excluded", [])
-    total = len(done) + len(excluded) + len(skipped) + len(failed)
-    print(f"평가 대상 {total} / 완료 {len(done)} / 제외 {len(excluded)} / 건너뜀 {len(skipped)} / 실패 {len(failed)}")
-    if excluded:
-        print(f"  제외: 신입인데 경력을 요구하는 공고 ({scoring.EXCLUDED}, v0.5 F36)")
-    if skipped:
-        print("  건너뜀: 경력·학력·키워드가 없는 줄 (v0.3 이전에 저장한 공고)")
-    _print_failures(failed)
+    for line in reports.score(result):
+        print(line)
 
 
 def print_gaps(top: list[tuple[str, float, int]], used: int, excluded: int) -> None:
@@ -127,39 +90,24 @@ def run_collect(state: dict) -> None:
     state["ocr_ready"] = ocr.available()
     if not state["ocr_ready"]:
         print(f"이미지 OCR 없음: 글자 본문만 저장합니다. {ocr.INSTALL_HINT}")
-    limit = recursion_limit(state["count"] * len(state["sources"]))
-    print_report(build_graph().invoke(state, {"recursion_limit": limit}))
+    print_report(runner.collect(state))
 
 
 def print_inbox_report(result: inbox.InboxResult) -> None:
-    counts: dict[str, int] = {}
-    for item in result.filled:
-        counts[item["status"]] = counts.get(item["status"], 0) + 1
-    detail = ", ".join(f"{status} {count}" for status, count in counts.items())
-    filled = f"본문을 채운 공고 {len(result.filled)}건" + (f" ({detail})" if detail else "")
-    print(f"읽은 이미지 {result.read}장 / {filled} / 건너뜀 {len(result.skipped)}")
-    for item in result.skipped:
-        print(f"  건너뜀: {item['file']} ({item['reason']})")
-    if result.filled:
-        print("다음: python main.py --score 로 체크된 공고를 다시 평가하세요")
+    for line in reports.inbox_result(result):
+        print(line)
 
 
 def run_inbox() -> None:
-    if not ocr.available():  # 아무 파일도 건드리지 않고 멈춘다 (F44)
-        raise SystemExit(f"OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")
-    print_inbox_report(inbox.run(sheets.read_rows()))
+    try:
+        result = runner.read_inbox()  # OCR이 없으면 아무 파일도 건드리지 않고 멈춘다 (v0.5 F44)
+    except runner.RunError as e:
+        raise SystemExit(str(e)) from None
+    print_inbox_report(result)
 
 
 def run_score(mode: str, profile: user_profile.Profile) -> None:
-    targets, skipped = scoring.select_targets(sheets.read_rows(), mode)
-    state = {
-        "profile": user_profile.to_prompt(profile),
-        "years": profile.experience.years,
-        "queue": targets,
-        "skipped": skipped,
-    }
-    result = build_score_graph().invoke(state, {"recursion_limit": recursion_limit(len(targets))})
-    print_score_report(result)
+    print_score_report(runner.score(mode, profile))
 
 
 def run_gaps() -> None:
@@ -184,7 +132,7 @@ def main(argv: list[str] | None = None) -> None:
             profile, warnings = user_profile.load(args.profile)
             for warning in warnings:
                 print(warning)  # 모르는 칸은 경고만 (F14)
-    except (codes.CodeNotFoundError, user_profile.ProfileError) as e:
+    except (codes.CodeNotFoundError, user_profile.ProfileError, runner.RunError) as e:
         raise SystemExit(str(e)) from None
 
     if state:

@@ -8,7 +8,7 @@
 
 - 수집: `사이트별 공고 가져오기 → 중복 거르기 → (꺼내기 → 상세 본문 → 저장) 반복`. LLM을 부르지 않습니다. 본문 원문은 PC의 `data/postings/`에만 저장합니다.
 - 평가: `(꺼내기 → (신입 제외 | LLM 채점) → 시트에 결과 쓰기) 반복`. 저장해 둔 원문(앞 6,000자)으로 채점하고, 원문이 없으면 시트 정보로 채점해 신뢰 "낮음"으로 적습니다. 기술·경력·문화·커리어 방향 점수, 종합점수, 별점, 판정, 강점, 부족한 점, 신뢰, 보정 내용을 씁니다.
-- 화면: `streamlit run app.py`. 시트를 읽기만 하고 요약 칸·점수순 카드·막대 차트·필터로 보여줍니다. 프로필 탭에서 추천 목록을 골라 프로필을 입력합니다. 탭마다 "사용법" 토글이 있습니다.
+- 화면: `streamlit run app.py`. 공고 탭의 수집·평가·받은함 버튼으로 터미널과 같은 작업을 실행하고(한 번에 하나), 요약 칸·점수순 카드·막대 차트·필터로 결과를 봅니다. 프로필 탭에서 추천 목록을 골라 입력하거나, 이력서·포트폴리오 파일(PDF·Word·txt·md)을 올려 빈 칸을 채운 뒤 저장합니다. 이력서 글자는 LLM 제공자로 전송되고 파일은 저장하지 않습니다. 탭마다 "사용법" 토글이 있습니다.
 - 받은함: 이미지뿐이라 본문을 못 읽은 공고는 사람이 저장한 이미지를 `data/inbox/`(또는 화면 카드)에 넣고 `--inbox`로 읽습니다.
 - 스킬 갭: 시트의 부족한 점을 점수로 가중해 순위를 냅니다. LLM을 부르지 않습니다.
 
@@ -27,7 +27,7 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -r requirements.txt
 pip install -r requirements-ocr.txt  # 선택: 공고 이미지 글자 읽기(PaddleOCR, 약 1GB). 없으면 글자 본문만 저장
 cp .env.example .env              # 열어서 키와 시트 ID 입력
-streamlit run app.py              # 화면의 프로필 탭에서 프로필 입력 (평가할 때 필요)
+streamlit run app.py              # 화면에서 프로필 입력 → 수집 → 평가 (터미널 명령도 그대로 됨)
 # 또는 cp profile.example.yaml profile.yaml 후 직접 입력
 ```
 
@@ -41,7 +41,7 @@ streamlit run app.py              # 화면의 프로필 탭에서 프로필 입�
 | 점수 없는 공고 전부 평가 | `python main.py --score all` |
 | 수집하고 바로 평가 | `python main.py --keyword 백엔드 --score all` |
 | 공부할 기술 순위 | `python main.py --gaps` |
-| 결과 화면, 프로필 입력 | `streamlit run app.py` |
+| 화면에서 수집·평가·결과 보기, 프로필 입력 | `streamlit run app.py` |
 | 넣어 둔 공고 이미지 읽기 | `python main.py --inbox` (이미지 이름: `saramin_공고ID.png`, 여러 장이면 `saramin_공고ID_2.png`) |
 
 | 옵션 | 값 |
@@ -85,7 +85,10 @@ LLM은 항목별 점수(0–100)만 매기고, 나머지는 코드가 계산합�
 | 파일 | 역할 |
 | --- | --- |
 | `main.py` | 실행 옵션을 받고 수집·평가·스킬 갭·받은함을 실행, 결과 출력 |
-| `app.py` | Streamlit 화면 (공고 탭, 프로필 탭). 그리기만 함 |
+| `app.py` | Streamlit 화면 (공고 탭, 프로필 탭). 그리기와 버튼만 |
+| `agent/runner.py` | 수집·평가·받은함 실행 (터미널과 화면이 같이 씀), 화면용 작업 스레드·잠금·진행 상황 |
+| `agent/reports.py` | 실행 결과 요약 글 (터미널 출력, 화면 결과 칸) |
+| `agent/resume.py` | 이력서·포트폴리오 글자 뽑기, LLM으로 프로필 칸 찾기, 입력란에 합치기 |
 | `agent/view.py` | 화면 카드·정렬·필터·차트 자료·요약 칸·오류 문구 |
 | `agent/profile_form.py` | 프로필 탭 입력란, 추천 목록, 파일 값 ↔ 입력란 값 |
 | `.streamlit/config.toml` | 화면 테마 (밝은 보라 계열) |

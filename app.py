@@ -2,7 +2,7 @@
 
 테마는 .streamlit/config.toml과 아래 CSS (v0.5.1 F17–F19).
 
-시트는 읽기만 한다. 파일은 profile.yaml과 data/inbox/에만 쓴다 (F8).
+수집·평가·받은함 버튼은 agent/runner.py를 별도 스레드로 돌린다 (v0.5.2). 이력서 채우기는 agent/resume.py.
 정렬·필터·카드·요약 칸은 agent/view.py, 프로필 입력란은 agent/profile_form.py, 검사는 agent/user_profile.py,
 이미지 저장은 agent/inbox.py에 있다.
 """
@@ -13,27 +13,29 @@ from html import escape
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent import inbox, profile_form, sheets, user_profile, view
+from agent import inbox, ocr, profile_form, resume, runner, sheets, user_profile, view
 
 PROFILE = user_profile.DEFAULT
 SUMMARY_FIELDS = ("요약", "주요업무", "우대사항", "기술스택")
 SCORE_FIELDS = ("기술", "경력", "문화", "방향")
 CHART_HEIGHT = 230  # 필터 카드 높이와 비슷하게 차트가 카드를 채우도록 (F21)
 ACCENT = "#6d5ef5"  # .streamlit/config.toml의 primaryColor와 같게
+FILL = "profile_fill"  # 이력서에서 채운 입력란 값 (session_state 키)
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
 POSTINGS_GUIDE = """
-1. 터미널에서 `python main.py --keyword 백엔드`로 공고를 모으고 `--score`로 평가합니다.
-   이 화면은 결과를 보기만 합니다.
+1. **수집** 카드에 키워드를 넣고 수집을 누른 뒤, **평가**를 누릅니다. 30건 수집은 몇 분 걸립니다.
+   터미널(`python main.py --keyword 백엔드`, `--score`)로 해도 결과는 같습니다.
 2. 카드는 종합점수 높은 순입니다.
    **자세히**를 누르면 요약, 항목별 점수, 강점·부족한 점, 원문 링크가 나옵니다.
 3. **신뢰 낮음**은 본문 없이 제목만 보고 매긴 점수라 흐리게 보입니다.
-   카드에 공고 이미지를 넣고 `--inbox`를 실행하면 본문이 채워집니다.
+   카드에 공고 이미지를 넣고 **받은함 읽기**를 누르면 본문이 채워집니다.
 4. 시트가 바뀌었으면 오른쪽 위 **새로고침**을 누릅니다.
 """
 PROFILE_GUIDE = """
 - `*` 표시한 필수 칸 3개만 채우면 평가할 수 있습니다. 나머지는 채울수록 점수 근거가 정확해집니다.
 - 목록 칸은 눌러서 고르고, 목록에 없으면 직접 입력한 뒤 Enter로 추가합니다.
+- 이력서·포트폴리오 파일을 올리면 빈 칸을 채워 줍니다. 확인하고 고친 뒤 저장하세요.
 - **저장**을 누르면 `profile.yaml`에 씁니다. 파일을 직접 고쳐도 됩니다(주석은 화면에서 저장하면 사라짐).
 """
 
@@ -152,15 +154,123 @@ def show_card(card: view.Card) -> None:
                 show_upload(card)
 
 
+@st.fragment(run_every=1.0)
+def show_live_job() -> None:
+    """실행 중인 작업의 진행 상황. 1초마다 이 부분만 다시 그린다 (F5, F9)."""
+    job = runner.current()
+    if job is None:
+        return
+    if job.finished:
+        load_rows.clear()  # 끝나면 시트를 다시 읽는다 (F6, F9)
+        st.rerun(scope="app")
+    st.progress(
+        job.done / job.total if job.total else 0.0, text=f"{job.label} 중: {job.stage} ({job.done}/{job.total})"
+    )
+
+
+def show_job_result() -> None:
+    job = runner.current()
+    if job is None or not job.finished:
+        return
+    title = f"{job.label} 결과 ({job.started} 시작)"
+    if job.error:
+        st.error(f"{title}\n\n{job.error}")  # 키·경로 없이 (F13)
+    else:
+        st.success(title + "\n\n" + "\n".join(f"- {escape(line.strip())}" for line in job.lines))
+
+
+def start_job(starter, *args) -> None:
+    try:
+        starter(*args)
+    except (runner.RunError, user_profile.ProfileError) as e:
+        st.error(str(e))
+        return
+    except Exception as e:  # 모르는 지역·직무 이름 등
+        st.error(runner.error_text(e))
+        return
+    st.rerun()
+
+
+def show_collect_card() -> None:
+    busy = runner.running()  # 한 번에 하나만 (F12)
+    with st.container(border=True, key="glass-run-collect"):
+        st.markdown(
+            "**수집** <span class='jv-muted'>사람인·잡코리아 공개 페이지, 요청 간격 3초</span>", unsafe_allow_html=True
+        )
+        try:
+            raw = user_profile.read_raw(PROFILE)
+        except user_profile.ProfileError:
+            raw = None
+        keyword = st.selectbox(
+            "키워드 *", runner.keyword_options(raw), index=None, accept_new_options=True,
+            placeholder="골라 주세요. 없으면 입력 후 Enter", help="사이트 검색창에 넣을 말 (F3)",
+        )  # fmt: skip
+        left, right = st.columns(2)
+        location = left.selectbox("지역", runner.REGION_NAMES, index=None, placeholder="전체")
+        job = right.selectbox("직무", runner.JOB_NAMES, index=None, accept_new_options=True, placeholder="전체")
+        left, middle, right = st.columns([1.2, 1.4, 1])
+        career = left.radio("경력", [runner.CAREER_ALL, *runner.codes.CAREERS], horizontal=True)
+        names = middle.multiselect("사이트", list(runner.SOURCE_NAMES), default=list(runner.SOURCE_NAMES))
+        count = right.number_input("사이트당 개수", 1, runner.MAX_COUNT, 10)
+        if st.button("🔎 수집", type="primary", disabled=busy, key="run-collect", use_container_width=True):
+            try:
+                sources = [runner.SOURCE_NAMES[name] for name in names]
+                state = runner.collect_state(keyword or "", location, job, career, sources, int(count))
+            except Exception as e:
+                st.error(runner.error_text(e))
+                return
+            start_job(runner.start_collect, state)
+
+
+def show_score_card(rows: list[dict] | None) -> None:
+    busy = runner.running()
+    with st.container(border=True, key="glass-run-score"):
+        st.markdown("**평가** <span class='jv-muted'>저장된 프로필로 LLM 채점</span>", unsafe_allow_html=True)
+        modes = {"체크한 공고": "checked", "점수 없는 공고 전부": "all"}
+        mode = modes[st.radio("대상", list(modes), horizontal=True, label_visibility="collapsed")]
+        targets = "-" if rows is None else runner.score_targets(rows, mode)
+        if st.button(
+            f"🧮 평가 (대상 {targets}건)", disabled=busy or not targets, key="run-score", use_container_width=True
+        ):
+            try:
+                profile = runner.load_profile(PROFILE)  # 없거나 틀리면 실행하지 않음 (F8)
+            except user_profile.ProfileError as e:
+                st.error(f"{e}\n\n프로필 탭에서 입력하고 저장해 주세요.")
+                return
+            start_job(runner.start_score, mode, profile)
+
+        images = runner.inbox_count()
+        if images:  # 받은함에 이미지가 있을 때만 (F10)
+            st.markdown(f"**받은함** <span class='jv-muted'>이미지 {images}장</span>", unsafe_allow_html=True)
+            if not ocr.available():
+                st.info(f"OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")  # F11
+            elif st.button("🖼 받은함 읽기", disabled=busy, key="run-inbox", use_container_width=True):
+                start_job(runner.start_inbox)
+
+
+def show_run_panel(rows: list[dict] | None) -> None:
+    left, right = st.columns([2, 1])
+    with left:
+        show_collect_card()
+    with right:
+        show_score_card(rows)
+    if runner.running():
+        show_live_job()
+    show_job_result()
+
+
 def show_postings() -> None:
     show_guide(POSTINGS_GUIDE)
     try:
-        rows = load_rows()
+        rows, error = load_rows(), None
     except Exception as e:
-        st.error(view.error_message(e))  # v0.5 F9
+        rows, error = None, e
+    show_run_panel(rows)
+    if error is not None:
+        st.error(view.error_message(error))  # v0.5 F9
         return
     if not rows:
-        st.info("공고 없음, 터미널에서 수집하세요. 예: `python main.py --keyword 백엔드`")  # v0.5 F10
+        st.info("공고 없음, 위 수집 카드에서 키워드를 넣고 수집하세요.")  # v0.5 F10
         return
 
     items = view.cards(rows)
@@ -227,6 +337,60 @@ def show_field(field: profile_form.Field, default):
     return st.text_input(label, default, placeholder=field.placeholder, help=field.help)
 
 
+def show_resume_fill(values: dict, fill: dict | None) -> None:
+    """이력서·포트폴리오 파일 → LLM → 입력란 (v0.5.2 F16–F22). 저장은 하지 않는다."""
+    st.markdown(
+        "**📄 이력서·포트폴리오로 채우기** <span class='jv-muted'>PDF(글자 있는 것)·Word·txt·md, 여러 개 가능</span>",
+        unsafe_allow_html=True,
+    )
+    if fill:  # 채운 칸 표시 (F20)
+        st.markdown(
+            "<span class='jv-muted'>이력서에서 채움</span> "
+            + "".join(badge(label, "verdict") for label in fill["filled"]),
+            unsafe_allow_html=True,
+        )
+        if "경력 연수" in fill["filled"]:
+            st.warning("경력 연수는 LLM이 계산한 값입니다. 맞는지 확인해 주세요.")
+        st.caption("확인하고 고친 뒤 아래 **저장**을 눌러야 profile.yaml에 씁니다.")
+        if st.button("채운 값 버리기", key="resume-discard"):
+            st.session_state.pop(FILL, None)
+            st.rerun()
+    files = st.file_uploader(
+        "이력서 파일",
+        type=[suffix[1:] for suffix in resume.EXTENSIONS],
+        accept_multiple_files=True,
+        key="resume-files",
+        label_visibility="collapsed",
+    )
+    st.caption(
+        f"파일 글자(앞 {resume.MAX_TEXT:,}자)가 LLM 제공자(기본 Gemini)로 전송됩니다. 파일은 저장하지 않습니다."
+    )  # N2, N3
+    overwrite = st.toggle("이미 적은 칸도 바꾸기", key="resume-overwrite")  # 기본은 빈 칸만 (F19)
+    if not st.button("✨ 이력서로 채우기", disabled=not files, key="resume-fill"):
+        return
+    text, skipped = resume.read_files([(file.name, file.getvalue()) for file in files])
+    for name, reason in skipped:  # 그 파일만 건너뜀 (F21)
+        st.warning(f"{name}: {reason}")
+    if not text:
+        st.error("글자를 읽을 수 있는 파일이 없습니다.")
+        return
+    try:
+        with st.spinner("LLM이 이력서를 읽는 중"):
+            found = resume.ask(text)
+    except resume.ResumeError as e:  # 아무 칸도 바꾸지 않음 (F21)
+        st.error(f"이력서를 읽지 못했습니다: {e}")
+        return
+    except Exception as e:  # LLM 키·네트워크 오류. 키는 보이지 않는다
+        st.error(runner.error_text(e))
+        return
+    merged, filled = resume.merge(values, found, overwrite)
+    if not filled:
+        st.info("새로 채울 칸이 없습니다.")
+        return
+    st.session_state[FILL] = {"values": merged, "filled": filled}
+    st.rerun()
+
+
 def show_profile() -> None:
     show_guide(PROFILE_GUIDE)
     try:
@@ -242,8 +406,10 @@ def show_profile() -> None:
         except user_profile.ProfileError as e:
             st.warning(f"지금 파일에 고칠 칸이 있습니다.\n\n{e}")
 
+    fill_box = st.container(border=True, key="glass-resume")  # 맨 위에 두고 입력란을 그린 뒤 채운다
     badges = st.empty()  # 입력란을 그린 뒤 채운다 (F8)
-    defaults = profile_form.to_form(raw)
+    fill = st.session_state.get(FILL)  # 이력서에서 채운 값. 저장 전까지 파일 대신 입력란 기본값 (v0.5.2 F18)
+    defaults = fill["values"] if fill else profile_form.to_form(raw)
     values = {}
     # 입력하는 동안 필수 칸 배지가 바뀌도록 st.form을 쓰지 않는다 (F8).
     # key를 주지 않아 파일이 바뀌면 입력란이 새 값으로 그려진다 (v0.5 F21)
@@ -260,6 +426,8 @@ def show_profile() -> None:
         ),
         unsafe_allow_html=True,
     )
+    with fill_box:
+        show_resume_fill(values, fill)
 
     if st.button("💾 저장", type="primary", key="profile-save"):
         try:
@@ -268,6 +436,7 @@ def show_profile() -> None:
             st.error(str(e))  # 저장하지 않는다 (v0.5 F20)
             return
         user_profile.save(profile, PROFILE)
+        st.session_state.pop(FILL, None)  # 저장한 뒤에는 파일 값을 기본값으로
         st.success(f"저장함 ({datetime.now():%Y-%m-%d %H:%M:%S})")
 
 

@@ -13,9 +13,10 @@ class Recorder:
     def __call__(self):
         return self
 
-    def invoke(self, state, config):
+    def stream(self, state, config, stream_mode):
+        # 화면과 같은 runner가 stream으로 돌린다 (v0.5.2 F14). 마지막 values가 결과 State
         self.calls.append((state, config))
-        return self.result
+        yield "values", self.result
 
 
 def test_names_become_codes_and_both_sources_by_default():
@@ -54,7 +55,7 @@ def test_unknown_choice_is_rejected(argv):
 
 
 def test_unknown_name_stops_before_requests(monkeypatch):
-    monkeypatch.setattr(main, "build_graph", lambda: pytest.fail("모르는 이름이면 그래프를 실행하지 않아야 함"))
+    monkeypatch.setattr(main.runner, "build_graph", lambda: pytest.fail("모르는 이름이면 그래프를 실행하지 않아야 함"))
 
     with pytest.raises(SystemExit) as exc_info:
         main.main(["--keyword", "백엔드", "--location", "서울특별시"])
@@ -99,7 +100,7 @@ def test_report_with_no_jobs(capsys):
 
 def test_first_run_prints_personal_use_notice_and_ocr_hint(monkeypatch, tmp_path, capsys):
     collect = Recorder({"fetched": {"saramin": 0}})
-    monkeypatch.setattr(main, "build_graph", collect)
+    monkeypatch.setattr(main.runner, "build_graph", collect)
     monkeypatch.setattr(main.postings, "DIR", tmp_path / "postings")
     monkeypatch.setattr(main.ocr, "available", lambda: False)
 
@@ -110,12 +111,12 @@ def test_first_run_prints_personal_use_notice_and_ocr_hint(monkeypatch, tmp_path
     assert "pip install -r requirements-ocr.txt" in out  # F13
     state, config = collect.calls[0]
     assert state["ocr_ready"] is False
-    assert config == {"recursion_limit": main.recursion_limit(10 * 2)}  # 사이트당 개수 × 사이트 수
+    assert config == {"recursion_limit": main.runner.recursion_limit(10 * 2)}  # 사이트당 개수 × 사이트 수
 
 
 def test_notice_only_on_first_run(monkeypatch, tmp_path, capsys):
     (tmp_path / "postings").mkdir()
-    monkeypatch.setattr(main, "build_graph", Recorder({"fetched": {}}))
+    monkeypatch.setattr(main.runner, "build_graph", Recorder({"fetched": {}}))
     monkeypatch.setattr(main.postings, "DIR", tmp_path / "postings")
     monkeypatch.setattr(main.ocr, "available", lambda: True)
 
@@ -157,7 +158,7 @@ def test_invalid_option_combinations(argv):
 
 
 def test_missing_profile_stops_before_collecting(monkeypatch, tmp_path):
-    monkeypatch.setattr(main, "build_graph", lambda: pytest.fail("프로필이 없으면 수집도 하지 않아야 함"))
+    monkeypatch.setattr(main.runner, "build_graph", lambda: pytest.fail("프로필이 없으면 수집도 하지 않아야 함"))
     monkeypatch.setattr(main.sheets, "read_rows", lambda: pytest.fail("프로필이 없으면 시트를 읽지 않아야 함"))
     missing = tmp_path / "profile.yaml"
 
@@ -169,7 +170,7 @@ def test_missing_profile_stops_before_collecting(monkeypatch, tmp_path):
 
 
 def test_bad_profile_stops_before_sheet_and_llm(monkeypatch, tmp_path):
-    monkeypatch.setattr(main, "build_score_graph", lambda: pytest.fail("프로필이 틀리면 평가하지 않음"))
+    monkeypatch.setattr(main.runner, "build_score_graph", lambda: pytest.fail("프로필이 틀리면 평가하지 않음"))
     monkeypatch.setattr(main.sheets, "read_rows", lambda: pytest.fail("프로필이 틀리면 시트를 읽지 않아야 함"))
     profile = tmp_path / "profile.yaml"
     profile.write_text("skills: {main: []}\nexperience: {years: 2.5}\ndirection: {jobs: [백엔드]}\n", encoding="utf-8")
@@ -190,8 +191,8 @@ def test_collect_then_score_all(monkeypatch, tmp_path, capsys):
     ]
     collect = Recorder({"fetched": {"saramin": 1}, "saved": [{"source": "saramin", "body": "글자"}]})
     score = Recorder({"done": [rows[0]], "skipped": [rows[2]]})
-    monkeypatch.setattr(main, "build_graph", collect)
-    monkeypatch.setattr(main, "build_score_graph", score)
+    monkeypatch.setattr(main.runner, "build_graph", collect)
+    monkeypatch.setattr(main.runner, "build_score_graph", score)
     monkeypatch.setattr(main.sheets, "read_rows", lambda: rows)
 
     monkeypatch.setattr(main.postings, "DIR", tmp_path)
@@ -203,7 +204,7 @@ def test_collect_then_score_all(monkeypatch, tmp_path, capsys):
     assert state["queue"] == [rows[0]] and state["skipped"] == [rows[2]]
     assert state["years"] == 1  # 보정과 신입 제외에 쓴다 (v0.5 F26, F36)
     assert state["profile"].startswith("## 기술\n- 주력: Python")  # to_prompt 글 (F22)
-    assert config == {"recursion_limit": main.recursion_limit(1)}
+    assert config == {"recursion_limit": main.runner.recursion_limit(1)}
     out = capsys.readouterr().out
     assert "모르는 칸(무시함): hobby" in out  # F14
     assert "사람인 가져옴 1 / 새로 저장 1" in out
@@ -215,8 +216,8 @@ def test_score_only_does_not_collect(monkeypatch, tmp_path):
     profile.write_text(PROFILE, encoding="utf-8")
     rows = [{"row": 2, "check": "TRUE", "score": "", "experience": "신입", "education": "", "keywords": ""}]
     score = Recorder({"done": rows})
-    monkeypatch.setattr(main, "build_graph", lambda: pytest.fail("--score만 쓰면 수집하지 않음"))
-    monkeypatch.setattr(main, "build_score_graph", score)
+    monkeypatch.setattr(main.runner, "build_graph", lambda: pytest.fail("--score만 쓰면 수집하지 않음"))
+    monkeypatch.setattr(main.runner, "build_score_graph", score)
     monkeypatch.setattr(main.sheets, "read_rows", lambda: rows)
 
     main.main(["--score", "--profile", str(profile)])
@@ -228,7 +229,7 @@ def test_gaps_needs_no_profile_and_no_llm(monkeypatch, capsys):
     rows = [{"score": "40", "gaps": "Docker, AWS"}, {"score": "80", "gaps": "docker"}, {"score": "", "gaps": "Git"}]
     monkeypatch.setattr(main.sheets, "read_rows", lambda: rows)
     monkeypatch.setattr(main.user_profile, "load", lambda path: pytest.fail("--gaps는 프로필을 읽지 않음"))
-    monkeypatch.setattr(main, "build_score_graph", lambda: pytest.fail("--gaps는 평가하지 않음"))
+    monkeypatch.setattr(main.runner, "build_score_graph", lambda: pytest.fail("--gaps는 평가하지 않음"))
 
     main.main(["--gaps"])
 
