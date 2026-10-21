@@ -112,6 +112,28 @@ def test_chart_has_scored_cards_only_and_unique_names():
     ]
 
 
+def test_summary_counts_whole_sheet():
+    rows = [
+        scored(2, 85, verdict="강력 추천"),
+        scored(3, 70),
+        scored(4, 50, verdict="보류", body="본문 미확보"),
+        make_row(5, body="본문 미확보"),
+        make_row(6, verdict="제외 (경력 요구)"),
+    ]
+
+    assert [(label, value) for label, value, _ in view.summary(view.cards(rows))] == [
+        ("전체 공고", 5),
+        ("평가 완료", 3),
+        ("추천 이상", 2),
+        ("본문 미확보", 2),
+    ]  # v0.5.1 F2
+
+
+def test_summary_of_empty_or_unscored_sheet():
+    assert [value for _, value, _ in view.summary([])] == [0, 0, 0, 0]
+    assert [value for _, value, _ in view.summary(view.cards([make_row(2), make_row(3)]))] == [2, 0, 0, 0]
+
+
 @pytest.mark.parametrize(
     ("error", "expected"),
     [
