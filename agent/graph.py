@@ -43,6 +43,11 @@ class State(TypedDict, total=False):
     filled: Annotated[list[dict], operator.add]  # 다른 사이트 본문으로 채운 줄 (v0.5 F46)
 
 
+def llm_model() -> str:
+    """쓸 LLM ("제공자:모델"). 평가·이력서 채우기·오류 문구가 같이 쓴다 (v0.5.2 F33)."""
+    return os.getenv("LLM_MODEL", "google_genai:gemini-2.5-flash")
+
+
 def _failure(job: dict, step: str, error: Exception) -> dict:
     # 예외 메시지에는 키나 인증정보, 주소가 섞일 수 있어 예외 이름만 남긴다.
     # crawler 예외는 메시지에 호스트와 이유(HTTP 코드, 연결 실패 종류)만 담으므로 함께 남긴다.
@@ -377,7 +382,7 @@ def score(state: ScoreState) -> ScoreState:
     try:
         # "제공자:모델" 형식. 예) google_genai:gemini-2.5-flash, anthropic:claude-sonnet-5-5
         # Gemini 2.5는 생각 토큰도 출력 한도를 쓰므로 JSON이 잘리지 않게 넉넉히 둔다.
-        llm = init_chat_model(os.getenv("LLM_MODEL", "google_genai:gemini-2.5-flash"), max_tokens=2048)
+        llm = init_chat_model(llm_model(), max_tokens=2048)
         body = _body(row)
         prompt = score_prompt if body is None else body_prompt
         inputs = {"location": "", "keywords": "", "experience": "", "education": ""} | row

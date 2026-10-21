@@ -67,8 +67,14 @@ FIELDS = [
         tuple(SKILLS),
         True,
     ),
-    Field(("skills", "can_use"), "다룰 수 있음", "pick", "찾아보며 쓸 수 있는 것", "골라 주세요", tuple(SKILLS)),
-    Field(("skills", "tried"), "써 본 적 있음", "pick", "공부나 실습으로 써 본 것", "골라 주세요", tuple(SKILLS)),
+    Field(
+        ("skills", "can_use"),
+        "다룰 수 있음",
+        "pick",
+        "찾아보며 쓸 수 있거나 공부·실습으로 써 본 것. 주력 기술에 고른 것은 빠짐",
+        "골라 주세요",
+        tuple(SKILLS),
+    ),
     Field(("skills", "certificates"), "자격증", "pick", "", "골라 주세요", tuple(CERTIFICATES)),
     Field(("experience", "years"), "경력 연수", "years", "직무 경력 연수. 신입은 0", required=True),
     Field(("experience", "degree"), "최종 학력", "degree", "고르고 전공을 적습니다", "예: 컴퓨터공학"),
@@ -152,11 +158,33 @@ def _lines(text: str) -> list[str]:
     return [line.strip() for line in str(text).splitlines() if line.strip()]
 
 
+# 앞 칸에 고른 기술은 뒤 칸에서 고를 수 없다 (v0.5.2 F37). 뒤 칸 → 앞 칸
+TAKEN_BY = {("skills", "can_use"): ("skills", "main")}
+
+
+def taken(values: dict, keys: tuple[str, ...]) -> list[str]:
+    """이 칸에서 고를 수 없는 항목 (앞 칸에 이미 고른 것)."""
+    owner = TAKEN_BY.get(keys)
+    return list(values.get(owner) or []) if owner else []
+
+
+def without_taken(values: dict) -> dict:
+    """앞 칸과 겹치는 항목을 뒤 칸에서 뺀 입력란 값."""
+    values = dict(values)
+    for keys in TAKEN_BY:
+        values[keys] = [item for item in values.get(keys) or [] if item not in taken(values, keys)]
+    return values
+
+
 def to_form(data: dict | None) -> dict:
-    """파일 내용(검사 전)을 입력란 기본값으로. 틀린 값은 빈 값으로 (연수는 0)."""
+    """파일 내용(검사 전)을 입력란 기본값으로. 틀린 값은 빈 값으로 (연수는 0).
+
+    예전 써 본 적 있음(tried)은 다룰 수 있음에 붙이고, 주력과 겹치는 기술은 뺀다 (v0.5.2 F36, F37).
+    """
+    data = user_profile.upgrade(data or {})
     values = {}
     for field in FIELDS:
-        value = _get(data or {}, field.keys)
+        value = _get(data, field.keys)
         if field.kind == "years":
             ok = isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= user_profile.MAX_YEARS
             values[field.keys] = value if ok else 0
@@ -169,12 +197,13 @@ def to_form(data: dict | None) -> dict:
         else:
             text = "" if value is None or isinstance(value, (dict, list)) else str(value)
             values[field.keys] = split_degree(text) if field.kind == "degree" else text
-    return values
+    return without_taken(values)
 
 
 def from_form(values: dict) -> dict:
-    """입력란 값을 프로필 dict로. 빈 항목·앞뒤 공백·겹치는 항목은 지운다."""
+    """입력란 값을 프로필 dict로. 빈 항목·앞뒤 공백·겹치는 항목(칸 사이 포함)은 지운다."""
     data: dict = {}
+    values = without_taken(values)
     for field in FIELDS:
         value = values.get(field.keys)
         if field.kind == "pick":

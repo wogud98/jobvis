@@ -17,6 +17,7 @@ CAREER_GROUPS = ("신입", "경력", "무관")  # 경력 필터 보기 (v0.5.2 F
 OTHER_CAREER = "기타"  # 묶음으로 나누지 못한 경력 글자 (예: 인턴)
 NOT_SCORED = "평가 전"
 NONE = "없음"  # 빈 칸 표시 (F3)
+PREVIEW = 600  # 평가 전 카드에 보일 원문 글자 수 (v0.5.2 F31)
 RECOMMENDED = ("강력 추천", "추천")  # 요약 칸 "추천 이상" (v0.5.1 F2)
 UPLOADABLE = (postings.MISSING, postings.PARTLY_UNREAD)  # 이미지 넣는 칸을 보일 본문 상태 (F47)
 
@@ -39,6 +40,7 @@ class Card:
     adjust: str
     body: str
     details: dict[str, str] = field(default_factory=dict)
+    info: dict[str, str] = field(default_factory=dict)  # 수집 때 받은 칸. 평가 전에도 보인다 (v0.5.2 F31)
 
     @property
     def dim(self) -> bool:
@@ -55,7 +57,7 @@ class Filters:
 
     sources: list[str]
     experiences: list[str]  # CAREER_GROUPS 중에서
-    show_unscored: bool = False
+    scored_only: bool = False  # 기본은 평가 전 공고도 보인다 (v0.5.2 F32)
 
 
 def _score(value: str) -> int | None:
@@ -93,6 +95,13 @@ def _card(row: dict) -> Card:
         "강점": row["strengths"],
         "부족한 점": row["gaps"],
     }
+    info = {
+        "지역": row["location"],
+        "경력": row["experience"],
+        "학력": row["education"],
+        "키워드": row["keywords"],
+        "마감": row["deadline"],
+    }
     return Card(
         row=row["row"],
         company=row["company"],
@@ -110,7 +119,18 @@ def _card(row: dict) -> Card:
         adjust=row["adjust"],
         body=row["body"],
         details={name: _or_none(value) for name, value in details.items()},
+        info={name: value.strip() for name, value in info.items() if value.strip()},
     )
+
+
+def preview(card: Card, limit: int = PREVIEW) -> str:
+    """저장해 둔 원문 앞부분 (v0.5.2 F31). 없으면 빈 글자. 이미지 글자도 이어 붙인다."""
+    content = postings.load(card.source_code, card.job_id) if card.job_id else None
+    if not content:
+        return ""
+    text, ocr = postings.split(content)
+    whole = "\n".join(part.strip() for part in (text, *ocr) if part.strip())
+    return whole if len(whole) <= limit else whole[:limit].rstrip() + " …"
 
 
 def cards(rows: list[dict]) -> list[Card]:
@@ -148,7 +168,7 @@ def apply(items: list[Card], filters: Filters) -> list[Card]:
         for card in items
         if (not filters.sources or card.source in filters.sources)
         and (not filters.experiences or set(career_groups(card.experience)) & set(filters.experiences))
-        and (filters.show_unscored or card.score is not None)
+        and (not filters.scored_only or card.score is not None)
     ]
 
 

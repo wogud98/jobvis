@@ -6,13 +6,14 @@
 from dataclasses import dataclass, field
 
 from agent import inbox, postings, scoring
-from agent.graph import SOURCES
+from agent.graph import SOURCES, llm_model
 
 # 예외 이름 일부 → 고칠 방법. LangChain 모델 오류 이름(ModelNotFoundError 등)과 제공자별 이름이 모두 걸린다 (F26)
 LLM_HINTS = (
     (
         "ModelNotFound",  # FileNotFoundError와 섞이지 않게
-        "LLM 모델을 찾지 못했습니다. .env의 LLM_MODEL을 확인해 주세요 (예: google_genai:gemini-flash-lite-latest).",
+        "LLM 모델({model})을 찾지 못했습니다. .env의 LLM_MODEL을 google_genai:gemini-flash-lite-latest 등으로 고치고"
+        " 화면을 다시 켜 주세요.",
     ),
     ("Authentication", "LLM API 키가 맞지 않습니다. .env의 GOOGLE_API_KEY를 확인해 주세요."),
     ("PermissionDenied", "LLM API 키에 권한이 없습니다. .env의 GOOGLE_API_KEY를 확인해 주세요."),
@@ -25,7 +26,7 @@ def llm_hint(names: list[str] | str) -> str:
     names = [names] if isinstance(names, str) else names
     for part, hint in LLM_HINTS:
         if any(part in name for name in names):
-            return hint
+            return hint.format(model=llm_model())  # 실제로 쓴 모델 이름 (F33). 키는 넣지 않는다
     return ""
 
 

@@ -28,11 +28,11 @@ def test_example_file_in_repo_is_valid():
 
 
 def test_single_text_in_list_field_becomes_one_item_list(tmp_path):
-    text = "skills: {main: Python, tried: '  '}\nexperience: {years: 3}\ndirection: {jobs: 백엔드}\nculture:\n"
+    text = "skills: {main: Python, can_use: '  '}\nexperience: {years: 3}\ndirection: {jobs: 백엔드}\nculture:\n"
     profile, _ = user_profile.load(write(tmp_path, text))
 
     assert profile.skills.main == ["Python"]
-    assert profile.skills.tried == []  # 빈 항목은 지운다
+    assert profile.skills.can_use == []  # 빈 항목은 지운다
     assert profile.direction.jobs == ["백엔드"]
     assert profile.culture == []
 
@@ -180,3 +180,31 @@ def test_read_raw_missing_and_broken(tmp_path):
     with pytest.raises(user_profile.ProfileError, match="화면에서 저장하지 않습니다"):
         user_profile.read_raw(write(tmp_path, "skills: [Python\n"))
     assert user_profile.read_raw(write(tmp_path, "- 목록\n")) == {}
+
+
+def test_old_tried_is_read_into_can_use_without_warning(tmp_path):
+    text = (
+        "skills: {main: [Python], can_use: [Java], tried: [Docker, Python, Java]}\n"
+        "experience: {years: 0}\ndirection: {jobs: [백엔드]}\n"
+    )
+
+    profile, warnings = user_profile.load(write(tmp_path, text))
+
+    assert profile.skills.can_use == ["Java", "Docker"]  # v0.5.2 F36, 주력·같은 칸 중복 뺌 (F37)
+    assert warnings == []  # 예전 칸은 모르는 칸 경고를 내지 않음
+    assert "tried" not in user_profile.to_dict(profile)["skills"]  # 다시 저장하면 can_use 하나로
+
+
+def test_to_prompt_has_one_can_use_line():
+    profile, _ = user_profile.validate(
+        {
+            "skills": {"main": ["Python"], "can_use": ["Go", "Python"]},
+            "experience": {"years": 1},
+            "direction": {"jobs": ["백엔드"]},
+        }
+    )
+
+    text = user_profile.to_prompt(profile)
+
+    assert "- 다룰 수 있음: Go" in text
+    assert "써 본 적 있음" not in text

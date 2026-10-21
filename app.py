@@ -7,6 +7,7 @@
 이미지 저장은 agent/inbox.py에 있다.
 """
 
+import hashlib
 from datetime import datetime
 from html import escape
 
@@ -169,20 +170,43 @@ def show_card(card: view.Card) -> None:
             f"{badges}<span class='jv-muted'>{escape(meta)}</span>",
             unsafe_allow_html=True,
         )
-        with st.expander("자세히"):  # 펼침 내용은 v0.5와 같음 (F4)
-            for name in SUMMARY_FIELDS:
-                st.markdown(f"**{name}** {card.details[name]}")
-            st.markdown(" · ".join(f"**{name}** {card.details[name]}" for name in SCORE_FIELDS))
-            st.markdown(f"**강점** {card.details['강점']}")
-            st.markdown(f"**부족한 점** {card.details['부족한 점']}")
-            if card.trust:
-                st.markdown(f"**신뢰** {card.trust} (본문: {card.body or '없음'})")
-            if card.adjust:
-                st.markdown(f"**보정** {card.adjust}")
+        with st.expander("자세히"):
+            if card.score is None:  # 평가 전·제외: 수집 칸과 원문 앞부분 (v0.5.2 F31)
+                show_unscored_details(card)
+            else:
+                show_scored_details(card)
             if card.url:
                 st.link_button("원문 열기", card.url)  # 새 탭 (v0.5 F4)
             if card.can_upload:
                 show_upload(card)
+
+
+def show_unscored_details(card: view.Card) -> None:
+    if card.verdict == view.scoring.EXCLUDED:
+        st.info("신입에게 경력을 요구하는 공고라 평가에서 제외했습니다.")
+    else:
+        st.info("아직 평가 전입니다. 🧮 평가를 누르면 요약·점수·강점·부족한 점이 채워집니다.")
+    if card.info:
+        st.markdown(" · ".join(f"**{name}** {escape(value)}" for name, value in card.info.items()))
+    text = view.preview(card)
+    if text:
+        st.caption("원문 앞부분")
+        st.text(text)  # 원문은 사이트 글자라 그대로(서식 없이) 보인다
+    elif card.can_upload:
+        st.warning("본문이 없습니다. 아래에 공고 이미지를 넣으면 평가가 정확해집니다.")
+
+
+def show_scored_details(card: view.Card) -> None:
+    # 평가한 공고의 펼침 내용은 v0.5와 같음 (F4)
+    for name in SUMMARY_FIELDS:
+        st.markdown(f"**{name}** {card.details[name]}")
+    st.markdown(" · ".join(f"**{name}** {card.details[name]}" for name in SCORE_FIELDS))
+    st.markdown(f"**강점** {card.details['강점']}")
+    st.markdown(f"**부족한 점** {card.details['부족한 점']}")
+    if card.trust:
+        st.markdown(f"**신뢰** {card.trust} (본문: {card.body or '없음'})")
+    if card.adjust:
+        st.markdown(f"**보정** {card.adjust}")
 
 
 @st.fragment(run_every=1.0)
@@ -327,7 +351,7 @@ def show_postings() -> None:
             # 처음엔 비워 두고 "전체"로 보인다. 고른 것이 있을 때만 거른다 (v0.5.2 F29)
             sources=st.multiselect("출처", sources, placeholder="전체"),
             experiences=st.multiselect("경력", experiences, placeholder="전체", help="신입·경력·무관으로 묶음"),
-            show_unscored=st.toggle("평가 전 공고 보기"),
+            scored_only=st.toggle("평가된 공고만 보기"),  # 기본은 전체 (v0.5.2 F32)
         )
     shown = view.apply(items, filters)
     with chart_box.container(border=True, key="box-chart"):
@@ -350,13 +374,23 @@ def show_postings() -> None:
         show_card(card)
 
 
-def show_field(field: profile_form.Field, default):
+def pick_key(field: profile_form.Field, default: list[str]) -> str:
+    # 기본값(파일·이력서 값)이 바뀌면 새 key라 입력란이 새 값으로 그려진다 (v0.5 F21)
+    digest = hashlib.sha1(repr(default).encode()).hexdigest()[:8]
+    return f"pick-{'.'.join(field.keys)}-{digest}"
+
+
+def show_field(field: profile_form.Field, default, taken: list[str] = ()):
     label = field.label + (" *" if field.required else "")
     if field.kind == "pick":  # 추천 목록에서 고르고, 없으면 입력해 추가 (F10, F11)
+        # 앞 칸에 고른 기술은 보기와 고른 값에서 뺀다 (v0.5.2 F37). key가 있어 다른 칸을 바꿔도 고른 값은 남는다
+        key = pick_key(field, default)
+        current = st.session_state.get(key, default)
+        st.session_state[key] = [item for item in current if item not in taken]
+        choices = [item for item in profile_form.options(field.suggestions, current) if item not in taken]
         return st.multiselect(
-            label, profile_form.options(field.suggestions, default), default=default,
-            accept_new_options=True, help=field.help, placeholder=field.placeholder,
-        )  # fmt: skip
+            label, choices, key=key, accept_new_options=True, help=field.help, placeholder=field.placeholder
+        )
     if field.kind == "years":  # 가로 슬라이더 (v0.5 F18)
         return st.slider(label, 0, max(profile_form.SLIDER_MAX, default), default, step=1, help=field.help)
     if field.kind == "degree":  # 최종 학력 고르기 + 전공 (F13)
@@ -390,6 +424,7 @@ def show_resume_fill(values: dict, fill: dict | None) -> None:
             + "".join(badge(label, "verdict") for label in fill["filled"]),
             unsafe_allow_html=True,
         )
+        show_missing(fill.get("missing", []))
         if "경력 연수" in fill["filled"]:
             st.warning("경력 연수는 LLM이 계산한 값입니다. 맞는지 확인해 주세요.")
         st.caption("확인하고 고친 뒤 아래 **저장**을 눌러야 profile.yaml에 씁니다.")
@@ -427,9 +462,20 @@ def show_resume_fill(values: dict, fill: dict | None) -> None:
     merged, filled = resume.merge(values, found, overwrite)
     if not filled:
         st.info("새로 채울 칸이 없습니다.")
+        show_missing(resume.missing(values, found))
         return
-    st.session_state[FILL] = {"values": merged, "filled": filled}
+    st.session_state[FILL] = {"values": merged, "filled": filled, "missing": resume.missing(merged, found)}
     st.rerun()
+
+
+def show_missing(labels: list[str]) -> None:
+    """이력서에 근거가 없어 비워 둔 칸 (v0.5.2 F35). 추측해 채우지 않고 직접 채우게 한다."""
+    if labels:
+        st.markdown(
+            "<span class='jv-muted'>이력서에 없어 비워 둠</span> "
+            + "".join(badge(f"입력 필요 · {label}", "mid") for label in labels),
+            unsafe_allow_html=True,
+        )
 
 
 def show_profile() -> None:
@@ -451,6 +497,9 @@ def show_profile() -> None:
     badges = st.empty()  # 입력란을 그린 뒤 채운다 (F8)
     fill = st.session_state.get(FILL)  # 이력서에서 채운 값. 저장 전까지 파일 대신 입력란 기본값 (v0.5.2 F18)
     defaults = fill["values"] if fill else profile_form.to_form(raw)
+    keys = {pick_key(field, defaults[field.keys]) for field in profile_form.FIELDS if field.kind == "pick"}
+    for old in [key for key in st.session_state if str(key).startswith("pick-") and key not in keys]:
+        del st.session_state[old]  # 예전 기본값의 고른 값은 버린다
     values = {}
     # 입력하는 동안 필수 칸 배지가 바뀌도록 st.form을 쓰지 않는다 (F8).
     # key를 주지 않아 파일이 바뀌면 입력란이 새 값으로 그려진다 (v0.5 F21)
@@ -459,7 +508,7 @@ def show_profile() -> None:
             with column.container(border=True, key=f"box-profile-{group}"):
                 st.markdown(f"#### {title} <span class='jv-muted'>{note}</span>", unsafe_allow_html=True)
                 for field in profile_form.group_fields(group):
-                    values[field.keys] = show_field(field, defaults[field.keys])
+                    values[field.keys] = show_field(field, defaults[field.keys], profile_form.taken(values, field.keys))
     badges.markdown(
         "".join(
             badge(f"{'✓' if done else '✗'} {name}", "high" if done else "low")

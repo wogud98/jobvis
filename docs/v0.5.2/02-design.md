@@ -1,8 +1,8 @@
 # v0.5.2 설계
 
-기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F30, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
+기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F37, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
 
-사용자 결정(2026-10-21 "진행")으로 요구사항·설계·구현을 한 PR에 담았다. 수집·평가 그래프, 시트 열, `profile.yaml` 형식은 바뀌지 않는다.
+사용자 결정(2026-10-21 "진행")으로 요구사항·설계·구현을 한 PR에 담았다. 수집·평가 그래프와 시트 열은 바뀌지 않는다. `profile.yaml`은 기술 칸 `tried`가 빠진다(F36, 예전 파일도 읽음).
 
 ## 모듈 다이어그램
 
@@ -62,10 +62,27 @@ classDiagram
         +parse(text) dict
         +ask(text) dict
         +merge(values, found, overwrite) (값, 채운 칸)
+        +missing(values, found) list~str~
     }
     class graph {
         +build_graph()
         +build_score_graph()
+        +llm_model() str
+    }
+    class view {
+        +Card.info dict
+        +Filters.scored_only
+        +PREVIEW
+        +preview(card, limit) str
+    }
+    class profile_form {
+        +TAKEN_BY
+        +taken(values, keys) list~str~
+        +without_taken(values) dict
+    }
+    class user_profile {
+        +Skills: main, can_use, certificates
+        +upgrade(data) dict
     }
 
     main --> runner
@@ -78,7 +95,12 @@ classDiagram
     runner --> inbox
     runner --> sheets
     resume --> profile_form
-    resume ..> LLM : init_chat_model(LLM_MODEL)
+    resume --> graph
+    reports --> graph
+    app --> view
+    app --> profile_form
+    profile_form --> user_profile
+    resume ..> LLM : init_chat_model(llm_model())
 ```
 
 ## 실행 흐름 (F4–F13)
@@ -157,7 +179,7 @@ sequenceDiagram
     A->>A: profile.yaml 저장, profile_fill 지움
 ```
 
-- 입력란은 v0.5부터 key 없이 그린다(파일이 바뀌면 새 값으로 그려지게). 그래서 채운 값은 입력란 기본값으로 넣는다. `profile_fill`이 있으면 파일 대신 그 값을 기본값으로 쓰고, 저장하거나 "채운 값 버리기"를 누르면 지운다.
+- 입력란은 v0.5부터 key 없이 그린다(파일이 바뀌면 새 값으로 그려지게). 고르기 칸만 F37 때문에 key를 주고, key에 기본값의 해시를 넣어 같은 효과를 낸다(아래 "기술 칸"). 채운 값은 입력란 기본값으로 넣는다. `profile_fill`이 있으면 파일 대신 그 값을 기본값으로 쓰고, 저장하거나 "채운 값 버리기"를 누르면 지운다.
 - 합치기는 지금 화면에 보이는 입력란 값(저장 전 고친 것 포함)을 기준으로 한다. 이력서 칸은 입력란보다 먼저 보이도록 위에 빈 상자를 두고, 입력란을 그린 뒤 그 상자 안을 채운다.
 - 합치기 규칙 (F19): 빈 칸은 채움. 고르기 칸·한 줄에 하나 칸·문화는 없는 항목만 더함. 학력·하고 싶은 일(글자 한 칸)은 그대로. 경력 연수는 입력란 기본값이 0이라 0이면 빈 칸으로 본다. "이미 적은 칸도 바꾸기"를 켜면 LLM이 찾은 칸만 바꾸고 못 찾은 칸은 그대로.
 - LLM 응답은 Pydantic `Found`로 검사한다. 모르는 칸은 버리고, 목록 칸에 글자가 오거나 경력 연수가 0–50 밖이면 형식 오류로 보고 아무 칸도 바꾸지 않는다 (F21).
@@ -183,6 +205,58 @@ classDiagram
 - 평가 `problems`: 실패 수. 실패 이유가 LLM 오류 하나로 모이면 고칠 방법을 바로 붙이고, 섞이면 "자세히를 확인해 주세요".
 - LLM 오류 구분 (F26): 예외 이름에 `ModelNotFound`, `Authentication`, `PermissionDenied`, `RateLimit`이 들어가는지 본다. 실행 중 예외는 클래스 계보(`__mro__`) 이름 전체로 보므로 LangChain 공통 오류(`ModelNotFoundError` 등)를 상속한 제공자 오류가 모두 걸린다. 평가 실패는 그래프가 예외 이름만 남기므로(`GoogleModelNotFoundError`) 그 이름으로 본다. `FileNotFoundError`와 섞이지 않게 `NotFound`가 아니라 `ModelNotFound`로 찾는다.
 - 라이브러리 없음 (F27): `resume._need`가 import 실패를 `ResumeError`(설치 방법)로 바꾼다.
+
+## 평가 전 카드와 목록 (F31, F32)
+
+```mermaid
+sequenceDiagram
+    participant A as app.show_card
+    participant V as view
+    participant P as postings
+    A->>A: 점수 없음?
+    alt 평가 전
+        A->>A: show_unscored_details(card)
+        A->>A: 제외 판정이면 제외 이유, 아니면 "아직 평가 전" 안내
+        A->>A: card.info(지역·경력·학력·키워드·마감) 표시
+        A->>V: preview(card)
+        V->>P: load(출처, 공고ID)
+        P-->>V: 저장한 본문(글자 + 이미지 글자) 또는 없음
+        V-->>A: 앞 600자 또는 ""
+        A->>A: st.text(앞부분) 또는 이미지 넣기 안내
+    else 평가됨
+        A->>A: show_scored_details(card) (전과 같음)
+    end
+```
+
+- `Card.info`는 `_card`에서 시트 줄의 location·experience·education·keywords·deadline 중 빈 것을 빼고 만든다. 시트 글자는 escape해서 그린다.
+- 원문은 `data/postings/`의 파일만 읽는다(사이트를 다시 부르지 않음). 원문은 `st.text`로 그려 HTML·마크다운으로 해석되지 않는다.
+- `view.Filters.show_unscored`(기본 False) → `scored_only`(기본 False). `apply`는 `scored_only`일 때만 점수 없는 카드를 뺀다.
+
+## 오류 안내와 이력서 규칙 (F33–F35)
+
+- `graph.llm_model()`이 `LLM_MODEL`(기본값 포함)을 돌려준다. `score` 노드, `resume.ask`, `reports.llm_hint`가 이것만 쓴다. 모델 이름은 키가 아니라서 안내에 넣는다.
+- 프롬프트 규칙(F34)은 `resume.SYSTEM_PROMPT`에 있다. 실제 Gemini가 따르는지는 재리 PC 확인 필요.
+- `resume.missing(값, found)`: 합친 뒤 빈 칸 이름. 필수 칸을 앞으로. 경력 연수는 found의 years가 None이고 입력란이 0일 때만. app은 `profile_fill["missing"]`에 두고 `show_missing`이 `jv-mid` 배지로 그린다.
+
+## 기술 칸 (F36, F37)
+
+- `user_profile.Skills`에서 `tried`를 뺐다. `upgrade(data)`가 예전 `tried`를 `can_use` 뒤에 붙인 새 dict를 돌려주고, `validate`(모르는 칸 경고 전)와 `profile_form.to_form`이 먼저 부른다. `Skills` 검사기가 칸 안 중복과 주력과 겹치는 `can_use` 항목을 지운다.
+- `profile_form.TAKEN_BY = {can_use: main}`. `taken(values, keys)`는 그 칸에서 고를 수 없는 항목, `without_taken(values)`는 겹침을 뺀 값. `to_form`, `from_form`, `resume.merge`가 쓴다.
+- 화면: 고르기 칸에 `key="pick-<칸>-<기본값 해시>"`를 준다. 그리기 전에 `session_state[key]`에서 앞 칸(주력)에 고른 항목을 빼고, 보기에서도 뺀다. key가 있어 주력을 바꿔도 다룰 수 있음의 다른 값은 남는다(key 없이 보기를 바꾸면 입력란이 처음 값으로 돌아감). 파일·이력서 값이 바뀌면 해시가 바뀌어 새 값으로 그려지고, 쓰지 않는 예전 key는 지운다.
+- 주력은 다른 칸에 막히지 않는다. 자격증·희망 직무·희망 지역은 겹칠 일이 없어 규칙 밖.
+
+```mermaid
+sequenceDiagram
+    actor U as 사용자
+    participant A as app.show_profile
+    participant F as profile_form
+    U->>A: 주력에 Git 고름
+    A->>A: 주력 칸 그림 → values[main]
+    A->>F: taken(values, can_use)
+    F-->>A: [Python, Git]
+    A->>A: session_state[다룰 수 있음 key]에서 Git 뺌, 보기에서도 뺌
+    A-->>U: 다룰 수 있음 = 나머지 값 그대로
+```
 
 ## 필터 (F29, F30)
 
@@ -213,5 +287,7 @@ classDiagram
 | `main.py` | `to_state` → `runner.collect_state`, 실행 → `runner.collect/score/read_inbox`, 출력 → `reports` 줄을 그대로 print. 터미널 옵션·출력 글은 그대로 (F14) |
 | `app.py` | 실행 카드, 진행 막대, 결과, 이력서 칸. 사용법 글 (F15). 빈 시트 안내를 "위 수집 카드에서…"로 |
 | `.streamlit/config.toml`, `app.py` CSS | 무채색 바탕 + 초록 포인트 (F23), 네오 브루탈리즘 (F28) |
+| `agent/user_profile.py`, `profile.example.yaml` | `skills.tried` 뺌, 예전 파일 읽기(`upgrade`), 프롬프트 "써 본 적 있음" 줄 뺌 (F36, F37) |
+| `agent/graph.py` | `llm_model()` (F33) |
 | `requirements.txt` | `pypdf`, `python-docx` (N1) |
 | `tests/test_main.py` | 가짜 그래프에 `stream`을 붙이고 바꿀 곳을 `main.runner`로. 검사 내용은 그대로 |

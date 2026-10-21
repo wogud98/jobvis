@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Annotated
 
 import yaml
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, model_validator
 
 DEFAULT = "profile.yaml"
 EXAMPLE = "profile.example.yaml"
@@ -55,9 +55,15 @@ class _Part(BaseModel):
 
 class Skills(_Part):
     main: Required
-    can_use: TextList = []
-    tried: TextList = []
+    can_use: TextList = []  # 써 본 기술도 여기에 (v0.5.2 F36)
     certificates: TextList = []
+
+    @model_validator(mode="after")
+    def _no_overlap(self):
+        # 주력에 있는 기술은 다룰 수 있음에서 뺀다. 칸 안에서 겹치는 것도 한 번만 (v0.5.2 F37)
+        self.main = list(dict.fromkeys(self.main))
+        self.can_use = [item for item in dict.fromkeys(self.can_use) if item not in self.main]
+        return self
 
 
 class Experience(_Part):
@@ -116,10 +122,24 @@ def _unknown(data: dict, model: type[BaseModel], prefix: str = "") -> list[str]:
     return names
 
 
+def upgrade(data):
+    """예전 skills.tried(써 본 적 있음)를 can_use 뒤에 붙인다 (v0.5.2 F36). 받은 dict는 바꾸지 않는다."""
+    skills = data.get("skills") if isinstance(data, dict) else None
+    if not isinstance(skills, dict) or "tried" not in skills:
+        return data
+    skills = dict(skills)
+    tried = skills.pop("tried")
+    can_use = skills.get("can_use")
+    lists = [value if isinstance(value, list) else [value] for value in (can_use, tried) if value is not None]
+    skills["can_use"] = [item for value in lists for item in value]
+    return data | {"skills": skills}
+
+
 def validate(data) -> tuple[Profile, list[str]]:
     """dict를 검사해 (Profile, 모르는 칸 경고)를 돌려준다. 틀리면 칸 경로가 담긴 ProfileError."""
     if not isinstance(data, dict):
         raise ProfileError("프로필 형식이 틀립니다: skills, experience, direction 칸이 있어야 합니다")
+    data = upgrade(data)
     try:
         profile = Profile.model_validate(data)
     except ValidationError as e:
@@ -205,7 +225,6 @@ def to_prompt(profile: Profile) -> str:
             "## 기술",
             f"- 주력: {_join(skills.main)}",
             f"- 다룰 수 있음: {_join(skills.can_use)}",
-            f"- 써 본 적 있음: {_join(skills.tried)}",
             f"- 자격증: {_join(skills.certificates)}",
             "## 경력",
             f"- 경력 연수: {years}",
