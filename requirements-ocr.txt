@@ -1,4 +1,7 @@
 # 공고 이미지 OCR (선택 설치, 약 1GB). 없으면 글자 본문만 수집함. CI와 테스트에서는 설치하지 않음.
 # pip install -r requirements-ocr.txt
-paddleocr>=3.0
-paddlepaddle>=3.0
+# 2026-10-21 윈도우 PC(파이썬 3.13)에서 확인한 버전으로 고정함.
+paddleocr==3.7.0
+paddlepaddle==3.3.1
+# shapely 2.1 이상은 윈도우 스마트 앱 컨트롤이 서명 없는 파일이라 막음(DLL load failed). 2.0.7은 돌아감.
+shapely<2.1

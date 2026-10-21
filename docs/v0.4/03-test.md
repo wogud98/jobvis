@@ -103,10 +103,19 @@ $ python main.py --keyword FDE --count 5
 
 고친 뒤 `ruff check .`, `ruff format --check .` 통과, `python -m pytest` 190 passed. 고친 코드로 PC에서 다시 수집하는 것은 아직 안 했다.
 
+## 재리 PC OCR 설치 (2026-10-21)
+
+- `pip install -r requirements-ocr.txt` 성공 (파이썬 3.13.15): paddleocr 3.7.0, paddlepaddle 3.3.1, pillow 13.0.0, numpy 2.3.5. `ocr.available()` True.
+- 첫 OCR 호출이 `ImportError: DLL load failed while importing _geometry_helpers`로 실패. 윈도우 스마트 앱 컨트롤이 서명 없는 shapely 2.2.0 파일을 막음. 보안 설정은 건드리지 않고 `shapely==2.0.7`로 내려 해결. `requirements-ocr.txt`에 버전을 고정함.
+- `ocr.py`의 `PaddleOCR(...)` 인자, `predict()`, `rec_texts`가 3.7.0에서 그대로 동작함.
+- 한국어 확인: 맑은 고딕으로 직접 그린 시험 이미지(모집부문·자격요건·근무지역·마감일 4줄)를 모두 맞게 읽음. 문장부호 뒤 띄어쓰기만 빠짐.
+- 속도: CPU에서 이미지 한 장 13–16초. 첫 호출은 모델 내려받기 포함 52초.
+- robots: `pds.saramin.co.kr` 금지(`/career-information/asset/`, `/company/logo/`만 허용), `cdn.jumpit.co.kr` robots.txt가 403이라 호스트 전체 금지로 처리, `static.saraminimage.co.kr` 허용.
+
 ## 미확인
 
 - **실제 사이트 수집.** 위 PC 시험 1회로 목록·마감일·경력·본문은 확인했다. 아직: 고친 잡코리아 지역 읽기를 실제 사이트로 다시 확인, 광고 카드 제외, 사람인 `loc_mcd`·`cat_kewd`·`exp_cd`·`sort=RD`가 먹는지(이번엔 조건 없이 실행).
-- **PaddleOCR.** 설치하지 않고 가짜로만 확인했다. `ocr.read()`(3.x `predict()`·`rec_texts`)와 `ocr.size()`(Pillow)는 실행해 보지 못했다. 버전도 고정하지 못했다(`>=3.0`).
+- **PaddleOCR으로 실제 공고 수집.** OCR 자체는 위처럼 PC에서 확인했지만, OCR을 켠 채 실제 공고를 수집해 본문 뒤에 붙는지는 아직 안 했다. 맥·리눅스 동작도 미확인.
 - **실제 구글 시트.** v0.3 → v0.4 제목 줄 바꾸기와 Y–AA열 쓰기는 가짜 시트로만 확인했다.
 - **실제 LLM.** 본문으로 채점했을 때 세 칸(주요업무·우대사항·기술스택)을 잘 채우는지 확인하지 못했다.
 - 사람인 API 공고ID와 크롤링 `rec_idx`가 같은지(출처 빈 줄을 사람인으로 볼 때 중복 판단).
