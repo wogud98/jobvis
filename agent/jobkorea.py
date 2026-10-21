@@ -50,6 +50,13 @@ def _looks_like_location(text: str) -> bool:
 
 def _conditions(card: Tag) -> tuple[str, str]:
     location = experience = ""
+    # 2026-10-21 실제 화면: 지역은 장소 아이콘(emoji--basicemoji-place2)이 든 GrayChip의 span.truncate에 있음
+    for chip in card.select('[data-sentry-component="GrayChip"]'):
+        if chip.select_one(f"[class*='{_PLACE_ICON}']"):
+            text = chip.select_one("span.truncate") or chip
+            location = " ".join(text.get_text(" ").split())
+            break
+    # 경력은 회색 글자 칩. 지역이 섞여 나오면 나눠 읽는다 (2026-10-21 FDE 시험 수집)
     for chip in card.select(_CHIP):
         place = chip.select_one(f"[class*='{_PLACE_ICON}']") or (
             isinstance(chip.find_previous_sibling(), Tag) and _PLACE_ICON in str(chip.find_previous_sibling())

@@ -4,10 +4,16 @@
   <div class="card">
     <div><a data-sentry-component="Title" href="/Recruit/GI_Read/2001?sc=1">Forward Deployed Engineer</a></div>
     <span class="mb-5"><a href="#"><span class="truncate">차카타시스템즈</span></a></span>
-    <div class="chips">
-      <span class="flex-shrink-0 text-gray700 text-typo-c1-13"><i class="emoji emoji--basicemoji-place"></i>서울 강남구</span>
-      <span class="flex-shrink-0 text-gray700 text-typo-c1-13">경력무관</span>
+    <!-- 2026-10-21 실제 화면 구조: 지역은 장소 아이콘이 든 GrayChip, 경력은 회색 글자 칩 -->
+    <div class="flex gap-1">
+      <div class="flex items-center rounded-[6px] bg-gray50 shrink-0 h-[30px] gap-1 px-2.5" data-sentry-component="GrayChip">
+        <div class="w-[16px] shrink-0"><span class="emoji--basicemoji-briefcase inline-block shrink-0 align-middle"></span></div>
+        <span class="truncate text-gray900 text-typo-b4-14">AI·개발</span></div>
+      <div class="flex items-center rounded-[6px] bg-gray50 shrink-0 h-[30px] gap-1 px-2.5" data-sentry-component="GrayChip">
+        <div class="w-[16px] shrink-0"><span class="emoji--basicemoji-place2 inline-block shrink-0 align-middle"></span></div>
+        <span class="truncate text-gray900 text-typo-b4-14">서울 강남구 외 1</span></div>
     </div>
+    <span class="flex-shrink-0 text-gray700 text-typo-c1-13">경력무관</span>
   </div>
   <div class="card">
     <div><a data-sentry-component="Title" href="/Recruit/GI_Read/2002">백엔드 개발자</a></div>

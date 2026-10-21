@@ -23,7 +23,7 @@ def test_parse_list_reads_cards_and_deadlines_from_next_data():
         "title": "Forward Deployed Engineer",
         "experience": "경력무관",
         "education": "",
-        "location": "서울 강남구",
+        "location": "서울 강남구 외 1",  # 장소 아이콘 GrayChip (직무 GrayChip은 무시)
         "deadline": "2026-11-12",
         "keywords": "",
         "url": "https://www.jobkorea.co.kr/Recruit/GI_Read/2001",

@@ -42,12 +42,16 @@ class State(TypedDict, total=False):
 
 def _failure(job: dict, step: str, error: Exception) -> dict:
     # 예외 메시지에는 키나 인증정보, 주소가 섞일 수 있어 예외 이름만 남긴다.
+    # crawler 예외는 메시지에 호스트와 이유(HTTP 코드, 연결 실패 종류)만 담으므로 함께 남긴다.
+    name = type(error).__name__
+    if isinstance(error, crawler.CrawlError) and str(error):
+        name = f"{name}: {error}"
     return {
         "source": job.get("source", ""),
         "company": job.get("company", ""),
         "title": job.get("title", ""),
         "step": step,
-        "error": type(error).__name__,
+        "error": name,
     }
 
 
