@@ -19,7 +19,7 @@ PROFILE = user_profile.DEFAULT
 SUMMARY_FIELDS = ("요약", "주요업무", "우대사항", "기술스택")
 SCORE_FIELDS = ("기술", "경력", "문화", "방향")
 CHART_HEIGHT = 230  # 필터 카드 높이와 비슷하게 차트가 카드를 채우도록 (F21)
-ACCENT = "#6d5ef5"  # .streamlit/config.toml의 primaryColor와 같게
+ACCENT = "#159a6c"  # .streamlit/config.toml의 primaryColor와 같게
 FILL = "profile_fill"  # 이력서에서 채운 입력란 값 (session_state 키)
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
@@ -43,14 +43,14 @@ PROFILE_GUIDE = """
 # data-testid에만 건다 (N5)
 CSS = """
 <style>
-.stApp { background: linear-gradient(135deg, #e9e4ff 0%, #dceefe 45%, #e2f7ef 100%); }
+.stApp { background: linear-gradient(135deg, #dff5e8 0%, #e3f3f0 45%, #eef7dc 100%); }
 [data-testid="stHeader"] { background: transparent; }
 .block-container { max-width: 1200px; padding-top: 2rem; }
 div[class*="st-key-glass"], div[data-testid="stExpander"] details {
   background: rgba(255, 255, 255, 0.55) !important;
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.75) !important; border-radius: 20px !important;
-  box-shadow: 0 8px 28px rgba(80, 70, 160, 0.10);
+  box-shadow: 0 8px 28px rgba(20, 100, 70, 0.10);
 }
 div[class*="st-key-glass"] { padding: 18px 20px; }
 div[class*="st-key-glass-dim"] { opacity: 0.55; }
@@ -68,14 +68,14 @@ div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
 }
 div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg { width: 0.7em; height: 0.7em; }
 div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
-div[data-testid="stMetricValue"] { font-size: 2.1rem; font-weight: 700; color: #3b2f8f; }
-.jv-hero h1 { margin: 0; padding: 0; font-size: 2.2rem; color: #2c2370; }
-.jv-hero p { margin: 0; color: #5a5680; }
-.jv-score { font-size: 2rem; font-weight: 800; line-height: 1; color: #3b2f8f; }
-.jv-muted { color: #5f5b85; font-size: 0.9rem; }
+div[data-testid="stMetricValue"] { font-size: 2.1rem; font-weight: 700; color: #0f6b4b; }
+.jv-hero h1 { margin: 0; padding: 0; font-size: 2.2rem; color: #0d4a35; }
+.jv-hero p { margin: 0; color: #4d6a5d; }
+.jv-score { font-size: 2rem; font-weight: 800; line-height: 1; color: #0f6b4b; }
+.jv-muted { color: #557063; font-size: 0.9rem; }
 .jv-badge { display: inline-block; margin-right: 6px; padding: 2px 10px; border-radius: 999px;
   font-size: 0.82rem; font-weight: 600; }
-.jv-verdict { background: #ece8ff; color: #3b2f8f; }
+.jv-verdict { background: #e3ece8; color: #1d4a3c; }
 .jv-high { background: #d9f5e6; color: #11734a; }
 .jv-mid { background: #fff1cc; color: #7a5600; }
 .jv-low { background: #fde4e4; color: #a12d2d; }

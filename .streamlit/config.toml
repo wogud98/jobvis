@@ -1,8 +1,8 @@
-# 화면 테마 (v0.5.1 F17). 밝은 테마 하나
+# 화면 테마 (v0.5.1 F17, 색은 v0.5.2 F23 초록 계열). 밝은 테마 하나
 [theme]
 base = "light"
-primaryColor = "#6d5ef5"
-backgroundColor = "#eef0fb"
-secondaryBackgroundColor = "#f4f2ff"
-textColor = "#25213f"
+primaryColor = "#159a6c"
+backgroundColor = "#edf7f1"
+secondaryBackgroundColor = "#eef8f3"
+textColor = "#1c3329"
 baseRadius = "0.8rem"

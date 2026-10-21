@@ -1,6 +1,6 @@
 # v0.5.2 설계
 
-기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F22, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
+기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F23, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
 
 사용자 결정(2026-10-21 "진행")으로 요구사항·설계·구현을 한 PR에 담았다. 수집·평가 그래프, 시트 열, `profile.yaml` 형식은 바뀌지 않는다.
 
@@ -159,11 +159,17 @@ sequenceDiagram
 - 파일 글자: PDF는 `pypdf`, Word는 `python-docx`(문단 + 표), txt·md는 UTF-8(BOM 포함) 다음 cp949. 깨진 파일은 라이브러리 오류 종류만 남긴다(메시지에 파일 내용이 섞일 수 있어서, N2).
 - 파일은 `st.file_uploader` 메모리에서 읽고 디스크에 쓰지 않는다 (N2). 업로드 칸 아래에 LLM 제공자로 전송된다고 적는다 (N3).
 
+## 테마 색 (F23)
+
+- `.streamlit/config.toml`: 강조색 `#159a6c`, 배경 `#edf7f1`, 글자 `#1c3329`. `app.py`의 `ACCENT`(차트 색)도 같은 값.
+- CSS: 배경 그라데이션 `#dff5e8 → #e3f3f0 → #eef7dc`, 점수·요약 숫자 `#0f6b4b`, 그림자 초록빛. 판정 배지는 `#e3ece8`/`#1d4a3c`(회녹색)로 신뢰 높음(초록)과 구별.
+
 ## 바뀐 기존 코드
 
 | 파일 | 바뀐 것 |
 | --- | --- |
 | `main.py` | `to_state` → `runner.collect_state`, 실행 → `runner.collect/score/read_inbox`, 출력 → `reports` 줄을 그대로 print. 터미널 옵션·출력 글은 그대로 (F14) |
 | `app.py` | 실행 카드, 진행 막대, 결과, 이력서 칸. 사용법 글 (F15). 빈 시트 안내를 "위 수집 카드에서…"로 |
+| `.streamlit/config.toml`, `app.py` CSS | 초록 계열 색 (F23) |
 | `requirements.txt` | `pypdf`, `python-docx` (N1) |
 | `tests/test_main.py` | 가짜 그래프에 `stream`을 붙이고 바꿀 곳을 `main.runner`로. 검사 내용은 그대로 |
