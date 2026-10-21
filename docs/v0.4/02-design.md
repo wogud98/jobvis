@@ -165,7 +165,7 @@ classDiagram
 | title | 공고 제목 | `h2.job_tit a[title]` | `a[data-sentry-component="Title"]` |
 | experience | 경력 글자 (예: 신입·경력) | `div.job_condition > span` 중 "신입"·"경력"이 든 것 | 칩(`span.flex-shrink-0.text-gray700.text-typo-c1-13`) 글자에서 경력 부분만 (`split_condition`) |
 | education | 학력 글자 | `div.job_condition > span` 중 "졸"·"학력"이 든 것 | 빈칸 (F4) |
-| location | 지역 글자 | `div.job_condition > span` 중 링크가 있는 것 | 장소 아이콘(`emoji--basicemoji-place`)이 붙었거나 지역 이름으로 시작하는 칩에서 경력 부분을 뺀 글자 |
+| location | 지역 글자 | `div.job_condition > span` 중 링크가 있는 것 | 장소 아이콘(`emoji--basicemoji-place2`)이 든 `[data-sentry-component="GrayChip"]`의 `span.truncate` 글자 (예: "서울 강남구 외 1"). 없으면 회색 글자 칩에서 경력 부분을 뺀 글자 |
 | deadline | `YYYY-MM-DD` 또는 "상시" (F5) | `div.job_date span.date` | 같은 HTML의 Next.js 데이터 `applicationPeriod.end` |
 | keywords | 직무 태그 (쉼표로 이음) | `div.job_sector` 글자 (추정) | 빈칸 |
 | url | 사람이 여는 상세 주소 | `/zf_user/jobs/relay/view?rec_idx=ID` | `/Recruit/GI_Read/ID` |
@@ -176,6 +176,7 @@ classDiagram
 
 - 카드: 제목 링크(`a[data-sentry-component="Title"]`)에서 위로 올라가며 제목 링크를 하나만 담은 가장 큰 상자.
 - 지역·경력: 2026-10-21 FDE 시험 수집에서 한 칸에 섞여 나와 두 칸에 같은 값이 들어갔다. 칩마다 경력 글자(신입, 경력무관, 경력 3년↑, 경력2–10년, 5년 이상 등)를 찾아 경력으로 떼고, 남은 글자를 지역으로 본다.
+- 2026-10-21 PC 실제 수집에서 확인: 회색 글자 칩(`span.flex-shrink-0.text-gray700.text-typo-c1-13`)에는 경력만 있고, 지역은 따로 GrayChip(장소 아이콘 `place2`)에 있다. 같은 카드의 다른 GrayChip은 직무(`briefcase`), 연봉(`money_bill`) 아이콘이라 장소 아이콘으로 고른다. "외 N"은 근무지가 여럿이라는 뜻이라 그대로 둔다.
 - 마감일: `<script>` 글을 모아 `\"`를 풀고, `applicationPeriod.end`마다 가장 가까이 적힌 카드 공고ID에 붙인다(추정). `end`가 null이면 "상시". 데이터를 아예 못 찾으면 광고를 거르지 않고 마감일을 비운다.
 
 ### Detail
@@ -217,7 +218,7 @@ classDiagram
 | 간격 | 호스트마다 마지막 요청 시각을 기억하고 3초가 안 지났으면 기다림. robots.txt 요청도 셈 | N4 |
 | 403·429 | `Blocked`를 던짐. 그래프가 그 사이트의 남은 요청을 모두 멈춤 | N4 |
 | 시간 제한 | 요청마다 10초 | - |
-| 오류 메시지 | 예외 이름과 호스트만 남김. 주소 전체는 남기지 않음 | v0.1 N |
+| 오류 메시지 | 예외 이름과 호스트만 남김. 주소 전체는 남기지 않음. 실패 목록에는 crawler 예외만 메시지(호스트, HTTP 코드나 연결 실패 종류)까지 남기고, 그 밖의 예외는 이름만 | v0.1 N |
 | 문자셋 | 응답 헤더에 문자셋이 없으면(ISO-8859-1로 잡히면) 내용으로 추정 | - |
 | 그 밖의 HTTP 오류 | `CrawlError`. 그 공고만 실패, 사이트는 계속 | - |
 
@@ -230,7 +231,7 @@ classDiagram
 - 이미지 거르기: 받은 뒤 Pillow로 크기를 보고 가로나 세로가 300px 미만이면 건너뛴다. 공고당 최대 10장. Pillow는 PaddleOCR이 함께 설치하므로 OCR이 없을 때는 이미지를 받지도 않는다.
 - 이미지 하나가 실패하면(금지, 오류, OCR 예외) 그 이미지만 건너뛴다. 금지는 실패 목록에 넣지 않고, 오류·OCR 예외는 공고당 한 줄을 "OCR" 실패로 남긴다. 줄은 저장한다.
 - 최대 10장은 OCR까지 한 장 수다. 작은 이미지와 못 읽은 이미지는 세지 않는다.
-- PaddleOCR 3.x의 `predict()` 결과 `rec_texts`를 쓴다(추정, PC에서 확인 필요).
+- PaddleOCR 3.x의 `predict()` 결과 `rec_texts`를 쓴다(2026-10-21 PC에서 3.7.0으로 확인). CPU에서 한 장 13–16초.
 
 ## 원문 저장과 본문 상태 (`postings.py`, F14, F15, F15a)
 
@@ -245,7 +246,7 @@ classDiagram
 | OCR 글자가 있음 | 글자+이미지 |
 | 그 밖 | 글자 |
 
-작은 이미지(300px 미만)는 장식으로 보고 "못 읽음"에 넣지 않는다. robots 금지 이미지는 "못 읽음"에 넣는다. OCR이 설치돼 있지 않으면 이미지를 받지 않으므로 본문 속 이미지 수를 모두 "못 읽음"으로 센다. 함수는 `status(text, ocr_texts, unread)`이고 `unread`가 못 읽은 장수다.
+작은 이미지(300px 미만)는 장식으로 보고 "못 읽음"에 넣지 않는다. robots 금지 이미지는 "못 읽음"에 넣는다. OCR이 설치돼 있지 않으면 이미지를 받지 않고 "못 읽음"으로도 세지 않는다. 크기를 알 수 없어 아이콘·배너까지 세게 되기 때문이다(2026-10-21 PC 시험에서 사람인 4건이 기술 로고 7개·배너 1개 때문에 모두 "이미지 일부 못 읽음", 사용자 결정으로 바꿈). 이미지뿐인 공고는 200자 규칙으로 "본문 미확보"가 된다. 함수는 `status(text, ocr_texts, unread)`이고 `unread`가 못 읽은 장수다.
 
 ## 시퀀스 다이어그램
 
@@ -459,7 +460,10 @@ v0.3의 A–U열은 그대로 두고 뒤에 붙인다.
 | `blocked`는 사이트 목록 | `{"source", "reason"}` 목록 | 결과 출력에 멈춘 이유를 적으려고 |
 | OCR 실패도 "실패" 수에 | 사이트별 "실패" 수에서 빼고 줄로만 알림 | 줄은 저장했으므로 가져옴 = 저장 + 건너뜀 + 실패가 맞게 |
 | 시트 정보 프롬프트 | 지역 칸을 더함 | 시트에 W열 지역이 생겨서 |
-| PaddleOCR 버전 고정 | `paddleocr>=3.0`, `paddlepaddle>=3.0` | PC 시험 버전을 저장소에서 확인하지 못함. PC 확인 뒤 고정 |
+| OCR 없으면 이미지를 모두 못 읽음으로 셈 | 세지 않음 | 아이콘·배너 때문에 거의 모든 공고가 "이미지 일부 못 읽음"이 됨 (2026-10-21 PC 시험) |
+| 잡코리아 지역 = 회색 글자 칩 | 장소 아이콘 GrayChip | 실제 화면 구조 (2026-10-21 PC 시험) |
+| 실패 목록은 예외 이름만 | crawler 예외는 호스트·이유까지 | PC 시험에서 실패 원인을 알 수 없었음 |
+| PaddleOCR 버전 고정 | `paddleocr==3.7.0`, `paddlepaddle==3.3.1`, `shapely<2.1` | 2026-10-21 PC에서 확인한 버전. shapely 2.1 이상은 윈도우 스마트 앱 컨트롤에 막힘 |
 
 ## 미확인
 

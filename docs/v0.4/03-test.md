@@ -78,10 +78,44 @@ v0.2 API용 테스트(`test_saramin.py`의 API 응답 변환, 숫자 경력 코�
 - 시트 줄 V–X: `['사람인', '서울 강남구', '본문 미확보']`, `['잡코리아', '경기 성남시', '본문 미확보']` 등. 가짜 본문이 200자보다 짧아 모두 "본문 미확보"가 맞음.
 - 원문 파일 4개(`saramin_1001.txt`, `jobkorea_2001.txt` …)가 `data/postings/`에 생김.
 
+## 재리 PC 실제 수집 (2026-10-21)
+
+PC(DESKTOP-OF0CMDB, main d20b966)에서 실제 사이트로 실행했다. OCR 미설치.
+
+```text
+$ python main.py --keyword FDE --count 5
+개인 사용만. 수집한 공고를 공유·공개·판매하지 않음 (사이트 약관)
+이미지 OCR 없음: 글자 본문만 저장합니다. 이미지 OCR을 쓰려면 `pip install -r requirements-ocr.txt`
+사람인 가져옴 5 / 새로 저장 4 / 건너뜀 0 / 실패 1
+잡코리아 가져옴 5 / 새로 저장 4 / 건너뜀 1 / 실패 0
+  실패(본문): 사람인 | 케이젯정밀(주) | [고려아연계열] KZ정밀 AI활용전문가(FDE) 채용 (CrawlError)
+```
+
+| 확인 | 결과 |
+| --- | --- |
+| 시트 제목 줄 | v0.4 제목 줄 1줄, 중복 없음 |
+| 마감일 | 8건 모두 채워짐 |
+| 잡코리아 경력 칸 | 경력 글자만 들어감 (지역 섞임 해결) |
+| 잡코리아 지역 칸 | **4건 모두 빈칸** → 실제 화면은 장소 아이콘 GrayChip에 지역이 있음. 고침 |
+| 사람인 본문 상태 | 4건 모두 "이미지 일부 못 읽음". 본문 글자는 4,700자로 정상인데 기술 로고 7개·배너 1개를 못 읽음으로 셈 → OCR 없을 땐 세지 않게 고침(사용자 결정) |
+| 사람인 본문 실패 1건 | 다시 요청하니 HTTP 200. 일시 오류로 봄. 실패 이유가 남지 않아 crawler 예외 메시지를 함께 남기게 고침. 이 공고 본문은 `pds.saramin.co.kr` 이미지 1장뿐이라 다음 실행 때 "본문 미확보" |
+| 제목 "[일본 FDE(SW) - SA" | 사이트 원문 그대로. 고칠 것 없음 |
+
+고친 뒤 `ruff check .`, `ruff format --check .` 통과, `python -m pytest` 190 passed. 고친 코드로 PC에서 다시 수집하는 것은 아직 안 했다.
+
+## 재리 PC OCR 설치 (2026-10-21)
+
+- `pip install -r requirements-ocr.txt` 성공 (파이썬 3.13.15): paddleocr 3.7.0, paddlepaddle 3.3.1, pillow 13.0.0, numpy 2.3.5. `ocr.available()` True.
+- 첫 OCR 호출이 `ImportError: DLL load failed while importing _geometry_helpers`로 실패. 윈도우 스마트 앱 컨트롤이 서명 없는 shapely 2.2.0 파일을 막음. 보안 설정은 건드리지 않고 `shapely==2.0.7`로 내려 해결. `requirements-ocr.txt`에 버전을 고정함.
+- `ocr.py`의 `PaddleOCR(...)` 인자, `predict()`, `rec_texts`가 3.7.0에서 그대로 동작함.
+- 한국어 확인: 맑은 고딕으로 직접 그린 시험 이미지(모집부문·자격요건·근무지역·마감일 4줄)를 모두 맞게 읽음. 문장부호 뒤 띄어쓰기만 빠짐.
+- 속도: CPU에서 이미지 한 장 13–16초. 첫 호출은 모델 내려받기 포함 52초.
+- robots: `pds.saramin.co.kr` 금지(`/career-information/asset/`, `/company/logo/`만 허용), `cdn.jumpit.co.kr` robots.txt가 403이라 호스트 전체 금지로 처리, `static.saraminimage.co.kr` 허용.
+
 ## 미확인
 
-- **실제 사이트 수집.** 이 환경(클라우드)에서는 두 사이트가 막혀 있어 실행하지 못했다. 재리 PC(DESKTOP-OF0CMDB)에서 `python main.py --keyword FDE --count 5`로 확인해야 한다. 확인할 것: 선택자가 실제 화면과 맞는지, 잡코리아 지역·경력 나누기, 잡코리아 마감일(Next.js 데이터) 짝 맞추기, 광고 카드 제외, 사람인 `loc_mcd`·`cat_kewd`·`exp_cd`·`sort=RD`가 먹는지.
-- **PaddleOCR.** 설치하지 않고 가짜로만 확인했다. `ocr.read()`(3.x `predict()`·`rec_texts`)와 `ocr.size()`(Pillow)는 실행해 보지 못했다. 버전도 고정하지 못했다(`>=3.0`).
+- **실제 사이트 수집.** 위 PC 시험 1회로 목록·마감일·경력·본문은 확인했다. 아직: 고친 잡코리아 지역 읽기를 실제 사이트로 다시 확인, 광고 카드 제외, 사람인 `loc_mcd`·`cat_kewd`·`exp_cd`·`sort=RD`가 먹는지(이번엔 조건 없이 실행).
+- **PaddleOCR으로 실제 공고 수집.** OCR 자체는 위처럼 PC에서 확인했지만, OCR을 켠 채 실제 공고를 수집해 본문 뒤에 붙는지는 아직 안 했다. 맥·리눅스 동작도 미확인.
 - **실제 구글 시트.** v0.3 → v0.4 제목 줄 바꾸기와 Y–AA열 쓰기는 가짜 시트로만 확인했다.
 - **실제 LLM.** 본문으로 채점했을 때 세 칸(주요업무·우대사항·기술스택)을 잘 채우는지 확인하지 못했다.
 - 사람인 API 공고ID와 크롤링 `rec_idx`가 같은지(출처 빈 줄을 사람인으로 볼 때 중복 판단).

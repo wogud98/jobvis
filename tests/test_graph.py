@@ -271,7 +271,13 @@ def test_search_robots_disallowed_and_connection_error(monkeypatch, tmp_path):
 
     assert result["blocked"] == [{"source": "saramin", "reason": "robots.txt 금지"}]
     assert result["failed"] == [
-        {"source": "jobkorea", "company": "", "title": "", "step": "목록", "error": "CrawlError"},
+        {
+            "source": "jobkorea",
+            "company": "",
+            "title": "",
+            "step": "목록",
+            "error": "CrawlError: www.jobkorea.co.kr 연결 실패",  # 호스트와 이유까지 남김 (2026-10-21 PC 시험)
+        },
     ]
 
 
@@ -293,10 +299,24 @@ def test_detail_failure_does_not_save_row(monkeypatch, tmp_path):
         "company": "회사1",
         "title": "백엔드 개발자",
         "step": "본문",
-        "error": "CrawlError",
+        "error": "CrawlError: www.saramin.co.kr 연결 실패 (Timeout)",
     }
     assert not (tmp_path / "postings" / "saramin_1.txt").exists()
     assert_counts_add_up(result)
+
+
+def test_non_crawler_errors_keep_only_the_name(monkeypatch, tmp_path):
+    Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": [make_job("saramin", "1")]},
+        details={"1": ValueError("token=secret 파싱 실패")},
+    )
+
+    result = run(sources=["saramin"])
+
+    assert result["failed"][0]["error"] == "ValueError"  # 크롤러 밖 예외는 메시지를 버림
+    assert "secret" not in str(result["failed"])
 
 
 def test_save_failure_does_not_stop_others(monkeypatch, tmp_path):
@@ -408,7 +428,20 @@ def test_without_ocr_images_are_not_downloaded(monkeypatch, tmp_path):
     result = run(sources=["saramin"], ocr_ready=False)
 
     assert "https://img.test/a.png" not in fakes.requested
-    assert result["saved"][0]["body"] == "이미지 일부 못 읽음"
+    assert result["saved"][0]["body"] == "글자"  # 아이콘일 수도 있어 못 읽음으로 세지 않음
+
+
+def test_without_ocr_image_only_posting_is_missing(monkeypatch, tmp_path):
+    Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": [make_job("saramin", "1")]},
+        details={"1": Detail("", ["https://pds.test/whole-posting.png"])},
+    )
+
+    result = run(sources=["saramin"], ocr_ready=False)
+
+    assert result["saved"][0]["body"] == "본문 미확보"
 
 
 def test_no_jobs_ends_without_reading_sheet(monkeypatch, tmp_path):
