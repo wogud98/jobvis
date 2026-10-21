@@ -1,6 +1,6 @@
 # v0.5.2 설계
 
-기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F27, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
+기준 문서: [01-requirements.md](01-requirements.md) (2026-10-21 확정, F1–F28, N1–N5). 괄호 안 ID는 요구사항 번호. 기준 코드는 v0.5.1(PR #26, #27).
 
 사용자 결정(2026-10-21 "진행")으로 요구사항·설계·구현을 한 PR에 담았다. 수집·평가 그래프, 시트 열, `profile.yaml` 형식은 바뀌지 않는다.
 
@@ -184,6 +184,16 @@ classDiagram
 - LLM 오류 구분 (F26): 예외 이름에 `ModelNotFound`, `Authentication`, `PermissionDenied`, `RateLimit`이 들어가는지 본다. 실행 중 예외는 클래스 계보(`__mro__`) 이름 전체로 보므로 LangChain 공통 오류(`ModelNotFoundError` 등)를 상속한 제공자 오류가 모두 걸린다. 평가 실패는 그래프가 예외 이름만 남기므로(`GoogleModelNotFoundError`) 그 이름으로 본다. `FileNotFoundError`와 섞이지 않게 `NotFound`가 아니라 `ModelNotFound`로 찾는다.
 - 라이브러리 없음 (F27): `resume._need`가 import 실패를 `ResumeError`(설치 방법)로 바꾼다.
 
+## 네오 브루탈리즘 (F28)
+
+- 카드는 key가 `box-`로 시작하는 컨테이너(v0.5.1의 `glass-`에서 이름만 바꿈). CSS는 `div[class*="st-key-box"]`에 흰 면, 3px `#111` 테두리, `6px 6px 0 #111` 그림자를 건다. 카드 안 카드는 그림자 3px.
+- 요약 칸 key는 `box-summary-0`–`3`(전엔 라벨 글자). 칸마다 단색 면(`#ffe066`, `#a5d8ff`, `#8ce99a`, `#ffc9c9`)을 주려고 순번으로 바꿈.
+- 버튼(`stButton`, `stLinkButton`): 2px 테두리, 4px 그림자. 마우스를 올리면 1px 떠오르고, 누르면 4px 눌리며 그림자가 사라짐. 잠긴 버튼은 그림자 없이 점선.
+- 입력란(`data-baseweb` select·input·textarea, 파일 올리기 칸), 펼침(`stExpander`), 안내 칸(`stAlert`)에도 2px 테두리.
+- `config.toml`: 바탕 `#fffdf5`, 보조 바탕 `#ffffff`, 글자 `#111111`, 모서리 `0.4rem`, `borderColor = "#111111"`, `showWidgetBorder = true`. 강조색 `#059669`(F23) 그대로.
+- 제목 JOBVIS는 굵기 900에 아래 42%를 `#6ee7b7` 형광펜으로 칠함. 배지는 각진 2px 테두리, 판정 흰색·신뢰 높음 초록·보통 노랑·낮음 빨강 면.
+- Streamlit이 직접 그리는 차트 안쪽과 드롭다운 목록은 바꾸지 않음.
+
 ## 테마 색 (F23)
 
 - 초록은 포인트에만: `.streamlit/config.toml` 강조색 `#059669`(버튼, 고른 키워드, 슬라이더, 탭 밑줄), `app.py`의 `ACCENT`(차트), 카드 점수 글자.
@@ -195,6 +205,6 @@ classDiagram
 | --- | --- |
 | `main.py` | `to_state` → `runner.collect_state`, 실행 → `runner.collect/score/read_inbox`, 출력 → `reports` 줄을 그대로 print. 터미널 옵션·출력 글은 그대로 (F14) |
 | `app.py` | 실행 카드, 진행 막대, 결과, 이력서 칸. 사용법 글 (F15). 빈 시트 안내를 "위 수집 카드에서…"로 |
-| `.streamlit/config.toml`, `app.py` CSS | 무채색 바탕 + 초록 포인트 (F23) |
+| `.streamlit/config.toml`, `app.py` CSS | 무채색 바탕 + 초록 포인트 (F23), 네오 브루탈리즘 (F28) |
 | `requirements.txt` | `pypdf`, `python-docx` (N1) |
 | `tests/test_main.py` | 가짜 그래프에 `stream`을 붙이고 바꿀 곳을 `main.runner`로. 검사 내용은 그대로 |

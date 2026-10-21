@@ -94,7 +94,19 @@ python -m pytest        # 420 passed (408 → 420)
 
 재리가 올린 실제 이력서 PDF(한글, 4쪽)를 이 환경의 pypdf 6.17로 읽어 4,955자를 뽑았다. 한글 PDF 글자 뽑기는 이 파일 하나로는 확인됨. 재리 PC의 첫 실패는 pypdf 미설치로 추정(이후 PDF는 읽히고 LLM 모델 404로 바뀜).
 
+## 네오 브루탈리즘 확인 (F28)
+
+CSS와 테마 설정만 바꿔 pytest로는 잡지 못한다. 가짜 시트·가짜 수집 그래프·가짜 LLM으로 실제 `app.py`를 띄워 크로미움으로 캡처했다(`/mnt/project-files/screens/neo-brutalism/postings.png`, `profile.png`). 테두리·그림자, 요약 칸 4색, 버튼 잠김(수집 중), 이력서 채운 배지가 보임.
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 통과
+python -m pytest        # 420 passed (변경 없음)
+```
+
 ## 미확인
+
+- 윈도우 엣지·크롬에서 네오 브루탈리즘 CSS(`:has()`, 버튼 눌림 효과)가 같게 보이는지.
 
 - 실제 사람인·잡코리아 수집을 화면 버튼으로 돌린 것. 그래프는 터미널과 같지만 실제 사이트로는 안 돌림.
 - 실제 LLM(Gemini)으로 이력서를 읽은 결과. 양식이 다른 실제 이력서에서 칸을 얼마나 잘 찾는지, 응답이 형식에 맞는지는 재리 PC에서 확인 필요.
