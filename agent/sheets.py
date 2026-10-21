@@ -6,6 +6,8 @@ import re
 
 import gspread
 
+from agent import postings
+
 HEADER = [
     "회사명",
     "직무",
@@ -34,6 +36,8 @@ HEADER = [
     "주요업무",
     "우대사항",
     "기술스택",
+    "신뢰",
+    "보정",
 ]
 # read_rows()가 돌려주는 dict의 키. HEADER와 순서가 같다.
 KEYS = [
@@ -64,13 +68,17 @@ KEYS = [
     "duties",
     "preferred",
     "stack",
+    "trust",
+    "adjust",
 ]
 V01_HEADER = HEADER[:5]
 V02_HEADER = HEADER[:7]
 V03_HEADER = HEADER[:21]
+V04_HEADER = HEADER[:27]
 CHECK_COLUMN = HEADER.index("평가")  # 0부터 (시트 API 범위용)
 SCORED_AT_COLUMN = HEADER.index("평가시각") + 1  # gspread 열 번호는 1부터
 DUTIES_COLUMN = HEADER.index("주요업무") + 1
+TRUST_COLUMN = HEADER.index("신뢰") + 1
 # 시트에는 사이트 이름으로 적는다. 출처 칸이 빈 줄은 v0.3까지의 사람인 API 줄이다.
 SOURCE_NAMES = {"saramin": "사람인", "jobkorea": "잡코리아"}
 _SOURCE_CODES = {name: code for code, name in SOURCE_NAMES.items()} | {"": "saramin"}
@@ -90,16 +98,20 @@ def _add_checkboxes(sheet: gspread.Worksheet) -> None:
     sheet.spreadsheet.batch_update({"requests": [{"setDataValidation": rule}]})
 
 
+def _open() -> gspread.Worksheet:
+    client = gspread.service_account(filename=os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"])
+    return client.open_by_key(os.environ["GOOGLE_SHEET_ID"]).sheet1
+
+
 @functools.cache
 def _sheet() -> gspread.Worksheet:
     # 실행 한 번에 한 번만 인증하고 연결을 재사용한다.
-    client = gspread.service_account(filename=os.environ["GOOGLE_SERVICE_ACCOUNT_FILE"])
-    sheet = client.open_by_key(os.environ["GOOGLE_SHEET_ID"]).sheet1
+    sheet = _open()
     first_row = sheet.row_values(1)
     if first_row in (V01_HEADER, V02_HEADER):
         sheet.update([HEADER], "A1")  # 예전 제목 줄 뒤에 새 열 이름을 붙인다
         _add_checkboxes(sheet)
-    elif first_row == V03_HEADER:
+    elif first_row in (V03_HEADER, V04_HEADER):
         sheet.update([HEADER], "A1")  # 체크박스 규칙은 v0.3에서 이미 걸었다
     elif first_row != HEADER:
         sheet.insert_row(HEADER, 1)
@@ -125,45 +137,81 @@ def source_code(name: str) -> str:
     return _SOURCE_CODES.get(name.strip(), name.strip())
 
 
-def existing_keys() -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
-    """(출처, 공고ID) 쌍과 (회사명, 제목) 정규화 쌍. 출처 칸이 빈 줄은 사람인으로 본다."""
-    ids, names = set(), set()
+def existing_keys() -> tuple[set[tuple[str, str]], set[tuple[str, str]], dict[tuple[str, str], dict]]:
+    """(출처, 공고ID) 쌍, (회사명, 제목) 정규화 쌍, 본문 미확보 줄. 출처 칸이 빈 줄은 사람인으로 본다.
+
+    본문 미확보 줄은 {(회사, 제목): {"row", "source", "id"}}. 다른 사이트 본문으로 채울 때 쓴다 (v0.5 F46).
+    """
+    ids, names, missing = set(), set(), {}
     for row in read_rows():
         if row["id"]:
             ids.add((source_code(row["source"]), row["id"]))
         if row["company"] or row["title"]:
-            names.add((normalize_company(row["company"]), normalize(row["title"])))
-    return ids, names
+            name = (normalize_company(row["company"]), normalize(row["title"]))
+            names.add(name)
+            if row["body"] == postings.MISSING and row["id"]:
+                missing.setdefault(name, {"row": row["row"], "source": source_code(row["source"]), "id": row["id"]})
+    return ids, names, missing
 
 
-def append_row(values: list) -> None:
-    _sheet().append_row(values)
+_ROW_NUMBER = re.compile(r"![A-Z]+(\d+)")
+
+
+def append_row(values: list) -> int | None:
+    """붙인 줄 번호를 돌려준다. 응답에서 못 읽으면 None."""
+    response = _sheet().append_row(values)
+    updated = response.get("updates", {}).get("updatedRange", "") if isinstance(response, dict) else ""
+    found = _ROW_NUMBER.search(updated)
+    return int(found.group(1)) if found else None
+
+
+def _rows(values: list[list]) -> list[dict]:
+    rows = []
+    for number, row in enumerate(values[1:], start=2):
+        if not any(row):
+            continue
+        row = [str(v) for v in row] + [""] * (len(KEYS) - len(row))
+        rows.append(dict(zip(KEYS, row, strict=False)) | {"row": number})
+    return rows
 
 
 def read_rows() -> list[dict]:
     """제목 줄을 뺀 모든 줄. 각 줄은 KEYS를 키로 하고, 시트 줄 번호를 "row"에 담는다."""
-    rows = []
-    for number, values in enumerate(_sheet().get_all_values()[1:], start=2):
-        if not any(values):
-            continue
-        values = [str(v) for v in values] + [""] * (len(KEYS) - len(values))
-        rows.append(dict(zip(KEYS, values, strict=False)) | {"row": number})
-    return rows
+    return _rows(_sheet().get_all_values())
 
 
-def write_result(row_number: int, summary: str, values: list, extra: list) -> None:
-    """요약은 "자격요건" 칸에, 평가 결과는 "평가"부터 "평가시각"까지, 본문 요약은 "주요업무"부터 "기술스택"까지.
+def read_rows_readonly() -> list[dict]:
+    """화면용. read_rows와 같지만 제목 줄을 고치거나 체크박스 규칙을 걸지 않는다 (v0.5 F8).
+
+    예전 제목 줄이어도 열 위치로 읽고, 모자란 칸은 빈칸이다.
+    """
+    return _rows(_open().get_all_values())
+
+
+def update_cells(row_number: int, changes: dict) -> None:
+    """제목 이름으로 열을 찾아 그 칸들만 한 번의 요청으로 쓴다. 받은함(F39, F40)과 본문 채우기(F46)가 쓴다."""
+    data = [
+        {"range": gspread.utils.rowcol_to_a1(row_number, HEADER.index(name) + 1), "values": [[value]]}
+        for name, value in changes.items()
+    ]
+    _sheet().batch_update(data)
+
+
+def _span(row_number: int, first: int, last: int) -> str:
+    return f"{gspread.utils.rowcol_to_a1(row_number, first)}:{gspread.utils.rowcol_to_a1(row_number, last)}"
+
+
+def write_result(row_number: int, summary: str | None, values: list, extra: list | None, tail: list) -> None:
+    """요약은 "자격요건" 칸에, 평가 결과는 "평가"부터 "평가시각"까지, 본문 요약은 "주요업무"부터 "기술스택"까지,
+    신뢰·보정은 마지막 두 칸에.
 
     한 번의 요청으로 쓰고, 그 사이 수집 칸(출처·지역·본문)은 건드리지 않는다.
+    summary와 extra가 None이면(신입 제외 줄) 그 칸은 그대로 둔다.
     """
-    first = gspread.utils.rowcol_to_a1(row_number, CHECK_COLUMN + 1)
-    last = gspread.utils.rowcol_to_a1(row_number, SCORED_AT_COLUMN)
-    extra_first = gspread.utils.rowcol_to_a1(row_number, DUTIES_COLUMN)
-    extra_last = gspread.utils.rowcol_to_a1(row_number, len(HEADER))
-    _sheet().batch_update(
-        [
-            {"range": f"C{row_number}", "values": [[summary]]},
-            {"range": f"{first}:{last}", "values": [values]},
-            {"range": f"{extra_first}:{extra_last}", "values": [extra]},
-        ]
-    )
+    data = [{"range": _span(row_number, CHECK_COLUMN + 1, SCORED_AT_COLUMN), "values": [values]}]
+    if summary is not None:
+        data.insert(0, {"range": f"C{row_number}", "values": [[summary]]})
+    if extra is not None:
+        data.append({"range": _span(row_number, DUTIES_COLUMN, TRUST_COLUMN - 1), "values": [extra]})
+    data.append({"range": _span(row_number, TRUST_COLUMN, len(HEADER)), "values": [tail]})
+    _sheet().batch_update(data)

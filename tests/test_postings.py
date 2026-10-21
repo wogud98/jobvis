@@ -43,3 +43,34 @@ def test_data_folder_is_git_ignored():
     from pathlib import Path
 
     assert "data/" in Path(".gitignore").read_text(encoding="utf-8").split()
+
+
+# ---- v0.5: 받은함에서 이미지 글자 붙이기 ----
+
+
+def test_split_is_the_reverse_of_compose():
+    assert postings.split(postings.compose("본문", ["가", "나"])) == ("본문", ["가\n나"])
+    assert postings.split("본문만") == ("본문만", [])
+    assert postings.split(postings.compose("", ["가"])) == ("", ["가"])
+
+
+def test_add_ocr_appends_after_existing_image_text():
+    content = postings.add_ocr(postings.compose("본문", ["가"]), ["나"])
+
+    assert content == f"본문\n\n{postings.OCR_MARK}\n가\n나"
+
+
+def test_add_ocr_without_file_starts_with_blank_text():
+    content = postings.add_ocr(None, ["이미지 글자"])
+
+    assert postings.split(content) == ("", ["이미지 글자"])
+
+
+def test_remove_deletes_file_and_ignores_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(postings, "DIR", tmp_path)
+    postings.save("saramin", "1", "본문")
+
+    postings.remove("saramin", "1")
+    postings.remove("saramin", "1")
+
+    assert not (tmp_path / "saramin_1.txt").exists()

@@ -151,3 +151,130 @@ def test_rows_without_posting_info_are_skipped():
 
     assert [r["row"] for r in targets] == [3]
     assert skipped == [old]
+
+
+# ---- v0.5: 점수 보정 (F25–F36) ----
+
+
+def test_select_all_skips_excluded_rows_but_checked_picks_them():
+    excluded = row(2) | {"verdict": scoring.EXCLUDED}
+    rows = [excluded | {"check": "TRUE"}, row(3)]
+
+    assert [r["row"] for r in scoring.select_targets(rows, "all")[0]] == [3]
+    assert [r["row"] for r in scoring.select_targets(rows, "checked")[0]] == [2]
+
+
+@pytest.mark.parametrize(("value", "expected"), [(0, 0), (3, 3), (None, None)])
+def test_required_years_values(value, expected):
+    assert make_evaluation(required_years=value).required_years == expected
+
+
+def test_required_years_missing_is_null():
+    text = '{"summary": "s", "skills": 1, "experience": 2, "culture": null, "career": 4}'
+
+    assert scoring.parse(text).required_years is None
+
+
+@pytest.mark.parametrize("value", ["-1", '"3년"'])
+def test_required_years_negative_or_text_is_rejected(value):
+    text = '{"summary": "s", "skills": 1, "experience": 2, "culture": null, "career": 4, "required_years": ' + value
+    with pytest.raises(ValueError):
+        scoring.parse(text + "}")
+
+
+@pytest.mark.parametrize(
+    ("required", "years", "experience"),
+    [
+        (2, 2, 75),  # 부족 0년: 그대로
+        (3, 2, 60),  # 1년 부족
+        (3, 1, 45),  # 2년 부족
+        (3, 0, 30),  # 3년 부족
+        (8, 0, 30),  # 3년 넘게 부족해도 30
+        (None, 0, 75),  # 공고에 경력 요구가 없음
+    ],
+)
+def test_experience_cap_by_short_years(required, years, experience):
+    adjusted = scoring.adjust(make_evaluation(experience=75, required_years=required), years, scoring.HIGH)
+
+    assert adjusted.experience == experience
+
+
+def test_lower_llm_score_is_kept_without_note():
+    # 경력 40은 상한 60보다 낮아 그대로. 종합 (30×72 + 25×40 + 30×80)/85 = 65.4 → 65 (상한 79 아래)
+    adjusted = scoring.adjust(make_evaluation(experience=40, required_years=3), 2, scoring.HIGH)
+
+    assert (adjusted.experience, adjusted.total, adjusted.note) == (40, 65, "")
+
+
+def test_short_experience_caps_total_at_79():
+    evaluation = make_evaluation(skills=95, experience=90, culture=None, career=95, required_years=3)
+
+    adjusted = scoring.adjust(evaluation, 2, scoring.HIGH)
+
+    # 경력 90 → 60. 종합 (30×95 + 25×60 + 30×95)/85 = 84.7 → 85 → 79, 판정은 "추천"까지 (F27)
+    assert (adjusted.experience, adjusted.total, adjusted.verdict) == (60, 79, "추천")
+    assert adjusted.stars == scoring.stars(79)
+    assert adjusted.note == "경력 90→60 (3년 요구, 2년), 종합 85→79 (경력 부족)"
+
+
+def test_short_experience_caps_total_even_when_experience_score_is_already_low():
+    # F27은 "경력이 부족한 공고"면 건다. 경력점수를 깎지 않았어도 종합 상한은 적용 (v0.5 설계)
+    evaluation = make_evaluation(skills=100, experience=50, culture=None, career=100, required_years=2)
+
+    adjusted = scoring.adjust(evaluation, 1, scoring.HIGH)
+
+    assert adjusted.experience == 50
+    assert adjusted.note == "종합 85→79 (경력 부족)"
+
+
+def test_low_trust_caps_total_at_69():
+    adjusted = scoring.adjust(make_evaluation(skills=90, experience=90, career=90), 3, scoring.LOW)
+
+    assert (adjusted.total, adjusted.verdict, adjusted.note) == (69, "추천", "종합 90→69 (신뢰 낮음)")
+
+
+def test_short_experience_and_low_trust_use_lower_cap():
+    evaluation = make_evaluation(skills=95, experience=90, culture=None, career=95, required_years=3)
+
+    adjusted = scoring.adjust(evaluation, 2, scoring.LOW)
+
+    assert adjusted.total == 69
+    assert adjusted.note == "경력 90→60 (3년 요구, 2년), 종합 85→69 (신뢰 낮음)"
+
+
+def test_no_adjustment_leaves_note_blank():
+    adjusted = scoring.adjust(make_evaluation(required_years=0), 0, scoring.MEDIUM)
+
+    assert (adjusted.experience, adjusted.total, adjusted.verdict, adjusted.note) == (60, 71, "추천", "")
+
+
+@pytest.mark.parametrize(
+    ("body", "with_body", "expected"),
+    [
+        ("글자", True, "높음"),
+        ("글자+이미지", True, "높음"),
+        ("", True, "높음"),  # v0.4 이전 줄의 빈 상태
+        ("이미지 일부 못 읽음", True, "보통"),
+        ("본문 미확보", False, "낮음"),
+        ("글자", False, "낮음"),  # 원문 파일 없음
+    ],
+)
+def test_trust_levels(body, with_body, expected):
+    assert scoring.trust(body, with_body) == expected
+
+
+@pytest.mark.parametrize(
+    ("experience", "years", "expected"),
+    [
+        ("경력 3년↑", 0, True),
+        ("경력2~10년", 0, True),
+        ("신입·경력", 0, False),
+        ("경력무관", 0, False),
+        ("신입", 0, False),
+        ("", 0, False),  # 경력 칸이 비면 평가한다
+        ("  ", 0, False),
+        ("경력 3년↑", 1, False),  # 신입이 아니면 제외하지 않는다
+    ],
+)
+def test_newcomer_exclusion(experience, years, expected):
+    assert scoring.excluded(experience, years) is expected

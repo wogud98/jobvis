@@ -6,4 +6,5 @@ venv/
 .pytest_cache/
 .ruff_cache/
 profile.md
+profile.yaml
 data/
