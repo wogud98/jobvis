@@ -170,3 +170,57 @@ def test_failed_save_keeps_old_file(tmp_path, monkeypatch):
 
     assert path.read_text(encoding="utf-8") == VALID
     assert [p.name for p in tmp_path.iterdir()] == ["profile.yaml"]
+
+
+# ---- 프로필 탭 입력란 (F17–F21) ----
+
+
+def test_form_round_trip_from_example_file():
+    raw = user_profile.read_raw(str(ROOT / "profile.example.yaml"))
+
+    values = user_profile.to_form(raw)
+
+    assert values[("skills", "main")] == "Python\nSQL"  # 한 줄에 하나 (F19)
+    assert values[("experience", "years")] == 0
+    assert values[("direction", "goals")] == "LLM을 활용한 서비스 개발, API 서버 설계"
+    profile, _ = user_profile.validate(user_profile.from_form(values))
+    assert profile == user_profile.load(str(ROOT / "profile.example.yaml"))[0]
+
+
+def test_form_defaults_for_missing_or_wrong_values():
+    values = user_profile.to_form({"experience": {"years": "2년"}, "skills": "Python"})
+
+    assert values[("experience", "years")] == 0
+    assert values[("skills", "main")] == ""
+    assert user_profile.to_form(None)[("culture",)] == ""
+
+
+def test_form_lines_become_items_and_blank_lines_are_dropped():
+    values = {keys: "" for keys, _, _ in user_profile.FORM_FIELDS} | {
+        ("skills", "main"): "Python\n\n  SQL  \n",
+        ("experience", "years"): 2,
+        ("direction", "jobs"): "백엔드",
+    }
+
+    data = user_profile.from_form(values)
+
+    assert data["skills"]["main"] == ["Python", "SQL"]
+    assert data["experience"]["years"] == 2
+    assert data["culture"] == []
+    assert user_profile.validate(data)[0].direction.jobs == ["백엔드"]
+
+
+def test_form_without_required_fields_is_rejected():
+    values = {keys: "" for keys, _, _ in user_profile.FORM_FIELDS} | {("experience", "years"): 0}
+
+    with pytest.raises(user_profile.ProfileError) as exc_info:
+        user_profile.validate(user_profile.from_form(values))
+
+    assert "skills.main" in str(exc_info.value) and "direction.jobs" in str(exc_info.value)
+
+
+def test_read_raw_missing_and_broken(tmp_path):
+    assert user_profile.read_raw(str(tmp_path / "profile.yaml")) is None
+    with pytest.raises(user_profile.ProfileError, match="화면에서 저장하지 않습니다"):
+        user_profile.read_raw(write(tmp_path, "skills: [Python\n"))
+    assert user_profile.read_raw(write(tmp_path, "- 목록\n")) == {}

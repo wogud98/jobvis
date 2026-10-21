@@ -73,7 +73,7 @@ classDiagram
         +Card
         +Filters
         +cards(rows) list~Card~
-        +options(rows) (출처 목록, 경력 목록)
+        +options(cards) (출처 목록, 경력 목록)
         +apply(cards, filters) list~Card~
         +chart(cards) list
         +error_message(error) str
@@ -81,7 +81,11 @@ classDiagram
     class user_profile {
         +Profile
         +ProfileError
-        +load(path) Profile
+        +load(path) (Profile, 경고)
+        +read_raw(path) dict|None
+        +FORM_FIELDS
+        +to_form(data) 입력란 값
+        +from_form(values) dict
         +parse(text) (Profile, 경고)
         +validate(data) (Profile, 경고)
         +dump(profile) str
@@ -225,6 +229,7 @@ sequenceDiagram
     participant I as inbox.py
 
     U->>A: 카드에 이미지 끌어다 놓기
+    U->>A: "받은함에 저장" 누름
     loop 파일마다
         A->>I: save_upload(source_code, job_id, 파일 이름, bytes)
         alt 확장자 아님 또는 10MB 초과
@@ -638,6 +643,20 @@ v0.4의 A–AA열은 그대로 두고 뒤에 붙인다.
 | 수집 그래프 F46 | 시트의 미확보 줄을 새 공고로 교체, 예전 원문 지움, 체크 켬 | 새 본문도 미확보 → 건너뜀, 같은 실행 두 사이트(앞 미확보/앞 본문 있음/앞 실패), 결과의 "본문 채움" 수 |
 | main --score | profile.yaml 읽기 | 프로필 없음 안내, 필수 칸 틀리면 시트·LLM 전에 멈춤 |
 | app.py | `streamlit.testing.v1.AppTest`로 가짜 시트 줄 3개를 넣어 탭 두 개와 카드 수 확인 | 시트 읽기 오류 문구, 빈 시트 안내 |
+
+## 구현하며 바뀐 점
+
+구현 PR에서 설계와 달라진 곳. 요구사항은 바뀌지 않음.
+
+| 설계 | 구현 | 이유 |
+| --- | --- | --- |
+| `user_profile.load`가 `Profile`을 돌려줌 | `(Profile, 경고 목록)`을 돌려줌 | 모르는 칸 경고(F14)를 `main`은 출력하고 화면은 `st.warning`으로 보여서, 출력은 부르는 쪽이 함 |
+| 프로필 탭 입력란 변환을 `app.py`에 | `user_profile`의 `FORM_FIELDS`, `read_raw`, `to_form`, `from_form` | Streamlit 없이 테스트 (N5) |
+| 이미지를 놓으면 바로 저장 | "받은함에 저장" 버튼을 눌러야 저장 | Streamlit은 버튼·필터를 누를 때마다 화면을 다시 그려 같은 파일이 여러 번 저장됨 |
+| 입력란에 key를 줌 | key 없음 | key가 있으면 파일을 직접 고쳐도 입력란이 예전 값을 유지함 (F21) |
+| F46 같은 실행 남은 backup을 앞에서 처리 | 대기열이 빈 뒤 `pick`에서 처리 | 앞 공고 저장이 끝나 시트 줄 번호를 안 뒤에만 교체할 수 있음 |
+| `existing_keys` 미확보 판정 문자열 | `postings.MISSING` 상수 | 같은 문구를 두 곳에 두지 않음 |
+| 화면 출처 필터 값 | 시트에 적힌 사이트 이름 그대로(빈 칸은 "미상") | 필터는 보이는 이름으로 고름. 이미지 저장 이름에만 코드(saramin, jobkorea)를 씀 |
 
 ## 미확인
 
