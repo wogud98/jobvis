@@ -1,14 +1,28 @@
 import pytest
 
 import main
-from agent.saramin import SaraminAPIError
 
 
-def test_names_become_codes():
+class Recorder:
+    def __init__(self, result):
+        self.calls = []
+        self.result = result
+
+    def __call__(self):
+        return self
+
+    def invoke(self, state, config):
+        self.calls.append((state, config))
+        return self.result
+
+
+def test_names_become_codes_and_both_sources_by_default():
     args = main.parse_args(["--keyword", "백엔드", "--location", "서울", "--job", "백엔드", "--career", "신입"])
 
     assert main.to_state(args) == {
         "keyword": "백엔드",
+        "sources": ["saramin", "jobkorea"],
+        "location": "서울",
         "region_code": "101000",
         "job_code": "84",
         "career": "신입",
@@ -16,18 +30,28 @@ def test_names_become_codes():
     }
 
 
-@pytest.mark.parametrize("count", ["0", "111"])
+def test_source_option_picks_one_site():
+    args = main.parse_args(["--keyword", "백엔드", "--source", "jobkorea", "--count", "30"])
+
+    state = main.to_state(args)
+    assert state["sources"] == ["jobkorea"]
+    assert state["count"] == 30
+    assert state["location"] is None and state["region_code"] is None
+
+
+@pytest.mark.parametrize("count", ["0", "31"])
 def test_count_out_of_range_is_rejected(count):
     with pytest.raises(SystemExit):
         main.parse_args(["--keyword", "백엔드", "--count", count])
 
 
-def test_unknown_career_is_rejected():
+@pytest.mark.parametrize("argv", [["--career", "무관"], ["--source", "wanted"]])
+def test_unknown_choice_is_rejected(argv):
     with pytest.raises(SystemExit):
-        main.parse_args(["--keyword", "백엔드", "--career", "무관"])
+        main.parse_args(["--keyword", "백엔드", *argv])
 
 
-def test_unknown_name_stops_before_api_call(monkeypatch):
+def test_unknown_name_stops_before_requests(monkeypatch):
     monkeypatch.setattr(main, "build_graph", lambda: pytest.fail("모르는 이름이면 그래프를 실행하지 않아야 함"))
 
     with pytest.raises(SystemExit) as exc_info:
@@ -36,38 +60,68 @@ def test_unknown_name_stops_before_api_call(monkeypatch):
     assert "서울특별시" in str(exc_info.value)
 
 
-def test_saramin_error_is_printed_without_traceback(monkeypatch):
-    class FailingGraph:
-        def invoke(self, state, config):
-            raise SaraminAPIError("사람인 API 오류 (코드 4)")
-
-    monkeypatch.setattr(main, "build_graph", FailingGraph)
-
-    with pytest.raises(SystemExit) as exc_info:
-        main.main(["--keyword", "백엔드"])
-
-    assert str(exc_info.value) == "사람인 API 오류 (코드 4)"
-
-
-def test_report_prints_counts_and_failures(capsys):
+def test_report_prints_counts_per_site_and_failures(capsys):
     main.print_report(
         {
-            "fetched": 4,
-            "saved": [{}, {}],
-            "skipped": [{}],
-            "failed": [{"company": "회사3", "title": "백엔드", "step": "요약", "error": "TimeoutError"}],
+            "fetched": {"saramin": 3, "jobkorea": 2},
+            "saved": [
+                {"source": "saramin", "body": "글자"},
+                {"source": "saramin", "body": "본문 미확보"},
+                {"source": "jobkorea", "body": "글자"},
+            ],
+            "skipped": [{"source": "jobkorea"}],
+            "failed": [
+                {"source": "saramin", "company": "회사3", "title": "백엔드", "step": "본문", "error": "CrawlError"},
+                {"source": "jobkorea", "company": "회사5", "title": "AI", "step": "OCR", "error": "RuntimeError"},
+            ],
+            "blocked": [{"source": "jobkorea", "reason": "www.jobkorea.co.kr 차단 (HTTP 429)"}],
         }
     )
 
     out = capsys.readouterr().out
-    assert "가져옴 4 / 새로 저장 2 / 건너뜀 1 / 실패 1" in out
-    assert "실패(요약): 회사3 | 백엔드 (TimeoutError)" in out
+    assert "사람인 가져옴 3 / 새로 저장 2 / 건너뜀 0 / 실패 1" in out
+    assert "잡코리아 가져옴 2 / 새로 저장 1 / 건너뜀 1 / 실패 0" in out  # OCR 실패는 줄을 저장했으므로 셈에서 뺌
+    assert "잡코리아 수집 멈춤: www.jobkorea.co.kr 차단 (HTTP 429)" in out
+    assert "실패(본문): 사람인 | 회사3 | 백엔드 (CrawlError)" in out
+    assert "실패(OCR): 잡코리아 | 회사5 | AI (RuntimeError)" in out
+    assert "본문 미확보 1건: 시트의 링크로 직접 확인해 주세요" in out
 
 
 def test_report_with_no_jobs(capsys):
-    main.print_report({"fetched": 0})
+    main.print_report({"fetched": {"saramin": 0}})
 
-    assert "가져옴 0 / 새로 저장 0 / 건너뜀 0 / 실패 0" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "사람인 가져옴 0 / 새로 저장 0 / 건너뜀 0 / 실패 0" in out
+    assert "본문 미확보" not in out
+
+
+def test_first_run_prints_personal_use_notice_and_ocr_hint(monkeypatch, tmp_path, capsys):
+    collect = Recorder({"fetched": {"saramin": 0}})
+    monkeypatch.setattr(main, "build_graph", collect)
+    monkeypatch.setattr(main.postings, "DIR", tmp_path / "postings")
+    monkeypatch.setattr(main.ocr, "available", lambda: False)
+
+    main.main(["--keyword", "백엔드"])
+
+    out = capsys.readouterr().out
+    assert "개인 사용만. 수집한 공고를 공유·공개·판매하지 않음" in out  # N6
+    assert "pip install -r requirements-ocr.txt" in out  # F13
+    state, config = collect.calls[0]
+    assert state["ocr_ready"] is False
+    assert config == {"recursion_limit": main.recursion_limit(10 * 2)}  # 사이트당 개수 × 사이트 수
+
+
+def test_notice_only_on_first_run(monkeypatch, tmp_path, capsys):
+    (tmp_path / "postings").mkdir()
+    monkeypatch.setattr(main, "build_graph", Recorder({"fetched": {}}))
+    monkeypatch.setattr(main.postings, "DIR", tmp_path / "postings")
+    monkeypatch.setattr(main.ocr, "available", lambda: True)
+
+    main.main(["--keyword", "백엔드", "--source", "saramin"])
+
+    out = capsys.readouterr().out
+    assert "개인 사용만" not in out
+    assert "requirements-ocr" not in out
 
 
 # ---- v0.3: 평가, 스킬 갭 ----
@@ -107,19 +161,6 @@ def test_missing_profile_stops_before_collecting(monkeypatch, tmp_path):
     assert "profile.example.md" in str(exc_info.value)
 
 
-class Recorder:
-    def __init__(self, result):
-        self.calls = []
-        self.result = result
-
-    def __call__(self):
-        return self
-
-    def invoke(self, state, config):
-        self.calls.append((state, config))
-        return self.result
-
-
 def test_collect_then_score_all(monkeypatch, tmp_path, capsys):
     profile = tmp_path / "profile.md"
     profile.write_text("Python", encoding="utf-8")
@@ -128,12 +169,14 @@ def test_collect_then_score_all(monkeypatch, tmp_path, capsys):
         {"row": 3, "check": "FALSE", "score": "70", "experience": "신입", "education": "", "keywords": ""},
         {"row": 4, "check": "FALSE", "score": "", "experience": "", "education": "", "keywords": ""},
     ]
-    collect = Recorder({"fetched": 1, "saved": [{}]})
+    collect = Recorder({"fetched": {"saramin": 1}, "saved": [{"source": "saramin", "body": "글자"}]})
     score = Recorder({"done": [rows[0]], "skipped": [rows[2]]})
     monkeypatch.setattr(main, "build_graph", collect)
     monkeypatch.setattr(main, "build_score_graph", score)
     monkeypatch.setattr(main.sheets, "read_rows", lambda: rows)
 
+    monkeypatch.setattr(main.postings, "DIR", tmp_path)
+    monkeypatch.setattr(main.ocr, "available", lambda: True)
     main.main(["--keyword", "백엔드", "--score", "all", "--profile", str(profile)])
 
     assert len(collect.calls) == 1
@@ -141,7 +184,7 @@ def test_collect_then_score_all(monkeypatch, tmp_path, capsys):
     assert state == {"profile": "Python", "queue": [rows[0]], "skipped": [rows[2]]}
     assert config == {"recursion_limit": main.recursion_limit(1)}
     out = capsys.readouterr().out
-    assert "가져옴 1 / 새로 저장 1" in out
+    assert "사람인 가져옴 1 / 새로 저장 1" in out
     assert "평가 대상 2 / 완료 1 / 건너뜀 1 / 실패 0" in out
 
 

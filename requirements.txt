@@ -3,5 +3,6 @@ langchain>=1.4
 langchain-google-genai>=4.0
 gspread>=6.2
 requests>=2.32
+beautifulsoup4>=4.12
 python-dotenv>=1.0
 # Claude로 바꿀 때만 설치: pip install langchain-anthropic

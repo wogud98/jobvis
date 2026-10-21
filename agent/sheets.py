@@ -27,6 +27,12 @@ HEADER = [
     "강점",
     "부족한점",
     "평가시각",
+    "출처",
+    "지역",
+    "본문",
+    "주요업무",
+    "우대사항",
+    "기술스택",
 ]
 # read_rows()가 돌려주는 dict의 키. HEADER와 순서가 같다.
 KEYS = [
@@ -51,11 +57,22 @@ KEYS = [
     "strengths",
     "gaps",
     "scored_at",
+    "source",
+    "location",
+    "body",
+    "duties",
+    "preferred",
+    "stack",
 ]
 V01_HEADER = HEADER[:5]
 V02_HEADER = HEADER[:7]
-ID_COLUMN = HEADER.index("공고ID") + 1  # gspread 열 번호는 1부터
+V03_HEADER = HEADER[:21]
 CHECK_COLUMN = HEADER.index("평가")  # 0부터 (시트 API 범위용)
+SCORED_AT_COLUMN = HEADER.index("평가시각") + 1  # gspread 열 번호는 1부터
+DUTIES_COLUMN = HEADER.index("주요업무") + 1
+# 시트에는 사이트 이름으로 적는다. 출처 칸이 빈 줄은 v0.3까지의 사람인 API 줄이다.
+SOURCE_NAMES = {"saramin": "사람인", "jobkorea": "잡코리아"}
+_SOURCE_CODES = {name: code for code, name in SOURCE_NAMES.items()} | {"": "saramin"}
 
 
 def _add_checkboxes(sheet: gspread.Worksheet) -> None:
@@ -81,15 +98,32 @@ def _sheet() -> gspread.Worksheet:
     if first_row in (V01_HEADER, V02_HEADER):
         sheet.update([HEADER], "A1")  # 예전 제목 줄 뒤에 새 열 이름을 붙인다
         _add_checkboxes(sheet)
+    elif first_row == V03_HEADER:
+        sheet.update([HEADER], "A1")  # 체크박스 규칙은 v0.3에서 이미 걸었다
     elif first_row != HEADER:
         sheet.insert_row(HEADER, 1)
         _add_checkboxes(sheet)
     return sheet
 
 
-def existing_ids() -> set[str]:
-    # 숫자로 읽힐 수 있어 문자열로 맞춘다.
-    return {str(value) for value in _sheet().col_values(ID_COLUMN)[1:] if value}
+def normalize(text: str) -> str:
+    """사이트 간 같은 공고를 알아보려고 공백·기호를 지운다 (F9)."""
+    return "".join(ch for ch in text if ch.isalnum()).casefold()
+
+
+def source_code(name: str) -> str:
+    return _SOURCE_CODES.get(name.strip(), name.strip())
+
+
+def existing_keys() -> tuple[set[tuple[str, str]], set[tuple[str, str]]]:
+    """(출처, 공고ID) 쌍과 (회사명, 제목) 정규화 쌍. 출처 칸이 빈 줄은 사람인으로 본다."""
+    ids, names = set(), set()
+    for row in read_rows():
+        if row["id"]:
+            ids.add((source_code(row["source"]), row["id"]))
+        if row["company"] or row["title"]:
+            names.add((normalize(row["company"]), normalize(row["title"])))
+    return ids, names
 
 
 def append_row(values: list) -> None:
@@ -107,13 +141,19 @@ def read_rows() -> list[dict]:
     return rows
 
 
-def write_result(row_number: int, summary: str, values: list) -> None:
-    """요약은 "자격요건" 칸에, 평가 결과는 "평가"부터 "평가시각"까지 한 번의 요청으로 쓴다."""
+def write_result(row_number: int, summary: str, values: list, extra: list) -> None:
+    """요약은 "자격요건" 칸에, 평가 결과는 "평가"부터 "평가시각"까지, 본문 요약은 "주요업무"부터 "기술스택"까지.
+
+    한 번의 요청으로 쓰고, 그 사이 수집 칸(출처·지역·본문)은 건드리지 않는다.
+    """
     first = gspread.utils.rowcol_to_a1(row_number, CHECK_COLUMN + 1)
-    last = gspread.utils.rowcol_to_a1(row_number, len(HEADER))
+    last = gspread.utils.rowcol_to_a1(row_number, SCORED_AT_COLUMN)
+    extra_first = gspread.utils.rowcol_to_a1(row_number, DUTIES_COLUMN)
+    extra_last = gspread.utils.rowcol_to_a1(row_number, len(HEADER))
     _sheet().batch_update(
         [
             {"range": f"C{row_number}", "values": [[summary]]},
             {"range": f"{first}:{last}", "values": [values]},
+            {"range": f"{extra_first}:{extra_last}", "values": [extra]},
         ]
     )

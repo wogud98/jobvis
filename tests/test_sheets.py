@@ -65,7 +65,7 @@ def worksheet(monkeypatch):
 def test_v01_header_is_replaced_with_new_header(worksheet):
     sheet, _ = worksheet([sheets.V01_HEADER, ["회사", "직무", "요약", "2026-11-01", "url"]])
 
-    sheets.existing_ids()
+    sheets.existing_keys()
 
     assert sheet.rows[0] == sheets.HEADER
     assert len(sheet.rows) == 2
@@ -80,22 +80,43 @@ def test_header_is_inserted_into_empty_sheet(worksheet):
     assert sheet.rows[1][5] == "1"
 
 
-def test_existing_ids_skips_header_and_v01_rows(worksheet):
+def test_existing_keys_reads_ids_and_names_and_treats_blank_source_as_saramin(worksheet):
+    blank = [""] * 10  # L–U 평가 칸
     worksheet(
         [
             sheets.HEADER,
             ["회사", "직무", "요약", "마감", "url"],  # v0.1 줄: ID 없음
-            ["회사", "직무", "요약", "마감", "url", "123", "2026-10-20 09:00"],
+            ["(주)가나다", "백엔드 개발자 [신입]", "요약", "마감", "url", "123", "시각"],  # v0.3까지: 출처 없음
+            ["라마바", "AI Engineer", "", "마감", "url", "77", "시각", "신입", "", "", "FALSE", *blank, "잡코리아"],
         ]
     )
 
-    assert sheets.existing_ids() == {"123"}
+    ids, names = sheets.existing_keys()
+
+    assert ids == {("saramin", "123"), ("jobkorea", "77")}
+    # 공백·기호를 지우고 소문자로 비교 (F9). "(주)"의 괄호만 지워지고 글자는 남는다.
+    assert names == {("회사", "직무"), ("주가나다", "백엔드개발자신입"), ("라마바", "aiengineer")}
+
+
+def test_normalize_drops_spaces_symbols_and_case():
+    assert sheets.normalize("(주) 가나다 · Backend!") == sheets.normalize("(주)가나다backend")
+
+
+def test_v03_header_is_extended_without_new_checkbox_rule(worksheet):
+    old_row = ["회사", "직무", "요약", "2026-11-01", "url", "1", "시각", "신입", "대졸", "Python", "TRUE"]
+    sheet, _ = worksheet([sheets.V03_HEADER, old_row])
+
+    sheets.existing_keys()
+
+    assert sheet.rows[0] == sheets.HEADER
+    assert sheet.rows[1] == old_row
+    assert sheet.spreadsheet.requests == []  # v0.3에서 이미 걸었음
 
 
 def test_connects_once_per_run(worksheet):
     _, connections = worksheet([sheets.HEADER])
 
-    sheets.existing_ids()
+    sheets.existing_keys()
     sheets.append_row(["a"] * 7)
     sheets.append_row(["b"] * 7)
 
@@ -114,7 +135,7 @@ def test_v02_header_is_extended_and_checkboxes_added(worksheet):
     old_row = ["회사", "직무", "요약", "2026-11-01", "url", "1", "2026-10-20 09:00"]
     sheet, _ = worksheet([sheets.V02_HEADER, old_row])
 
-    sheets.existing_ids()
+    sheets.existing_keys()
 
     assert sheet.rows[0] == sheets.HEADER
     assert sheet.rows[1] == old_row  # 예전 줄은 그대로
@@ -124,7 +145,7 @@ def test_v02_header_is_extended_and_checkboxes_added(worksheet):
 def test_checkboxes_added_only_when_header_changes(worksheet):
     sheet, _ = worksheet([sheets.HEADER])
 
-    sheets.existing_ids()
+    sheets.existing_keys()
 
     assert sheet.spreadsheet.requests == []
 
@@ -132,7 +153,7 @@ def test_checkboxes_added_only_when_header_changes(worksheet):
 def test_new_sheet_gets_checkboxes(worksheet):
     sheet, _ = worksheet([])
 
-    sheets.existing_ids()
+    sheets.existing_keys()
 
     assert sheet.spreadsheet.requests == [CHECKBOX_RULE]
 
@@ -158,19 +179,24 @@ def test_read_rows_pads_short_rows_and_keeps_row_numbers(worksheet):
     assert set(rows[1]) == set(sheets.KEYS) | {"row"}
 
 
-def test_write_result_writes_summary_and_result_columns_only(worksheet):
+def test_write_result_writes_summary_result_and_body_summary_columns_only(worksheet):
     sheet, _ = worksheet([sheets.HEADER])
     values = [False, 71, "★★★★☆", "추천", 72, 60, "-", 80, "강점", "Docker", "2026-10-20 09:00"]
+    extra = ["API 개발", "AWS 경험", "Java, Spring"]
 
-    sheets.write_result(5, "신입, Java 필수", values)
+    sheets.write_result(5, "신입, Java 필수", values, extra)
 
+    # 수집 칸인 V–X(출처·지역·본문)는 건드리지 않는다
     assert sheet.updates == [
         {"range": "C5", "values": [["신입, Java 필수"]]},
         {"range": "K5:U5", "values": [values]},
+        {"range": "Y5:AA5", "values": [extra]},
     ]
 
 
 def test_header_and_keys_line_up():
-    assert len(sheets.HEADER) == len(sheets.KEYS) == 21
+    assert len(sheets.HEADER) == len(sheets.KEYS) == 27
     assert sheets.HEADER[sheets.KEYS.index("gaps")] == "부족한점"
     assert sheets.HEADER[sheets.KEYS.index("check")] == "평가"
+    assert sheets.HEADER[21:] == ["출처", "지역", "본문", "주요업무", "우대사항", "기술스택"]  # V–AA
+    assert sheets.HEADER[sheets.KEYS.index("body")] == "본문"

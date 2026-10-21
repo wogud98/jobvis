@@ -1,4 +1,4 @@
-"""실행 옵션의 이름(서울, 백엔드, 신입)을 사람인 코드로 바꾸고, 경력 조건을 판단한다."""
+"""실행 옵션의 이름(서울, 백엔드, 신입)을 사람인 코드로 바꾸고, 경력·지역 글자로 공고를 거른다."""
 
 import difflib
 import re
@@ -300,9 +300,6 @@ JOB_ALIASES = {
 
 CAREERS = ("신입", "경력")
 
-# 사람인 experience-level.code: 1 신입, 2 경력, 3 신입/경력, 0 경력무관
-_CAREER_CODES = {"신입": {1, 3, 0}, "경력": {2, 3, 0}}
-
 
 class CodeNotFoundError(ValueError):
     """모르는 이름. 메시지에 비슷한 이름과 쓸 수 있는 이름 전체를 담는다."""
@@ -347,7 +344,18 @@ def to_job_code(name: str) -> str:
     return _find(name, "직무", JOBS, _JOB_LOOKUP)
 
 
-def matches_career(code: int | None, career: str | None) -> bool:
+def matches_career(experience: str, career: str | None) -> bool:
+    """경력 글자로 판단한다. 신입이면 "신입"·"경력무관", 경력이면 "경력"·"경력무관"이 든 공고만 남긴다."""
     if career is None:
         return True
-    return code in _CAREER_CODES[career]
+    text = experience.replace(" ", "")
+    if "무관" in text:
+        return True
+    if career == "신입":
+        return "신입" in text
+    return "경력" in text or bool(re.search(r"\d+년", text))
+
+
+def matches_location(location: str, name: str | None) -> bool:
+    """지역 글자에 지역 이름이 들어 있는지. 주소에 지역 조건을 못 넣는 사이트(잡코리아)용."""
+    return name is None or name in location
