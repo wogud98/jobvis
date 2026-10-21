@@ -91,7 +91,7 @@ LLM은 항목별 점수(0–100)만 매기고, 나머지는 코드가 계산합�
 | `agent/resume.py` | 이력서·포트폴리오 글자 뽑기, LLM으로 프로필 칸 찾기, 입력란에 합치기 |
 | `agent/view.py` | 화면 카드·정렬·필터·차트 자료·요약 칸·오류 문구 |
 | `agent/profile_form.py` | 프로필 탭 입력란, 추천 목록, 파일 값 ↔ 입력란 값 |
-| `.streamlit/config.toml` | 화면 테마 (밝은 초록 계열) |
+| `.streamlit/config.toml` | 화면 테마 (무채색 바탕 + 초록 포인트) |
 | `agent/inbox.py` | 받은함 이미지 OCR, 화면에서 넣은 이미지 저장 |
 | `agent/codes.py` | 지역·직무 이름 → 사람인 코드, 경력·지역 글자 거르기 |
 | `agent/graph.py` | LangGraph 흐름 두 개(수집, 평가)와 채점 프롬프트 |

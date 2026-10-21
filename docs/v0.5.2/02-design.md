@@ -161,8 +161,8 @@ sequenceDiagram
 
 ## 테마 색 (F23)
 
-- `.streamlit/config.toml`: 강조색 `#159a6c`, 배경 `#edf7f1`, 글자 `#1c3329`. `app.py`의 `ACCENT`(차트 색)도 같은 값.
-- CSS: 배경 그라데이션 `#dff5e8 → #e3f3f0 → #eef7dc`, 점수·요약 숫자 `#0f6b4b`, 그림자 초록빛. 판정 배지는 `#e3ece8`/`#1d4a3c`(회녹색)로 신뢰 높음(초록)과 구별.
+- 초록은 포인트에만: `.streamlit/config.toml` 강조색 `#059669`(버튼, 고른 키워드, 슬라이더, 탭 밑줄), `app.py`의 `ACCENT`(차트), 카드 점수 글자.
+- 나머지는 무채색: 바탕 `#f6f7f9`, 글자 `#1f2328`, 흐린 글자 `#6b7280`, 요약 숫자·제목 `#111827`, 판정 배지 `#eef0f3`/`#374151`. 배경 그라데이션은 `#f8f9fb → #eef1f5 → #e9f5f0`(오른쪽 아래만 옅은 초록), 글래스 카드는 흰색 72%, 그림자는 무채색.
 
 ## 바뀐 기존 코드
 
@@ -170,6 +170,6 @@ sequenceDiagram
 | --- | --- |
 | `main.py` | `to_state` → `runner.collect_state`, 실행 → `runner.collect/score/read_inbox`, 출력 → `reports` 줄을 그대로 print. 터미널 옵션·출력 글은 그대로 (F14) |
 | `app.py` | 실행 카드, 진행 막대, 결과, 이력서 칸. 사용법 글 (F15). 빈 시트 안내를 "위 수집 카드에서…"로 |
-| `.streamlit/config.toml`, `app.py` CSS | 초록 계열 색 (F23) |
+| `.streamlit/config.toml`, `app.py` CSS | 무채색 바탕 + 초록 포인트 (F23) |
 | `requirements.txt` | `pypdf`, `python-docx` (N1) |
 | `tests/test_main.py` | 가짜 그래프에 `stream`을 붙이고 바꿀 곳을 `main.runner`로. 검사 내용은 그대로 |
