@@ -1,147 +1,117 @@
+from datetime import date
+from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
+
 import pytest
-import requests
 
 from agent import saramin
 
-SAMPLE_JOB = {
-    "id": "123",
-    "url": "https://www.saramin.co.kr/job/123",
-    "keyword": "Python, Django",
-    "expiration-timestamp": "1793000000",
-    "company": {"detail": {"name": "테스트회사"}},
-    "position": {
-        "title": "백엔드 개발자",
-        "experience-level": {"code": "1", "name": "신입"},
-        "required-education-level": {"name": "대학교졸업(4년)"},
-    },
-}
+FIXTURES = Path(__file__).parent / "fixtures"
+TODAY = date(2026, 10, 21)
 
 
-def test_to_row_extracts_fields():
-    row = saramin._to_row(SAMPLE_JOB)
-
-    assert row["id"] == "123"
-    assert row["company"] == "테스트회사"
-    assert row["title"] == "백엔드 개발자"
-    assert row["experience"] == "신입"
-    assert row["experience_code"] == 1
-    assert row["education"] == "대학교졸업(4년)"
-    assert row["keywords"] == "Python, Django"
-    assert row["url"] == "https://www.saramin.co.kr/job/123"
-    assert len(row["deadline"]) == len("2026-10-26")
+def read(name: str) -> str:
+    return (FIXTURES / name).read_text(encoding="utf-8")
 
 
-def test_to_row_without_deadline_is_always_open():
-    job = {**SAMPLE_JOB, "expiration-timestamp": None}
+def test_parse_list_reads_ten_fields_and_skips_cards_without_id():
+    jobs = saramin.parse_list(read("saramin_list.html"), TODAY)
 
-    assert saramin._to_row(job)["deadline"] == "상시"
-
-
-def test_to_row_without_experience_code():
-    job = {**SAMPLE_JOB, "position": {"title": "개발자"}}
-
-    assert saramin._to_row(job)["experience_code"] is None
-
-
-def test_fetch_jobs_sends_keyword_and_parses(monkeypatch):
-    sent = {}
-
-    class FakeResponse:
-        ok = True
-
-        def json(self):
-            return {"jobs": {"job": [SAMPLE_JOB]}}
-
-    def fake_get(url, params, headers, timeout):
-        sent.update(params)
-        return FakeResponse()
-
-    monkeypatch.setenv("SARAMIN_API_KEY", "test-key")
-    monkeypatch.setattr(saramin.requests, "get", fake_get)
-
-    rows = saramin.fetch_jobs("백엔드", region_code="101000", job_code="84", count=110)
-
-    assert sent["keywords"] == "백엔드"
-    assert sent["loc_mcd"] == "101000"
-    assert sent["job_cd"] == "84"
-    assert sent["count"] == 110
-    assert sent["access-key"] == "test-key"
-    assert rows[0]["company"] == "테스트회사"
+    assert [job["id"] for job in jobs] == ["1001", "1002", "1003"]  # 공고ID 없는 광고 카드 제외
+    assert jobs[0] == {
+        "source": "saramin",
+        "id": "1001",
+        "company": "가나다소프트",
+        "title": "백엔드 개발자 (Python)",
+        "experience": "신입·경력",
+        "education": "대학교졸업(4년)이상",
+        "location": "서울 강남구",
+        "deadline": "2026-11-12",
+        "keywords": "Python, Django",
+        "url": "https://www.saramin.co.kr/zf_user/jobs/relay/view?rec_idx=1001",
+    }
 
 
-def _error_response(status: int, url: str) -> requests.Response:
-    resp = requests.Response()
-    resp.status_code = status
-    resp.reason = "Server Error"
-    resp.url = url
-    return resp
+def test_parse_list_handles_missing_education_and_special_deadlines():
+    jobs = saramin.parse_list(read("saramin_list.html"), TODAY)
+
+    assert jobs[1]["education"] == ""
+    assert jobs[1]["experience"] == "경력 3년↑"
+    assert jobs[1]["deadline"] == "상시"
+    assert jobs[2]["deadline"] == "2026-10-22"  # 내일마감
+    assert jobs[2]["education"] == "학력무관"
+    assert jobs[2]["keywords"] == ""
 
 
-def test_http_error_does_not_leak_api_key(monkeypatch):
-    monkeypatch.setenv("SARAMIN_API_KEY", "secret-key-123")
-
-    def fake_get(url, params, headers, timeout):
-        return _error_response(500, f"{url}?access-key={params['access-key']}&keywords=x")
-
-    monkeypatch.setattr(saramin.requests, "get", fake_get)
-
-    with pytest.raises(saramin.SaraminAPIError) as exc_info:
-        saramin.fetch_jobs("백엔드")
-
-    error = exc_info.value
-    assert "500" in str(error)
-    assert "secret-key-123" not in str(error)
-    assert error.__context__ is None
+def test_parse_list_returns_empty_for_unknown_page():
+    assert saramin.parse_list("<html><body><p>점검 중</p></body></html>", TODAY) == []
 
 
-def test_network_error_does_not_leak_api_key(monkeypatch):
-    monkeypatch.setenv("SARAMIN_API_KEY", "secret-key-123")
-
-    def fake_get(url, params, headers, timeout):
-        raise requests.ConnectionError(f"Max retries exceeded with url: /job-search?access-key={params['access-key']}")
-
-    monkeypatch.setattr(saramin.requests, "get", fake_get)
-
-    with pytest.raises(saramin.SaraminAPIError) as exc_info:
-        saramin.fetch_jobs("백엔드")
-
-    assert "secret-key-123" not in str(exc_info.value)
-    assert exc_info.value.__suppress_context__
-
-
-def _json_response(data: dict):
-    class FakeResponse:
-        ok = True
-
-        def json(self):
-            return data
-
-    return FakeResponse()
+@pytest.mark.parametrize(
+    ("text", "today", "expected"),
+    [
+        ("~ 11/12(목)", TODAY, "2026-11-12"),
+        ("~ 10/21(수)", TODAY, "2026-10-21"),  # 오늘 마감은 올해
+        ("~ 01/05(화)", date(2026, 12, 20), "2027-01-05"),  # 12월에 본 1월 마감
+        ("~ 2026.11.30", TODAY, "2026-11-30"),
+        ("상시채용", TODAY, "상시"),
+        ("채용시", TODAY, "상시"),
+        ("오늘마감", TODAY, "2026-10-21"),
+        ("내일마감", TODAY, "2026-10-22"),
+        ("~ 02/30(월)", TODAY, ""),  # 없는 날짜
+        ("", TODAY, ""),
+    ],
+)
+def test_parse_deadline(text, today, expected):
+    assert saramin.parse_deadline(text, today) == expected
 
 
-def test_optional_filters_are_not_sent(monkeypatch):
-    sent = {}
-    monkeypatch.setenv("SARAMIN_API_KEY", "test-key")
-    monkeypatch.setattr(
-        saramin.requests,
-        "get",
-        lambda url, params, headers, timeout: sent.update(params) or _json_response({"jobs": {}}),
-    )
+def test_search_url_puts_conditions_in_address():
+    url = saramin.search_url("백엔드 신입", {"region_code": "101000", "job_code": "84", "career": "신입"})
 
-    assert saramin.fetch_jobs("백엔드") == []
-    assert "loc_mcd" not in sent
-    assert "job_cd" not in sent
+    parts = urlsplit(url)
+    assert parts.netloc == "www.saramin.co.kr"
+    assert parts.path == "/zf_user/search/recruit"
+    query = parse_qs(parts.query)
+    assert query["searchword"] == ["백엔드 신입"]
+    assert query["loc_mcd"] == ["101000"]
+    assert query["cat_kewd"] == ["84"]
+    assert query["exp_cd"] == ["1"]
+    assert query["sort"] == ["RD"]
 
 
-def test_api_error_code_raises(monkeypatch):
-    # 하루 호출 한도 초과(코드 4)처럼 jobs 대신 오류 코드가 오는 경우
-    monkeypatch.setenv("SARAMIN_API_KEY", "secret-key-123")
-    monkeypatch.setattr(
-        saramin.requests, "get", lambda url, params, headers, timeout: _json_response({"code": 4, "message": "limit"})
-    )
+def test_search_url_without_conditions():
+    query = parse_qs(urlsplit(saramin.search_url("백엔드", {})).query)
 
-    with pytest.raises(saramin.SaraminAPIError) as exc_info:
-        saramin.fetch_jobs("백엔드")
+    assert set(query) == {"searchword", "recruitPageCount", "sort"}
 
-    assert "코드 4" in str(exc_info.value)
-    assert "secret-key-123" not in str(exc_info.value)
+
+def test_detail_url():
+    assert saramin.detail_url("1001") == "https://www.saramin.co.kr/zf_user/jobs/relay/view-detail?rec_idx=1001"
+
+
+def test_parse_detail_keeps_visible_text_and_absolute_images():
+    detail = saramin.parse_detail(read("saramin_detail.html"))
+
+    assert detail.text.splitlines() == [
+        "주요업무",
+        "주문·결제 API 개발과 운영",
+        "자격요건",
+        "Python 또는 Java 경험",
+        "SQL 기본",
+    ]
+    # 스크립트, 스타일, noscript, 숨은 요소는 버린다 (F11)
+    for hidden in ("버려야 할 스크립트", "100점", "숨은 글", "스크립트 꺼짐"):
+        assert hidden not in detail.text
+    # 상대 주소는 절대 주소로, 같은 이미지는 한 번만, data: 이미지는 뺀다
+    assert detail.images == [
+        "https://www.saramin.co.kr/images/detail1.png",
+        "https://example-company.co.kr/recruit/detail2.jpg",
+    ]
+
+
+def test_parse_detail_without_body_area_is_empty():
+    detail = saramin.parse_detail("<html><body><div class='other'>본문 아님</div></body></html>")
+
+    assert detail.text == ""
+    assert detail.images == []

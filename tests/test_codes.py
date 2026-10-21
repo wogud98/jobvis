@@ -52,13 +52,26 @@ def test_unknown_region_lists_all_regions():
 
 
 @pytest.mark.parametrize(
-    ("career", "kept"),
+    ("experience", "new", "experienced"),
     [
-        ("신입", {1, 3, 0}),
-        ("경력", {2, 3, 0}),
-        (None, {1, 2, 3, 0, None}),
+        ("신입", True, False),
+        ("경력 3년↑", False, True),
+        ("경력2~10년", False, True),
+        ("신입·경력", True, True),
+        ("경력무관", True, True),
+        ("경력 무관", True, True),
+        ("5년 이상", False, True),
+        ("", False, False),
     ],
 )
-def test_matches_career(career, kept):
-    for code in (1, 2, 3, 0, None):
-        assert codes.matches_career(code, career) == (code in kept)
+def test_matches_career_by_text(experience, new, experienced):
+    assert codes.matches_career(experience, "신입") is new
+    assert codes.matches_career(experience, "경력") is experienced
+    assert codes.matches_career(experience, None) is True
+
+
+def test_matches_location():
+    assert codes.matches_location("서울 강남구", "서울")
+    assert not codes.matches_location("부산 해운대구", "서울")
+    assert not codes.matches_location("", "서울")
+    assert codes.matches_location("", None)

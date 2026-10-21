@@ -18,6 +18,10 @@ class Evaluation(BaseModel):
     career: int = Field(ge=0, le=100)
     strengths: list[str] = []
     gaps: list[str] = []
+    # 본문 요약 세 칸 (v0.4 F18). 본문에 없으면 빈 문자열이고, 빠지거나 null이어도 실패로 보지 않는다.
+    duties: str = ""
+    preferred: str = ""
+    stack: str = ""
 
     @field_validator("summary")
     @classmethod
@@ -25,6 +29,11 @@ class Evaluation(BaseModel):
         if not value.strip():
             raise ValueError("요약이 비어 있음")
         return value.strip()
+
+    @field_validator("duties", "preferred", "stack", mode="before")
+    @classmethod
+    def _text_or_blank(cls, value) -> str:
+        return "" if value is None else str(value).strip()
 
     @field_validator("strengths", "gaps")
     @classmethod

@@ -1,6 +1,7 @@
 """실행 예.
 
 수집:            python main.py --keyword 백엔드 --location 서울 --job 백엔드 --career 신입 --count 10
+한 사이트만:     python main.py --keyword 백엔드 --source jobkorea
 체크한 줄 평가:  python main.py --score
 점수 없는 줄 평가: python main.py --score all
 수집 후 평가:    python main.py --keyword 백엔드 --score all
@@ -11,11 +12,11 @@ import argparse
 
 from dotenv import load_dotenv
 
-from agent import codes, gaps, scoring, sheets, user_profile
-from agent.graph import MAX_COUNT, build_graph, build_score_graph, recursion_limit
-from agent.saramin import SaraminAPIError
+from agent import codes, gaps, ocr, postings, scoring, sheets, user_profile
+from agent.graph import MAX_COUNT, SOURCES, build_graph, build_score_graph, recursion_limit
 
 GAPS_TOP = 10  # 스킬 갭 출력 개수 (F20)
+NOTICE = "개인 사용만. 수집한 공고를 공유·공개·판매하지 않음 (사이트 약관)"  # v0.4 N6
 
 
 def _count(value: str) -> int:
@@ -26,12 +27,13 @@ def _count(value: str) -> int:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="사람인 공고를 수집하고 내 프로필과 비교해 적합도를 평가")
+    parser = argparse.ArgumentParser(description="사람인·잡코리아 공고를 수집하고 내 프로필과 비교해 적합도를 평가")
     parser.add_argument("--keyword", help="검색어 (예: 백엔드). 수집할 때 필요")
     parser.add_argument("--location", help="지역 이름 (예: 서울, 경기)")
     parser.add_argument("--job", help="직무 이름 (예: 백엔드, 프론트엔드, Python)")
     parser.add_argument("--career", choices=codes.CAREERS, help="신입 또는 경력. 생략하면 거르지 않음")
-    parser.add_argument("--count", type=_count, default=10, help=f"가져올 공고 수 (1~{MAX_COUNT}, 기본 10)")
+    parser.add_argument("--source", choices=list(SOURCES), help="한 사이트만 수집 (saramin, jobkorea). 생략하면 둘 다")
+    parser.add_argument("--count", type=_count, default=10, help=f"사이트당 가져올 공고 수 (1~{MAX_COUNT}, 기본 10)")
     parser.add_argument(
         "--score",
         nargs="?",
@@ -53,10 +55,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def to_state(args: argparse.Namespace) -> dict:
-    # 모르는 이름이면 사람인 API를 부르기 전에 여기서 멈춘다 (v0.2 F11).
+    # 모르는 이름이면 사이트에 요청하기 전에 여기서 멈춘다 (v0.2 F11).
+    region_code = codes.to_region_code(args.location) if args.location else None
     return {
         "keyword": args.keyword,
-        "region_code": codes.to_region_code(args.location) if args.location else None,
+        "sources": [args.source] if args.source else list(SOURCES),
+        "location": args.location,
+        "region_code": region_code,
         "job_code": codes.to_job_code(args.job) if args.job else None,
         "career": args.career,
         "count": args.count,
@@ -65,13 +70,26 @@ def to_state(args: argparse.Namespace) -> dict:
 
 def _print_failures(failed: list[dict]) -> None:
     for job in failed:
-        print(f"  실패({job['step']}): {job['company']} | {job['title']} ({job['error']})")
+        site = SOURCES[job["source"]].NAME if job.get("source") else ""
+        # 목록 실패는 회사·제목이 빈칸이라 사이트 이름만 남는다.
+        where = " | ".join(part for part in (site, job["company"], job["title"]) if part)
+        print(f"  실패({job['step']}): {where} ({job['error']})")
 
 
 def print_report(result: dict) -> None:
     saved, skipped, failed = result.get("saved", []), result.get("skipped", []), result.get("failed", [])
-    print(f"가져옴 {result.get('fetched', 0)} / 새로 저장 {len(saved)} / 건너뜀 {len(skipped)} / 실패 {len(failed)}")
+    for source, fetched in result.get("fetched", {}).items():
+        mine = [len([job for job in jobs if job.get("source") == source]) for jobs in (saved, skipped)]
+        # OCR 실패는 줄을 저장했으므로 실패 수에 넣지 않고 아래 줄로만 알린다.
+        lost = len([job for job in failed if job.get("source") == source and job["step"] != "OCR"])
+        name = SOURCES[source].NAME
+        print(f"{name} 가져옴 {fetched} / 새로 저장 {mine[0]} / 건너뜀 {mine[1]} / 실패 {lost}")
+    for stop in result.get("blocked", []):
+        print(f"  {SOURCES[stop['source']].NAME} 수집 멈춤: {stop['reason']}")
     _print_failures(failed)
+    missing = [job for job in saved if job.get("body") == postings.MISSING]
+    if missing:
+        print(f"본문 미확보 {len(missing)}건: 시트의 링크로 직접 확인해 주세요")
 
 
 def print_score_report(result: dict) -> None:
@@ -93,11 +111,13 @@ def print_gaps(top: list[tuple[str, float, int]], used: int, excluded: int) -> N
 
 
 def run_collect(state: dict) -> None:
-    try:
-        result = build_graph().invoke(state, {"recursion_limit": recursion_limit(state["count"])})
-    except SaraminAPIError as e:
-        raise SystemExit(str(e)) from None
-    print_report(result)
+    if not postings.DIR.exists():
+        print(NOTICE)  # 첫 실행 안내 (N6)
+    state["ocr_ready"] = ocr.available()
+    if not state["ocr_ready"]:
+        print(f"이미지 OCR 없음: 글자 본문만 저장합니다. {ocr.INSTALL_HINT}")
+    limit = recursion_limit(state["count"] * len(state["sources"]))
+    print_report(build_graph().invoke(state, {"recursion_limit": limit}))
 
 
 def run_score(mode: str, profile: str) -> None:
@@ -120,7 +140,7 @@ def main(argv: list[str] | None = None) -> None:
 
     try:
         state = to_state(args) if args.keyword else None
-        # 평가를 하려면 프로필이 있어야 한다. 없으면 사람인 API와 LLM을 부르기 전에 멈춘다 (F6).
+        # 평가를 하려면 프로필이 있어야 한다. 없으면 사이트 요청과 LLM 호출 전에 멈춘다 (v0.3 F6).
         profile = user_profile.load(args.profile) if args.score else None
     except (codes.CodeNotFoundError, user_profile.ProfileError) as e:
         raise SystemExit(str(e)) from None

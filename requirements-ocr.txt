@@ -1,0 +1,4 @@
+# 공고 이미지 OCR (선택 설치, 약 1GB). 없으면 글자 본문만 수집함. CI와 테스트에서는 설치하지 않음.
+# pip install -r requirements-ocr.txt
+paddleocr>=3.0
+paddlepaddle>=3.0

@@ -1,57 +1,102 @@
-"""사람인 오픈API에서 채용공고를 가져온다."""
+"""사람인 공개 검색 결과와 상세 본문 페이지를 읽는다. 요청은 crawler.py가 한다."""
 
-import os
-from datetime import datetime
+import re
+from datetime import date, timedelta
+from urllib.parse import urlencode
 
-import requests
+from bs4 import BeautifulSoup
 
-API_URL = "https://oapi.saramin.co.kr/job-search"
+from agent import postings
+
+SOURCE = "saramin"
+NAME = "사람인"
+BASE = "https://www.saramin.co.kr"
+PAGE_SIZE = 40  # 검색 결과 1페이지 개수
+
+# 검색 주소의 경력 조건 (추정, 설계 미확인 항목)
+EXPERIENCE_CODES = {"신입": "1", "경력": "2"}
 
 
-class SaraminAPIError(Exception):
-    """사람인 API 호출 실패. 메시지에 API 키가 담긴 요청 주소를 넣지 않는다."""
+def search_url(keyword: str, filters: dict) -> str:
+    params = {"searchword": keyword, "recruitPageCount": PAGE_SIZE, "sort": "RD"}  # 등록일순
+    if filters.get("region_code"):
+        params["loc_mcd"] = filters["region_code"]
+    if filters.get("job_code"):
+        params["cat_kewd"] = filters["job_code"]
+    if filters.get("career"):
+        params["exp_cd"] = EXPERIENCE_CODES[filters["career"]]
+    return f"{BASE}/zf_user/search/recruit?{urlencode(params)}"
 
 
-def fetch_jobs(
-    keyword: str, region_code: str | None = None, job_code: str | None = None, count: int = 10
-) -> list[dict]:
-    params = {
-        "access-key": os.environ["SARAMIN_API_KEY"],
-        "keywords": keyword,
-        "count": count,
-        "sort": "pd",  # 최신 게시순
-    }
-    if region_code:
-        params["loc_mcd"] = region_code  # 사람인 1차 지역 코드 (예: 101000 = 서울)
-    if job_code:
-        params["job_cd"] = job_code  # 사람인 직무 코드 (예: 84 = 백엔드/서버개발)
-    # requests의 오류 메시지는 access-key가 붙은 전체 주소를 담으므로 원본 예외를 버리고 다시 던진다.
+def detail_url(job_id: str) -> str:
+    return f"{BASE}/zf_user/jobs/relay/view-detail?rec_idx={job_id}"
+
+
+def view_url(job_id: str) -> str:
+    return f"{BASE}/zf_user/jobs/relay/view?rec_idx={job_id}"
+
+
+def parse_deadline(text: str, today: date | None = None) -> str:
+    """ "~ 11/12(목)"은 오늘 이후 가장 가까운 날짜로, 상시·채용시는 "상시"로 바꾼다 (F5). 모르면 빈칸."""
+    today = today or date.today()
+    text = text.strip()
+    if "상시" in text or "채용시" in text:
+        return "상시"
+    if "오늘마감" in text:
+        return today.isoformat()
+    if "내일마감" in text:
+        return (today + timedelta(days=1)).isoformat()
+    full = re.search(r"(\d{4})[./-](\d{1,2})[./-](\d{1,2})", text)
+    if full:
+        return date(*map(int, full.groups())).isoformat()
+    short = re.search(r"(\d{1,2})[./](\d{1,2})", text)
+    if not short:
+        return ""
+    month, day = map(int, short.groups())
     try:
-        resp = requests.get(API_URL, params=params, headers={"Accept": "application/json"}, timeout=10)
-    except requests.RequestException as e:
-        raise SaraminAPIError(f"사람인 API 연결 실패 ({type(e).__name__})") from None
-    if not resp.ok:
-        raise SaraminAPIError(f"사람인 API 오류 (HTTP {resp.status_code})")
-    data = resp.json()
-    if "jobs" not in data:
-        # 하루 호출 한도 초과(코드 4) 등은 jobs 대신 오류 코드가 온다.
-        raise SaraminAPIError(f"사람인 API 오류 (코드 {data.get('code', '알 수 없음')})")
-    return [_to_row(job) for job in data["jobs"].get("job", [])]
+        candidate = date(today.year, month, day)
+        if candidate < today:
+            candidate = date(today.year + 1, month, day)  # 12월에 본 1월 마감
+    except ValueError:  # 2/29 같은 없는 날짜
+        return ""
+    return candidate.isoformat()
 
 
-def _to_row(job: dict) -> dict:
-    position = job.get("position", {})
-    expires = job.get("expiration-timestamp")
-    experience = position.get("experience-level", {})
-    experience_code = experience.get("code")
-    return {
-        "id": str(job["id"]),
-        "company": job["company"]["detail"]["name"],
-        "title": position.get("title", ""),
-        "experience": experience.get("name", ""),
-        "experience_code": int(experience_code) if experience_code is not None else None,
-        "education": position.get("required-education-level", {}).get("name", ""),
-        "keywords": job.get("keyword", ""),
-        "deadline": datetime.fromtimestamp(int(expires)).strftime("%Y-%m-%d") if expires else "상시",
-        "url": job.get("url", ""),
-    }
+def parse_list(html: str, today: date | None = None) -> list[dict]:
+    jobs = []
+    for item in BeautifulSoup(html, "html.parser").select("div.item_recruit"):
+        job_id = (item.get("value") or "").strip()
+        title = item.select_one("h2.job_tit a")
+        company = item.select_one("strong.corp_name a")
+        if not (job_id.isdigit() and title and company):
+            continue  # 공고ID가 없는 카드(광고 등)는 건너뛴다
+        experience = education = location = ""
+        for span in item.select("div.job_condition > span"):
+            text = " ".join(span.get_text(" ").split())
+            if span.find("a"):
+                location = location or text
+            elif "신입" in text or "경력" in text:
+                experience = experience or text
+            elif "졸" in text or "학력" in text:
+                education = education or text
+        date_tag = item.select_one("div.job_date span.date")
+        sector = [a.get_text(strip=True) for a in item.select("div.job_sector a")]
+        jobs.append(
+            {
+                "source": SOURCE,
+                "id": job_id,
+                "company": company.get_text(strip=True),
+                "title": (title.get("title") or title.get_text(" ")).strip(),
+                "experience": experience,
+                "education": education,
+                "location": location,
+                "deadline": parse_deadline(date_tag.get_text(" ") if date_tag else "", today),
+                "keywords": ", ".join(s for s in sector if s),
+                "url": view_url(job_id),
+            }
+        )
+    return jobs
+
+
+def parse_detail(html: str) -> postings.Detail:
+    return postings.extract(html, "div.user_content", BASE)
