@@ -111,6 +111,20 @@ def test_read_files_joins_files_with_names():
     assert text == "# 파일: 이력서.txt\nC++\n\n# 파일: 포트폴리오.md\nJOBVIS" and skipped == []
 
 
+def test_missing_library_says_how_to_install(monkeypatch):
+    real_import = __import__
+
+    def no_pypdf(name, *args, **kwargs):
+        if name == "pypdf":
+            raise ModuleNotFoundError(name)
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.__import__", no_pypdf)
+
+    with pytest.raises(resume.ResumeError, match="pypdf가 설치돼 있지 않음. pip install -r requirements.txt"):
+        resume.extract("cv.pdf", text_pdf("Python"))  # F27
+
+
 # ---- LLM 응답 ----
 
 ANSWER = {

@@ -28,7 +28,7 @@ class Job:
     done: int = 0
     total: int = 0
     stage: str = "준비 중"
-    lines: list[str] = field(default_factory=list)  # 끝난 뒤 결과 요약 (reports와 같은 글)
+    result: reports.Summary | None = None  # 끝난 뒤 결과 (F24)
     error: str = ""
     finished: bool = False
 
@@ -54,13 +54,16 @@ def error_text(error: Exception) -> str:
     """실행 중 오류를 화면 문구로. 키·경로는 보이지 않는다 (F13)."""
     if isinstance(error, (RunError, codes.CodeNotFoundError, user_profile.ProfileError)):
         return str(error)
+    hint = reports.llm_hint([cls.__name__ for cls in type(error).__mro__])  # LLM 모델·키 오류 (F26)
+    if hint:
+        return hint
     message = view.error_message(error)
-    if message.startswith("시트를 읽지 못했습니다"):  # 시트와 상관없는 오류 (LLM 등)
+    if message.startswith("시트를 읽지 못했습니다"):  # 시트와 상관없는 오류
         return f"실행하지 못했습니다 ({type(error).__name__}). 터미널 로그를 확인해 주세요."
     return message
 
 
-def start(kind: str, work: Callable[[Job], list[str]], *, wait: bool = False) -> Job:
+def start(kind: str, work: Callable[[Job], reports.Summary], *, wait: bool = False) -> Job:
     """work를 별도 스레드에서 실행한다. 이미 실행 중이면 RunError (F12). wait=True면 끝날 때까지 기다린다(테스트용)."""
     global _job
     with _lock:
@@ -71,7 +74,7 @@ def start(kind: str, work: Callable[[Job], list[str]], *, wait: bool = False) ->
 
     def target() -> None:
         try:
-            job.lines = work(job)
+            job.result = work(job)
         except Exception as e:  # 화면이 꺼지지 않게 모든 오류를 문구로 남긴다 (F13)
             job.error = error_text(e)
         finally:
@@ -161,10 +164,12 @@ def _collect_progress(job: Job) -> Callable[[str, dict], None]:
 
 
 def start_collect(state: dict, *, wait: bool = False) -> Job:
-    def work(job: Job) -> list[str]:
+    def work(job: Job) -> reports.Summary:
         job.stage = "공고 목록을 가져오는 중"
-        lines = [] if ocr.available() else [f"이미지 OCR 없음: 글자 본문만 저장했습니다. {ocr.INSTALL_HINT}"]
-        return lines + reports.collect(collect(state, _collect_progress(job)))
+        summary = reports.collect_summary(collect(state, _collect_progress(job)))
+        if not ocr.available():  # 할 일이 아니라 참고라 자세히에만
+            summary.details.insert(0, f"이미지 OCR 없음: 글자 본문만 저장했습니다. {ocr.INSTALL_HINT}")
+        return summary
 
     return start("collect", work, wait=wait)
 
@@ -209,9 +214,9 @@ def _score_progress(job: Job) -> Callable[[str, dict], None]:
 
 
 def start_score(mode: str, profile: user_profile.Profile, *, wait: bool = False) -> Job:
-    def work(job: Job) -> list[str]:
+    def work(job: Job) -> reports.Summary:
         job.stage = "시트를 읽는 중"
-        return reports.score(score(mode, profile, _score_progress(job)))
+        return reports.score_summary(score(mode, profile, _score_progress(job)))
 
     return start("score", work, wait=wait)
 
@@ -232,9 +237,9 @@ def read_inbox() -> inbox.InboxResult:
 
 
 def start_inbox(*, wait: bool = False) -> Job:
-    def work(job: Job) -> list[str]:
+    def work(job: Job) -> reports.Summary:
         job.stage = "이미지를 읽는 중 (한 장에 10초 넘게 걸릴 수 있음)"
         job.total = inbox_count()
-        return reports.inbox_result(read_inbox())
+        return reports.inbox_summary(read_inbox())
 
     return start("inbox", work, wait=wait)

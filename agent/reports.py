@@ -1,7 +1,51 @@
-"""실행 결과를 사람이 읽는 줄로 만든다. 터미널(main.py)은 출력하고 화면(app.py)은 그린다 (v0.5.2 F14)."""
+"""실행 결과를 사람이 읽는 줄로 만든다. 터미널(main.py)은 줄을 모두 출력한다 (v0.5.2 F14).
+
+화면(app.py)은 Summary로 결과 한 줄, 할 일, 문제만 보이고 줄 전체는 접어 둔다 (v0.5.2 F24).
+"""
+
+from dataclasses import dataclass, field
 
 from agent import inbox, postings, scoring
 from agent.graph import SOURCES
+
+# 예외 이름 일부 → 고칠 방법. LangChain 모델 오류 이름(ModelNotFoundError 등)과 제공자별 이름이 모두 걸린다 (F26)
+LLM_HINTS = (
+    (
+        "ModelNotFound",  # FileNotFoundError와 섞이지 않게
+        "LLM 모델을 찾지 못했습니다. .env의 LLM_MODEL을 확인해 주세요 (예: google_genai:gemini-flash-lite-latest).",
+    ),
+    ("Authentication", "LLM API 키가 맞지 않습니다. .env의 GOOGLE_API_KEY를 확인해 주세요."),
+    ("PermissionDenied", "LLM API 키에 권한이 없습니다. .env의 GOOGLE_API_KEY를 확인해 주세요."),
+    ("RateLimit", "LLM 사용 한도를 넘었습니다. 잠시 뒤 다시 해 주세요."),
+)
+
+
+def llm_hint(names: list[str] | str) -> str:
+    """예외 이름(들)에 맞는 고칠 방법. 모르는 오류면 빈 글자."""
+    names = [names] if isinstance(names, str) else names
+    for part, hint in LLM_HINTS:
+        if any(part in name for name in names):
+            return hint
+    return ""
+
+
+@dataclass
+class Summary:
+    """화면에 보일 결과. headline은 항상, todo(할 일)와 problems(문제)는 있을 때만, details는 접어 둔다 (F24)."""
+
+    headline: str
+    todo: list[str] = field(default_factory=list)
+    problems: list[str] = field(default_factory=list)
+    details: list[str] = field(default_factory=list)
+
+
+def _failure_problem(failed: list[dict], what: str) -> list[str]:
+    if not failed:
+        return []
+    hints = list(dict.fromkeys(llm_hint(job["error"]) for job in failed if llm_hint(job["error"])))
+    return [
+        f"{len(failed)}건을 {what} 못했습니다." + (f" {hints[0]}" if len(hints) == 1 else " 자세히를 확인해 주세요.")
+    ]
 
 
 def _failures(failed: list[dict]) -> list[str]:
@@ -67,3 +111,49 @@ def inbox_result(result: inbox.InboxResult) -> list[str]:
     if result.filled:
         lines.append("다음: python main.py --score 로 체크된 공고를 다시 평가하세요")
     return lines
+
+
+def collect_summary(result: dict) -> Summary:
+    """수집 결과 화면용 (F24, F25)."""
+    saved, skipped = result.get("saved", []), result.get("skipped", [])
+    filled = result.get("filled", [])
+    if saved:
+        headline = f"새 공고 {len(saved)}건을 저장했습니다."
+    elif skipped:
+        headline = "새 공고가 없습니다. 가져온 공고는 모두 이미 저장돼 있습니다."
+    else:
+        headline = "가져온 공고가 없습니다. 키워드나 조건을 바꿔 보세요."
+    if filled:
+        headline += f" 본문 없던 공고 {len(filled)}건은 다른 사이트 본문으로 채웠습니다."
+    todo = []
+    missing = [job for job in saved if job.get("body") == postings.MISSING]
+    if missing:  # 터미널 명령 대신 화면에서 할 일로 (F25)
+        todo.append(f"본문 없는 공고 {len(missing)}건: 카드 '자세히'에서 공고 이미지를 넣으면 더 정확하게 평가됩니다.")
+    problems = [
+        f"{SOURCES[stop['source']].NAME} 수집이 멈췄습니다: {stop['reason']}" for stop in result.get("blocked", [])
+    ]
+    problems += _failure_problem([job for job in result.get("failed", []) if job["step"] != "OCR"], "가져오지")
+    return Summary(headline, todo, problems, collect(result))
+
+
+def score_summary(result: dict) -> Summary:
+    """평가 결과 화면용 (F24)."""
+    done, excluded, failed = result.get("done", []), result.get("excluded", []), result.get("failed", [])
+    if done or excluded:
+        headline = f"공고 {len(done)}건을 평가했습니다." + (
+            f" 신입에게 경력을 요구하는 공고 {len(excluded)}건은 제외했습니다." if excluded else ""
+        )
+    elif failed:
+        headline = "평가하지 못했습니다."
+    else:
+        headline = "평가할 공고가 없습니다."
+    return Summary(headline, [], _failure_problem(failed, "평가하지"), score(result))
+
+
+def inbox_summary(result: inbox.InboxResult) -> Summary:
+    """받은함 결과 화면용 (F24)."""
+    filled = len(result.filled)
+    headline = f"이미지 {result.read}장을 읽어 공고 {filled}건의 본문을 채웠습니다."
+    todo = [f"본문을 채운 {filled}건은 평가 대상으로 체크했습니다. 🧮 평가를 눌러 다시 평가하세요."] if filled else []
+    problems = [f"이미지 {len(result.skipped)}장을 건너뛰었습니다. 자세히를 확인해 주세요."] if result.skipped else []
+    return Summary(headline, todo, problems, inbox_result(result))

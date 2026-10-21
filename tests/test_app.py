@@ -223,12 +223,31 @@ def test_running_job_locks_buttons_and_shows_progress(app):
     assert "수집 중" in text and "(2/8)" in text  # F5
 
 
-def test_finished_job_shows_result_lines_escaped(app):
-    runner._job = runner.Job("collect", lines=["사람인 가져옴 3 / 새로 저장 <b>2</b>"], finished=True)
+def test_finished_job_shows_headline_todo_problems_and_folded_details(app):
+    summary = runner.reports.Summary(
+        "새 공고 <b>17</b>건을 저장했습니다.",
+        todo=["본문 없는 공고 2건: 카드 '자세히'에서 이미지를 넣어 주세요."],
+        problems=["잡코리아 수집이 멈췄습니다: 429"],
+        details=["사람인 가져옴 20 / 새로 저장 14 / 건너뜀 6 / 실패 0"],
+    )
+    runner._job = runner.Job("collect", result=summary, finished=True)
     at = app([])
 
-    assert "수집 결과" in at.success[0].value
-    assert "&lt;b&gt;2&lt;/b&gt;" in at.success[0].value
+    assert at.success[0].value.startswith("새 공고 &lt;b&gt;17&lt;/b&gt;건을 저장했습니다.")  # 한 줄, escape (F24)
+    assert "수집 결과" in at.success[0].value and "가져옴" not in at.success[0].value  # 로그는 기본으로 안 보임
+    assert "본문 없는 공고 2건" in at.warning[0].value  # 할 일 (F25)
+    assert "--inbox" not in at.warning[0].value
+    assert "수집이 멈췄습니다" in at.error[0].value  # 문제
+    details = next(e for e in at.expander if e.label == "자세히" and "가져옴" in e.children[0].value)
+    assert "사람인 가져옴 20" in details.children[0].value
+
+
+def test_finished_job_without_todo_or_problems_shows_only_headline(app):
+    runner._job = runner.Job("score", result=runner.reports.Summary("공고 3건을 평가했습니다."), finished=True)
+    at = app([])
+
+    assert "공고 3건을 평가했습니다." in at.success[0].value
+    assert not at.warning and not at.error
 
 
 def test_failed_job_shows_error(app):

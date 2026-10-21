@@ -175,8 +175,17 @@ def show_job_result() -> None:
     title = f"{job.label} 결과 ({job.started} 시작)"
     if job.error:
         st.error(f"{title}\n\n{job.error}")  # 키·경로 없이 (F13)
-    else:
-        st.success(title + "\n\n" + "\n".join(f"- {escape(line.strip())}" for line in job.lines))
+        return
+    result = job.result
+    # 결과 한 줄, 할 일, 문제만 보이고 나머지는 접어 둔다 (F24)
+    st.success(f"{escape(result.headline)}  \n{title}")
+    for line in result.todo:
+        st.warning(escape(line))
+    for line in result.problems:
+        st.error(escape(line))
+    if result.details:
+        with st.expander("자세히"):
+            st.markdown("\n".join(f"- {escape(line.strip())}" for line in result.details))
 
 
 def start_job(starter, *args) -> None:

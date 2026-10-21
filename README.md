@@ -77,7 +77,7 @@ LLM은 항목별 점수(0–100)만 매기고, 나머지는 코드가 계산합�
 
 | 모델 | `LLM_MODEL` 값 | 필요한 키 |
 | --- | --- | --- |
-| Gemini (기본, 무료 구간) | `google_genai:gemini-2.5-flash` | `GOOGLE_API_KEY` |
+| Gemini (기본, 무료 구간) | `google_genai:gemini-flash-lite-latest` (`gemini-2.5-flash`는 새 키에서 404가 날 수 있음) | `GOOGLE_API_KEY` |
 | Claude (유료) | `anthropic:claude-sonnet-5-5` | `ANTHROPIC_API_KEY` + `pip install langchain-anthropic` |
 
 ## 구조
