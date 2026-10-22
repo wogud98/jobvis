@@ -17,4 +17,14 @@
 | D9 | Docker CMD에 `--client.showErrorDetails=type` (F12) | 잡지 못한 예외의 메시지·경로가 화면에 안 나감. 로그에는 남음 |
 | D10 | `settings.delete_key()`: `dotenv.unset_key`로 `data/settings.env`에서 지우고 `os.environ`에서 뺌. 파일에서 지웠는지 돌려줘 화면 안내를 고름 (F14) | `.env`는 사용자 파일이라 고치지 않음 |
 
+## 보완 결정 (F15–F20)
+
+| ID | 결정 | 이유 |
+| --- | --- | --- |
+| D11 | `reload_after_job()`: 화면을 그릴 때마다 마지막 작업이 끝났고 아직 다시 읽지 않았으면(`session_state["reloaded_job"]`이 `label-started`와 다르면) `reload_rows()`. 진행 막대가 끝을 볼 때도 같은 표시를 남겨 두 번 읽지 않음 (F16) | 진행 막대는 그 회차에 작업이 돌고 있을 때만 그려진다. 재현은 못 했지만 작업이 그 사이에 끝나면 다시 읽기를 놓칠 수 있는 길이 이것뿐 |
+| D12 | 키는 `@st.dialog` 창. 저장은 폼 버튼 콜백(`save_key`)에서 하고, 저장 뒤 창 안에서 `st.rerun()`으로 닫음. 오류·삭제 안내가 남아 있으면 다음 회차에 창을 다시 띄움 (F17) | 창 안 버튼은 창 부분만 다시 그리므로 콜백이어야 저장이 확실함 |
+| D13 | 창은 한 번에 하나라, 키가 없으면 키 창이 먼저, 키를 넣은 뒤 사용법 창 (F17) | 처음 쓰는 사람이 키부터 넣게 |
+| D14 | 이력서 칸은 `st.expander(expanded=프로필 비었음 or 채운 값 있음)` (F18) | 막지 않고 접어서 글을 줄임 |
+| D15 | 사이드바 `background: var(--jv-paper)`, 필터는 `box-filter` 컨테이너(카드 CSS 그대로) (F20) | 메인 카드와 같은 규칙을 그대로 씀 |
+
 CSS는 v0.5.1 N5처럼 key로 붙는 `st-key-*` 클래스와 `data-testid`에만 건다. Streamlit 판을 올리면 F4·F7·F9 모양을 다시 확인한다.

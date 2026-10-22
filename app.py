@@ -27,6 +27,7 @@ APPLIED = "applied_overrides"  # 화면에서 바꾼 지원 {시트 줄: 지원�
 LAST_SEEN = "last_seen"  # 이 화면을 열기 전 마지막으로 연 시각 (v0.5.3 F9)
 CHECK_ERROR = "check_error"
 TOASTED = "toasted_job"  # 결과 알림을 띄운 작업 (v0.6.1 F5)
+RELOADED = "reloaded_job"  # 결과를 다시 읽은 작업 (v0.6.1 F16)
 PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
 TAGLINE = "채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다"  # JOBVIS 아래 문장 (v0.5.2 F43)
 SORTS = {"점수 높은 순": "score_desc", "점수 낮은 순": "score_asc", "마감 임박 순": "deadline"}  # F40, v0.5.3 F8
@@ -135,9 +136,9 @@ div[class*="st-key-box-profile"] div[class*="st-key-clear-"] button {
   background: transparent !important; font-size: 1.1rem; color: var(--jv-muted) !important; }
 div[class*="st-key-box-profile"] div[class*="st-key-clear-"] button:hover {
   color: var(--jv-green) !important; transform: none !important; box-shadow: none !important; }
-/* 지금 적용 중인 칸은 초록 테두리 (v0.5.4 F12) */
-div[class*="st-key-box-summary"][class*="-on"] { border-color: var(--jv-green) !important;
-  box-shadow: 6px 6px 0 var(--jv-green); }
+/* 지금 적용 중인 칸은 굵은 테두리 + 제목 앞 ✓. 초록은 다른 곳에도 써서 모양으로 구분 (v0.5.4 F12, v0.6.1 F15) */
+div[class*="st-key-box-summary"][class*="-on"] { border-width: 5px !important; transform: translate(-2px, -2px);
+  box-shadow: 9px 9px 0 var(--jv-ink); }
 div[data-testid="stExpander"] details {
   background: var(--jv-card); border: 2px solid var(--jv-ink) !important; border-radius: 6px !important;
   box-shadow: 3px 3px 0 var(--jv-ink);
@@ -162,7 +163,8 @@ div[data-testid="stAlert"] > div {
   border: 2px solid var(--jv-ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--jv-ink);
 }
 /* 필터 사이드바와 자세히 창도 굵은 테두리 (v0.5.4 F1, F5) */
-section[data-testid="stSidebar"] { border-right: 3px solid var(--jv-ink); }
+section[data-testid="stSidebar"] { border-right: 3px solid var(--jv-ink); background: var(--jv-paper); }
+section[data-testid="stSidebar"] div[class*="st-key-box-filter"] { padding: 16px; }
 div[data-testid="stPopoverBody"] { border: 3px solid var(--jv-ink) !important; box-shadow: 6px 6px 0 var(--jv-ink);
   max-height: 75vh; overflow-y: auto; }
 /* 고르기 칸의 키워드 아무 데나 눌러도 지워지게, 삭제 버튼이 키워드 전체를 덮는다 (v0.5.1 F22) */
@@ -177,10 +179,9 @@ div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
 div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg { width: 0.7em; height: 0.7em; }
 div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
 div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: var(--jv-ink); }
-/* 제목은 크게, 어두운 테마에서는 흰색 (v0.6.1 F1) */
-.jv-hero h1 { margin: 0; padding: 0 6px; font-size: 3.4rem; font-weight: 900; color: var(--jv-title);
-  letter-spacing: -0.03em; display: inline-block;
-  background: linear-gradient(transparent 58%, var(--jv-highlight) 58%); }
+/* 제목은 크게, 어두운 테마에서는 흰색 (v0.6.1 F1). 뒤 형광 줄은 뺐다 (v0.6.1 F19) */
+.jv-hero h1 { margin: 0; padding: 0; font-size: 4rem; font-weight: 900; color: var(--jv-title);
+  letter-spacing: -0.03em; line-height: 1.05; }
 .jv-hero p { margin: 4px 0 0; color: var(--jv-sub); font-weight: 600; }
 .jv-score { font-size: 2.2rem; font-weight: 900; line-height: 1; color: var(--jv-green); }
 .jv-muted { color: var(--jv-muted); font-size: 0.9rem; }
@@ -204,8 +205,6 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
   border-radius: 4px; font-size: 0.85rem; font-weight: 700; background: var(--jv-card); color: var(--jv-ink); }
 .jv-chip.jv-mine { background: #8ce99a; color: #111111; }
 .jv-strength { color: var(--jv-sub); font-size: 0.9rem; }
-/* 키 칸은 제목과 띄우고 작게 (v0.6.1 F2) */
-div[class*="st-key-key-card"] { margin-top: 1.2rem; padding: 10px 16px; }
 /* 카드 체크·점수·버튼 칸은 창이 좁아져도 글자가 잘리지 않게 (v0.6.1 F4) */
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"] div[class*="st-key-check-"]) {
   flex-wrap: nowrap; }
@@ -485,6 +484,7 @@ def show_live_job() -> None:
     if job is None:
         return
     if job.finished:
+        st.session_state[RELOADED] = f"{job.label}-{job.started}"  # 다시 읽기는 한 번만 (v0.6.1 F16)
         reload_rows()  # 끝나면 시트를 다시 읽는다 (F6, F9). 평가한 줄은 체크가 풀려 있다
         st.rerun(scope="app")
     st.progress(
@@ -629,7 +629,21 @@ def tile_on(index: int) -> bool:
     return state == wanted
 
 
+def reload_after_job() -> None:
+    """끝난 작업의 결과를 한 번은 꼭 다시 읽는다 (v0.6.1 F16).
+
+    보통은 진행 막대(show_live_job)가 끝을 보고 다시 읽지만, 작업이 화면을 그리는 사이에 끝나면
+    진행 막대가 그려지지 않아 다시 읽기를 놓친다.
+    """
+    job = runner.current()
+    done = f"{job.label}-{job.started}" if job and job.finished else None
+    if done and st.session_state.get(RELOADED) != done:
+        st.session_state[RELOADED] = done
+        reload_rows()
+
+
 def show_postings() -> None:
+    reload_after_job()
     try:
         rows, error = load_rows(), None
     except Exception as e:
@@ -652,15 +666,14 @@ def show_postings() -> None:
     for index, (column, (label, value, note)) in enumerate(zip(st.columns(4), view.summary(items), strict=True)):
         on = "-on" if tile_on(index) else ""
         with column.container(border=True, key=f"box-summary-{index}{on}"):  # 칸마다 색 (F28)
-            st.metric(label, value)
+            st.metric(f"✓ {label}" if on else label, value)
             # 숫자 아래 설명 글을 누르면 그 필터로 목록을 보인다 (v0.5.4 F3, F12)
             st.button(f"{note} →", key=f"tile-{index}", on_click=pick_tile, args=(index,), type="tertiary")
 
     sources, experiences = view.options(items)
     # 필터는 왼쪽 사이드바에 고정한다. 목록을 내려도 보이고 « 로 접는다 (v0.5.4 F1)
-    with st.sidebar:
-        st.markdown("### 필터")
-        st.caption("📋 공고 탭 목록에 적용됩니다.")
+    with st.sidebar, st.container(border=True, key="box-filter"):  # 메인 카드와 같은 모양 (v0.6.1 F20)
+        st.markdown("#### 필터 <span class='jv-muted'>📋 공고 목록에 적용</span>", unsafe_allow_html=True)
         filters = view.Filters(
             query=st.text_input("검색", placeholder="회사명·직무", key="search"),  # v0.5.3 F10
             # 처음엔 비워 두고 "전체"로 보인다. 고른 것이 있을 때만 거른다 (v0.5.2 F29)
@@ -821,7 +834,7 @@ def show_field_with_clear(field: profile_form.Field, default, taken: list[str]):
 
 def show_resume_fill(values: dict, fill: dict | None) -> None:
     """이력서·포트폴리오 파일 → LLM → 입력란 (v0.5.2 F16–F22). 저장은 하지 않는다."""
-    st.markdown("**📄 이력서·포트폴리오로 채우기**")  # 형식·전송 안내는 파일 칸 ? 도움말로 (v0.6.1 F10)
+    # 제목은 접기 칸 이름. 형식·전송 안내는 파일 칸 ? 도움말로 (v0.6.1 F10, F18)
     if fill:  # 채운 칸 표시 (F20)
         st.markdown(
             "<span class='jv-muted'>이력서에서 채움</span> "
@@ -895,9 +908,11 @@ def show_profile() -> None:
         except user_profile.ProfileError as e:
             st.warning(f"지금 파일에 고칠 칸이 있습니다.\n\n{e}")
 
-    fill_box = st.container(border=True, key="box-resume")  # 맨 위에 두고 입력란을 그린 뒤 채운다
-    badges = st.empty()  # 입력란을 그린 뒤 채운다 (F8)
     fill = st.session_state.get(FILL)  # 이력서에서 채운 값. 저장 전까지 파일 대신 입력란 기본값 (v0.5.2 F18)
+    # 프로필이 비어 있거나 방금 채웠으면 펼치고, 아니면 접어 둔다 (v0.6.1 F18)
+    blank = profile_form.to_form(raw) == profile_form.to_form(None)
+    fill_box = st.expander("📄 이력서·포트폴리오로 채우기", expanded=blank or bool(fill))  # 입력란을 그린 뒤 채운다
+    badges = st.empty()  # 입력란을 그린 뒤 채운다 (F8)
     defaults = fill["values"] if fill else profile_form.to_form(raw)
     empty = profile_form.to_form(None)
     for keys in st.session_state.get(CLEARED, set()):  # 비운 칸은 빈 값으로 (v0.5.5 F1, F2)
@@ -945,33 +960,42 @@ def show_profile() -> None:
 
 KEY_SAVED = "key_saved"  # 방금 키를 저장했는지 (v0.6 F4)
 KEY_DELETED = "key_deleted"  # 방금 키를 지웠는지 (v0.6.1 F14)
+KEY_PROMPTED = "key_prompted"  # 키가 없어 창을 한 번 띄웠는지 (v0.6.1 F17)
+KEY_ERROR = "key_error"  # 저장하지 못한 이유 (v0.6.1 F17)
 
 
 def delete_key() -> None:
     st.session_state[KEY_DELETED] = settings.delete_key()
 
 
-def save_key_form(where: str) -> None:
-    with st.form(f"key_form_{where}", clear_on_submit=True, border=False):
-        box, button = st.columns([5, 1], vertical_alignment="bottom")  # 입력란과 저장을 한 줄에 (v0.6.1 F2)
-        key = box.text_input(
-            settings.key_name(), type="password", placeholder="여기에 붙여넣기", label_visibility="collapsed"
-        )
-        if not button.form_submit_button("저장", type="primary", use_container_width=True):
-            return
+def save_key(field: str) -> None:
+    """저장 버튼 콜백. 창 안 버튼만 다시 그려질 때도 저장되게 콜백에서 한다 (v0.6.1 F17)."""
     try:
-        settings.save_key(key)
+        settings.save_key(st.session_state.get(field, ""))
     except ValueError as e:  # 문구에 키는 들어 있지 않다 (F5)
-        st.error(str(e))
+        st.session_state[KEY_ERROR] = str(e)
         return
     st.session_state[KEY_SAVED] = True
-    st.rerun()
 
 
-def show_key_card() -> None:
-    """LLM 키가 없으면 맨 위에 입력 칸, 있으면 접힌 "바꾸기"만 (v0.6 F4, F5)."""
-    if st.session_state.pop(KEY_SAVED, False):
-        st.success(f"키를 저장함 ({settings.masked()}). 이제 평가와 이력서 채우기를 쓸 수 있습니다.")
+def save_key_form(where: str) -> None:
+    field = f"key-input-{where}"
+    with st.form(f"key_form_{where}", clear_on_submit=True, border=False):
+        box, button = st.columns([4, 1], vertical_alignment="bottom")  # 입력란과 저장을 한 줄에 (v0.6.1 F2)
+        box.text_input(
+            settings.key_name(), type="password", placeholder="여기에 붙여넣기", label_visibility="collapsed", key=field
+        )
+        button.form_submit_button("저장", type="primary", use_container_width=True, on_click=save_key, args=(field,))
+    error = st.session_state.pop(KEY_ERROR, None)
+    if error:
+        st.error(error)
+
+
+@st.dialog("🔑 LLM 키")
+def show_key_dialog() -> None:
+    """키 넣기·바꾸기·지우기 창. 화면 위 🔑 버튼으로 연다 (v0.6 F4, F5, v0.6.1 F14, F17)."""
+    if st.session_state.get(KEY_SAVED):  # 저장했으면 창을 닫고 화면 전체를 다시 그린다
+        st.rerun()
     deleted = st.session_state.pop(KEY_DELETED, None)
     if deleted is not None:  # 이 PC에서만 지운다. Google의 키는 그대로 (F14)
         st.info(
@@ -979,22 +1003,35 @@ def show_key_card() -> None:
             f"[Google AI Studio]({settings.KEY_PAGES['GOOGLE_API_KEY']})에서 삭제하세요."
             + ("" if deleted else " .env에 적은 키는 .env에서 직접 지워야 다음 실행에도 지워집니다.")
         )
+    page = settings.key_page()
     if settings.has_key():
-        with st.expander(f"🔑 LLM 키 {settings.masked()} · 바꾸기·삭제"):
-            st.caption(".env에 키를 적어 두었다면 다음 실행부터는 .env 값이 우선합니다.")
-            save_key_form("change")
-            # PC를 넘기거나 키가 샜다고 의심될 때 (v0.6.1 F14)
-            st.button("🗑 이 PC에서 키 삭제", key="key-delete", on_click=delete_key,
-                      help="이 PC에 저장한 키만 지웁니다. Google에서 키를 없애지는 않습니다")  # fmt: skip
+        st.markdown(f"지금 키 **{settings.masked()}** · 새 키를 넣으면 바뀝니다.")
+        st.caption(".env에 키를 적어 두었다면 다음 실행부터는 .env 값이 우선합니다.")
+        save_key_form("change")
+        # PC를 넘기거나 키가 샜다고 의심될 때 (v0.6.1 F14)
+        st.button("🗑 이 PC에서 키 삭제", key="key-delete", on_click=delete_key,
+                  help="이 PC에 저장한 키만 지웁니다. Google에서 키를 없애지는 않습니다")  # fmt: skip
         return
-    with st.container(border=True, key="key-card"):  # 제목 한 줄 + 입력 한 줄 (v0.6.1 F2)
-        page = settings.key_page()
-        st.markdown(
-            f"**🔑 LLM 키를 넣어 주세요** <span class='jv-muted'>평가·이력서 채우기에 씀 · "
-            f"<a href='{page}' target='_blank'>무료 발급</a> · 이 PC에만 저장, 화면엔 끝 4자리만</span>",
-            unsafe_allow_html=True,
-        )
-        save_key_form("new")
+    st.markdown("**LLM 키를 넣어 주세요**")
+    st.caption(
+        f"평가·이력서 채우기에 씁니다. [{page}]({page})에서 무료로 발급받아 붙여넣으세요. "
+        "이 PC에만 저장되고 화면에는 끝 4자리만 보입니다. 처음이면 📖 사용법도 보세요."
+    )
+    save_key_form("new")
+
+
+def key_button(column) -> None:
+    """화면 위 🔑 버튼 (v0.6.1 F17). 키가 없으면 눈에 띄는 색, 처음 연 화면에서 한 번 창을 띄운다."""
+    if st.session_state.pop(KEY_SAVED, False):
+        st.toast(f"키를 저장함 ({settings.masked()}). 이제 평가와 이력서 채우기를 쓸 수 있습니다.", icon="🔑")
+    missing = not settings.has_key()
+    label = "🔑 키 넣기" if missing else f"🔑 키 {settings.masked()}"
+    clicked = column.button(label, type="primary" if missing else "secondary", use_container_width=True, key="key-open")
+    first = missing and not st.session_state.get(KEY_PROMPTED)
+    pending = KEY_ERROR in st.session_state or KEY_DELETED in st.session_state  # 창 안 안내를 보여야 함
+    if clicked or first or pending:
+        st.session_state[KEY_PROMPTED] = True
+        show_key_dialog()
 
 
 def main() -> None:
@@ -1003,8 +1040,9 @@ def main() -> None:
     st.set_page_config(page_title="JOBVIS", layout="wide")
     st.markdown(css(st.context.theme.type), unsafe_allow_html=True)  # 테마를 바꾸면 다시 그린다 (F13)
     remember_visit()
-    open_guide_first_time()
-    title, guide, refresh = st.columns([5, 1, 1], vertical_alignment="center")
+    if settings.has_key():  # 키가 없으면 키 창이 먼저 뜬다. 창은 한 번에 하나 (v0.6.1 F17)
+        open_guide_first_time()
+    title, key, guide, refresh = st.columns([4, 1.2, 1, 1], vertical_alignment="center")
     title.markdown(
         f'<div class="jv-hero"><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',
         unsafe_allow_html=True,
@@ -1013,7 +1051,7 @@ def main() -> None:
         show_guide()
     if refresh.button("🔄 새로고침", use_container_width=True):
         reload_rows()
-    show_key_card()
+    key_button(key)
     postings_tab, profile_tab = st.tabs(["📋 공고", "👤 프로필"])  # v0.5 F1
     with postings_tab:
         show_postings()
