@@ -138,6 +138,8 @@ SYSTEM_PROMPT = """너는 이력서·포트폴리오 글에서 채용 적합도 
 - experience.degree는 "최종 학력, 전공" 한 줄 (예: "대학교 졸업(4년), 컴퓨터공학").
   최종 학력은 고등학교 졸업, 전문대 졸업(2–3년), 대학교 졸업(4년), 석사, 박사 중 하나로 써.
 - experience.projects는 프로젝트를 한 줄씩(최대 5개), training은 교육 과정 이수(예: SSAFY 수료)를 한 줄씩.
+- 여러 파일에 같은 기술·프로젝트·교육이 조금 다르게 적혀 있으면 하나로 합쳐 한 번만 써.
+  (예: "OO 부트캠프 백엔드 과정"과 "OO 부트캠프"는 같은 교육이면 하나)
 - direction.jobs는 희망 직무, locations는 희망 근무 지역(시·도 이름), goals는 하고 싶은 일 한 줄.
   "희망", "원하는", "지원 직무"처럼 직접 적힌 것만 넣어. 주소·거주지·학교·다녔던 회사 위치로 지역을 추측하지 마.
 - culture는 원하는 회사 문화·일하는 방식을 짧은 말로 (예: 코드 리뷰 문화, 재택 가능). 원한다고 적힌 것만.
@@ -175,8 +177,29 @@ def _empty(value) -> bool:
     return not value
 
 
+def _same(item: str) -> str:
+    """띄어쓰기·대소문자만 다른 항목은 같은 것으로 본다 (v0.6.1 F8)."""
+    return " ".join(str(item).split()).casefold()
+
+
 def _add(current: list[str], new: list[str]) -> list[str]:
-    return current + [item for item in new if item not in current]
+    seen, added = {_same(item) for item in current}, list(current)
+    for item in new:
+        if _same(item) and _same(item) not in seen:
+            seen.add(_same(item))
+            added.append(item)
+    return added
+
+
+def _unique(field: profile_form.Field, value):
+    """LLM이 여러 파일에서 같은 항목을 두 번 준 경우 하나만 남긴다 (v0.6.1 F8)."""
+    if field.kind == "pick":
+        return _add([], value)
+    if field.kind == "lines":
+        return _add_lines("", value)
+    if field.kind == "culture":
+        return _add([], value[0]), _add_lines("", value[1])
+    return value
 
 
 def _add_lines(current: str, new: str) -> str:
@@ -225,6 +248,6 @@ def merge(values: dict, found: dict, overwrite: bool = False) -> tuple[dict, lis
                 continue  # 이미 적은 글자 칸(학력, 하고 싶은 일)은 그대로
             if new == old:
                 continue
-        merged[field.keys] = new
+        merged[field.keys] = _unique(field, new)
         filled.append(field.label)
     return profile_form.without_taken(merged), filled  # 주력에 들어간 기술은 다룰 수 있음에서 뺀다 (F37)
