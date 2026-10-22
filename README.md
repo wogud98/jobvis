@@ -27,6 +27,7 @@ Docker만 있으면 됩니다. 구글 시트·서비스 계정 설정은 필요 
 | 끄기 (데이터는 남음) | `docker compose down` |
 | 다시 켜기 | `docker compose up -d` |
 | 코드를 새로 받은 뒤 | `git pull` → `docker compose up -d --build` |
+| 공고만 지우고 다시 모으기 (프로필·키는 남음) | 화면 사이드바 맨 아래 **🗑 공고 초기화** (지원한 공고는 남길 수 있음) |
 | 내 데이터까지 모두 지우기 | `docker compose down -v` |
 | OCR 끄기 (OCR이 안 도는 PC) | `JOBVIS_OCR=off docker compose up -d` (PowerShell: `$env:JOBVIS_OCR="off"; docker compose up -d`) |
 
@@ -63,7 +64,7 @@ streamlit run app.py              # 화면에서 프로필 입력 → 수집 →
 
 | 하고 싶은 일 | 명령 |
 | --- | --- |
-| 공고 수집 (두 사이트) | `python main.py --keyword 백엔드 --location 서울 --job 백엔드 --career 신입 --count 10` |
+| 공고 수집 (두 사이트) | `python main.py --keyword 백엔드 --location 서울,경기 --job 백엔드 --career 신입 --count 10` |
 | 한 사이트만 수집 | `python main.py --keyword 백엔드 --source jobkorea` |
 | 시트에서 체크한 공고만 평가 | `python main.py --score` |
 | 점수 없는 공고 전부 평가 | `python main.py --score all` |
@@ -76,7 +77,7 @@ streamlit run app.py              # 화면에서 프로필 입력 → 수집 →
 | --- | --- |
 | `--keyword` | 검색어. 수집할 때 필요 |
 | `--source` | `saramin` 또는 `jobkorea`. 빼면 둘 다 |
-| `--location` | 지역 이름 (서울, 경기, 부산 …). 빼면 전국. 잡코리아는 지역 글자로 거름 |
+| `--location` | 지역 이름 (서울, 경기, 부산 …). 여러 개는 쉼표로 (`서울,경기`). 빼면 전국. 잡코리아는 지역 글자로 거름 |
 | `--job` | 직무 이름. 사람인 IT개발·데이터 이름 그대로 (백엔드, 프론트엔드, Python …). 잡코리아에는 쓰지 않음 |
 | `--career` | `신입` 또는 `경력`. 빼면 거르지 않음. 공고의 경력 글자로 거름 |
 | `--count` | 사이트당 가져올 공고 수 1–30, 기본 10 |

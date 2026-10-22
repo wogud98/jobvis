@@ -89,7 +89,7 @@ class Fakes:
 
     def _search_url(self, source):
         def search_url(keyword, filters):
-            self.search_filters[source] = (keyword, filters.get("region_code"), filters.get("career"))
+            self.search_filters[source] = (keyword, filters.get("region_codes"), filters.get("career"))
             return f"search:{source}:{keyword}"
 
         return search_url
@@ -99,12 +99,12 @@ class Fakes:
         return value[1]
 
 
-def run(sources=("saramin", "jobkorea"), count=10, career=None, location=None, ocr_ready=True):
+def run(sources=("saramin", "jobkorea"), count=10, career=None, locations=(), ocr_ready=True):
     state = {
         "keyword": "백엔드",
         "sources": list(sources),
-        "location": location,
-        "region_code": "101000" if location else None,
+        "locations": list(locations),
+        "region_codes": [graph.codes.to_region_code(name) for name in locations],
         "job_code": None,
         "career": career,
         "count": count,
@@ -240,10 +240,31 @@ def test_career_and_location_filters(monkeypatch, tmp_path):
         },
     )
 
-    result = run(career="신입", location="서울")
+    result = run(career="신입", locations=["서울"])
 
     assert result["fetched"] == {"saramin": 1, "jobkorea": 1}
     assert ids(result["saved"]) == [("saramin", "2"), ("jobkorea", "3")]
+
+
+def test_jobkorea_keeps_any_of_several_locations(monkeypatch, tmp_path):
+    """여러 지역을 고르면 잡코리아는 하나라도 맞는 공고를 남긴다. 사람인은 주소에 지역을 모두 넣는다 (v0.6.1 F29)."""
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {
+            "saramin": [make_job("saramin", "1")],
+            "jobkorea": [
+                make_job("jobkorea", "2", location="서울 강남구"),
+                make_job("jobkorea", "3", location="경기 성남시"),
+                make_job("jobkorea", "4", location="부산 해운대구"),
+            ],
+        },
+    )
+
+    result = run(locations=["서울", "경기"])
+
+    assert ids(result["saved"]) == [("saramin", "1"), ("jobkorea", "2"), ("jobkorea", "3")]
+    assert fakes.search_filters["saramin"][1] == ["101000", "102000"]
 
 
 def test_count_is_per_site(monkeypatch, tmp_path):

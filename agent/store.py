@@ -69,3 +69,10 @@ def set_applied(row_number: int, applied: bool) -> None:
 
 def write_result(row_number: int, summary: str | None, values: list, extra: list | None, tail: list) -> None:
     backend().write_result(row_number, summary, values, extra, tail)
+
+
+def delete_rows(keep_applied: bool) -> list[dict]:
+    """DB 공고 초기화 (v0.6.1 F30). 시트는 사람이 직접 고치는 곳이라 지우지 않는다."""
+    if kind() != "db":
+        raise StorageError("공고 초기화는 DB 저장에서만 쓸 수 있습니다.")
+    return backend().delete_rows(keep_applied)

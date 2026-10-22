@@ -97,3 +97,12 @@ def write_result(row_number: int, summary: str | None, values: list, extra: list
         data |= _named(header[sheets.DUTIES_COLUMN - 1 : sheets.TRUST_COLUMN - 1], extra)
     data |= _named(header[sheets.TRUST_COLUMN - 1 :], tail)
     _set(row_number, data)
+
+
+def delete_rows(keep_applied: bool) -> list[dict]:
+    """공고 줄을 지우고 지운 줄을 돌려준다. keep_applied면 "지원"을 체크한 줄은 남긴다 (v0.6.1 F30)."""
+    condition = sa.func.upper(sa.func.trim(TABLE.c.applied)) != "TRUE" if keep_applied else sa.true()
+    with engine().begin() as connection:
+        found = connection.execute(sa.select(TABLE).where(condition)).mappings().all()
+        connection.execute(TABLE.delete().where(condition))
+    return [{key: row[key] for key in sheets.KEYS} | {"row": row["row"]} for row in found]

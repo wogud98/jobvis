@@ -1,6 +1,6 @@
 """실행 예.
 
-수집:            python main.py --keyword 백엔드 --location 서울 --job 백엔드 --career 신입 --count 10
+수집:            python main.py --keyword 백엔드 --location 서울,경기 --job 백엔드 --career 신입 --count 10
 한 사이트만:     python main.py --keyword 백엔드 --source jobkorea
 체크한 줄 평가:  python main.py --score
 점수 없는 줄 평가: python main.py --score all
@@ -31,7 +31,7 @@ def _count(value: str) -> int:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="사람인·잡코리아 공고를 수집하고 내 프로필과 비교해 적합도를 평가")
     parser.add_argument("--keyword", help="검색어 (예: 백엔드). 수집할 때 필요")
-    parser.add_argument("--location", help="지역 이름 (예: 서울, 경기)")
+    parser.add_argument("--location", help="지역 이름. 여러 개는 쉼표로 (예: 서울,경기)")
     parser.add_argument("--job", help="직무 이름 (예: 백엔드, 프론트엔드, Python)")
     parser.add_argument("--career", choices=codes.CAREERS, help="신입 또는 경력. 생략하면 거르지 않음")
     parser.add_argument("--source", choices=list(SOURCES), help="한 사이트만 수집 (saramin, jobkorea). 생략하면 둘 다")

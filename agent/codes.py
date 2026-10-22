@@ -356,6 +356,6 @@ def matches_career(experience: str, career: str | None) -> bool:
     return "경력" in text or bool(re.search(r"\d+년", text))
 
 
-def matches_location(location: str, name: str | None) -> bool:
-    """지역 글자에 지역 이름이 들어 있는지. 주소에 지역 조건을 못 넣는 사이트(잡코리아)용."""
-    return name is None or name in location
+def matches_location(location: str, names: list[str] | None) -> bool:
+    """지역 글자에 고른 지역 이름 중 하나라도 있는지. 주소에 지역 조건을 못 넣는 사이트(잡코리아)용 (v0.6.1 F29)."""
+    return not names or any(name in location for name in names)

@@ -10,7 +10,20 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from agent import codes, inbox, ocr, profile_form, reports, scoring, settings, store, user_profile, view
+from agent import (
+    codes,
+    inbox,
+    ocr,
+    postings,
+    profile_form,
+    reports,
+    scoring,
+    settings,
+    sheets,
+    store,
+    user_profile,
+    view,
+)
 from agent.graph import MAX_COUNT, SOURCES, build_graph, build_score_graph, recursion_limit
 
 KINDS = {"collect": "수집", "score": "평가", "inbox": "받은함 읽기"}
@@ -104,9 +117,20 @@ def keyword_options(profile: dict | None) -> list[str]:
     return list(dict.fromkeys(values[("direction", "jobs")] + values[("skills", "main")] + JOB_NAMES))
 
 
+def region_names(value: list[str] | str | None) -> list[str]:
+    """지역 입력을 이름 목록으로. 터미널은 "서울,경기"처럼 쉼표로 받는다. 빈칸·겹친 이름은 뺀다 (v0.6.1 F29)."""
+    names = value.split(",") if isinstance(value, str) else value or []
+    return list(dict.fromkeys(name.strip() for name in names if name and name.strip()))
+
+
+def default_regions(profile: dict | None) -> list[str]:
+    """수집 지역 기본값: 프로필 희망 지역 중 사이트 지역 이름에 있는 것만 ("재택·원격"은 뺀다) (v0.6.1 F29)."""
+    return [name for name in profile_form.to_form(profile)[("direction", "locations")] if name in REGION_NAMES]
+
+
 def collect_state(
     keyword: str,
-    location: str | None = None,
+    locations: list[str] | str | None = None,
     job: str | None = None,
     career: str | None = None,
     sources: list[str] | None = None,
@@ -121,13 +145,13 @@ def collect_state(
     sources = [source for source in (sources or list(SOURCES)) if source in SOURCES]
     if not sources:
         raise RunError("사이트를 하나 이상 골라 주세요.")
-    location = (location or "").strip() or None
+    locations = region_names(locations)
     job = (job or "").strip() or None
     return {
         "keyword": keyword,
         "sources": sources,
-        "location": location,
-        "region_code": codes.to_region_code(location) if location else None,
+        "locations": locations,
+        "region_codes": [codes.to_region_code(name) for name in locations],
         "job_code": codes.to_job_code(job) if job else None,
         "career": career if career in codes.CAREERS else None,
         "count": count,
@@ -247,3 +271,47 @@ def start_inbox(*, wait: bool = False) -> Job:
         return reports.inbox_summary(read_inbox())
 
     return start("inbox", work, wait=wait)
+
+
+# ---- DB 공고 초기화 ----
+
+
+@dataclass
+class ResetResult:
+    rows: int = 0  # 지운 공고 수
+    files: int = 0  # 지운 원문·이미지 파일 수
+    kept: int = 0  # 남긴 지원한 공고 수
+
+
+def reset_counts(rows: list[dict]) -> tuple[int, int]:
+    """확인 창에 보일 (전체 공고 수, 지원한 공고 수) (F30)."""
+    return len(rows), sum(scoring.is_true(row.get("applied", "")) for row in rows)
+
+
+def _remove_files(removed: list[dict]) -> int:
+    """지운 공고의 원문(data/postings)과 받은함·done 이미지(data/inbox)를 지운다. 남긴 공고 파일은 그대로."""
+    keys = {(sheets.source_code(row.get("source", "")), row["id"]) for row in removed if row.get("id")}
+    files = [postings.path(source, job_id) for source, job_id in keys]
+    for folder in (inbox.DIR, inbox.DONE):
+        if folder.is_dir():
+            for file in folder.iterdir():
+                if file.is_file() and (inbox.parse_name(file.name) or ())[:2] in keys:
+                    files.append(file)
+    count = 0
+    for file in files:
+        try:
+            file.unlink()
+            count += 1
+        except FileNotFoundError:
+            pass
+    return count
+
+
+def reset_postings(keep_applied: bool = True) -> ResetResult:
+    """DB 공고와 그 원문·이미지를 지운다. 프로필·키는 그대로 (F30). 작업 중이면 막는다."""
+    with _lock:
+        if running():
+            raise RunError(f"{_job.label}을 실행하는 중입니다. 끝난 뒤 다시 눌러 주세요.")
+        removed = store.delete_rows(keep_applied)
+        kept = len(store.read_rows()) if keep_applied else 0
+    return ResetResult(rows=len(removed), files=_remove_files(removed), kept=kept)

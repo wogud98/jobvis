@@ -28,6 +28,8 @@ LAST_SEEN = "last_seen"  # 이 화면을 열기 전 마지막으로 연 시각 (
 CHECK_ERROR = "check_error"
 TOASTED = "toasted_job"  # 결과 알림을 띄운 작업 (v0.6.1 F5)
 RELOADED = "reloaded_job"  # 결과를 다시 읽은 작업 (v0.6.1 F16)
+RESET_DONE = "reset_done"  # 방금 공고를 초기화한 결과 문구 (v0.6.1 F30)
+RESET_ERROR = "reset_error"  # 초기화하지 못한 이유 (v0.6.1 F30)
 PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
 TAGLINE = "채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다"  # JOBVIS 아래 문장 (v0.5.2 F43)
 SORTS = {"점수 높은 순": "score_desc", "점수 낮은 순": "score_asc", "마감 임박 순": "deadline"}  # F40, v0.5.3 F8
@@ -42,6 +44,7 @@ GUIDE = """
 **② 수집** · 📋 공고 탭
 - 수집 카드에 키워드를 넣고 **🔎 수집**을 누릅니다. 사람인·잡코리아 공개 페이지를 3초 간격으로 읽어서
   30건 수집은 몇 분 걸립니다.
+- 지역은 여러 곳을 고를 수 있습니다. 처음엔 프로필 희망 지역이 골라져 있고, 비우면 전체입니다.
 
 **③ 평가**
 - 공고 카드의 **평가** 칸을 체크하고 목록 위 **🧮 체크한 공고 평가**를 누릅니다.
@@ -61,6 +64,7 @@ GUIDE = """
 
 **그 밖에**
 - 시트를 직접 고쳤으면 오른쪽 위 **🔄 새로고침**을 누릅니다.
+- Docker(DB)로 쓸 때 공고를 지우고 다시 모으려면 사이드바 맨 아래 **🗑 공고 초기화**. 프로필·키는 남습니다.
 - 다크 모드는 컴퓨터 설정을 따릅니다. 바꾸려면 오른쪽 위 **⋮ → Light·Dark**. 바꾸면 바로 적용됩니다.
 - 터미널(`python main.py --keyword 백엔드`, `--score`, `--inbox`)로 해도 결과는 같습니다.
 """
@@ -626,7 +630,10 @@ def show_collect_card() -> None:
             placeholder="골라 주세요. 없으면 입력 후 Enter", help="사이트 검색창에 넣을 말 (F3)",
         )  # fmt: skip
         left, right = st.columns(2)
-        location = left.selectbox("지역", runner.REGION_NAMES, index=None, placeholder="전체")
+        locations = left.multiselect(
+            "지역", runner.REGION_NAMES, default=runner.default_regions(raw), placeholder="전체",
+            help="여러 곳을 고를 수 있음. 비우면 전체. 처음엔 프로필 희망 지역 (F29)",
+        )  # fmt: skip
         job = right.selectbox("직무", runner.JOB_NAMES, index=None, accept_new_options=True, placeholder="전체")
         left, middle, right = st.columns([1.2, 1.4, 1])
         career = left.radio("경력", [runner.CAREER_ALL, *runner.codes.CAREERS], horizontal=True)
@@ -635,7 +642,7 @@ def show_collect_card() -> None:
         if st.button("🔎 수집", type="primary", disabled=busy, key="run-collect", use_container_width=True):
             try:
                 sources = [runner.SOURCE_NAMES[name] for name in names]
-                state = runner.collect_state(keyword or "", location, job, career, sources, int(count))
+                state = runner.collect_state(keyword or "", locations, job, career, sources, int(count))
             except Exception as e:
                 st.error(runner.error_text(e))
                 return
@@ -730,6 +737,8 @@ def reload_after_job() -> None:
 
 def show_postings() -> None:
     reload_after_job()
+    if done := st.session_state.pop(RESET_DONE, None):
+        st.toast(done, icon="🗑")
     try:
         rows, error = load_rows(), None
     except Exception as e:
@@ -777,6 +786,7 @@ def show_postings() -> None:
                 "관심 없는 공고만 보기", key="hidden-only", help="관심 없음으로 뺀 공고. 되돌리기로 목록에 다시 넣음"
             ),
         )
+    show_reset(rows)
     shown = view.apply(items, filters)
     data = view.chart(shown)  # 필터를 지난 공고 중 높은 5개 (F42)
     if data:  # 점수 있는 공고가 있을 때만 칸을 보인다 (v0.6.1 F6)
@@ -797,6 +807,54 @@ def show_postings() -> None:
         show_card(card, known)
     if pages > 1:
         show_pager(number, pages)
+
+
+def show_reset(rows: list[dict]) -> None:
+    """사이드바 맨 아래 DB 공고 초기화 (v0.6.1 F30). 시트는 사람이 직접 고치는 곳이라 DB 저장일 때만."""
+    try:
+        if store.kind() != "db":
+            return
+    except store.StorageError:
+        return
+    with st.sidebar, st.container(border=True, key="box-reset"):
+        st.markdown("#### 공고 초기화 <span class='jv-muted'>DB</span>", unsafe_allow_html=True)
+        st.caption("모은 공고를 지우고 처음부터 다시 수집합니다. 프로필·키는 그대로.")
+        clicked = st.button("🗑 공고 초기화", key="reset-open", disabled=runner.running(), use_container_width=True)
+        if clicked or RESET_ERROR in st.session_state:  # 못 지운 이유를 창에 다시 보인다 (키 창과 같음)
+            confirm_reset(rows)
+
+
+@st.dialog("공고 초기화")
+def confirm_reset(rows: list[dict]) -> None:
+    """지우기 전에 몇 건인지 보여 주고 묻는다 (F30)."""
+    total, applied = runner.reset_counts(rows)
+    keep = st.checkbox(f"지원한 공고는 남기기 ({applied}건)", value=True, key="reset-keep")
+    removed = total - applied if keep else total
+    st.markdown(f"DB 공고 **{removed}건**과 그 원문·받은함 이미지를 지웁니다. 되돌릴 수 없습니다.")
+    error = st.session_state.pop(RESET_ERROR, None)
+    if error:
+        st.error(error)
+    yes, no = st.columns(2)
+    # 콜백에서 지워야 창 안 버튼만 다시 그려질 때도 지운다 (confirm_clear_all과 같음)
+    if yes.button(
+        "지우기", type="primary", key="reset-yes", disabled=not removed, use_container_width=True,
+        on_click=reset_postings,
+    ) and not error:  # 못 지웠으면 창을 닫지 않고 이유를 보인다  # fmt: skip
+        st.rerun()
+    if no.button("취소", key="reset-no", use_container_width=True):
+        st.rerun()
+
+
+def reset_postings() -> None:
+    keep = st.session_state.get("reset-keep", True)  # 누른 순간의 체크 값
+    try:
+        result = runner.reset_postings(keep)
+    except Exception as e:  # 창에 그대로 보인다. 키·경로는 가린다
+        st.session_state[RESET_ERROR] = runner.error_text(e)
+        return
+    kept = f", 지원한 공고 {result.kept}건 남김" if result.kept else ""
+    st.session_state[RESET_DONE] = f"공고 {result.rows}건 지움{kept}"
+    reload_rows()
 
 
 def my_skills() -> list[str]:
