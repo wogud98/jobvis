@@ -21,13 +21,13 @@ class Recorder:
 
 
 def test_names_become_codes_and_both_sources_by_default():
-    args = main.parse_args(["--keyword", "백엔드", "--location", "서울", "--job", "백엔드", "--career", "신입"])
+    args = main.parse_args(["--keyword", "백엔드", "--location", "서울,경기", "--job", "백엔드", "--career", "신입"])
 
     assert main.to_state(args) == {
         "keyword": "백엔드",
         "sources": ["saramin", "jobkorea"],
-        "location": "서울",
-        "region_code": "101000",
+        "locations": ["서울", "경기"],
+        "region_codes": ["101000", "102000"],
         "job_code": "84",
         "career": "신입",
         "count": 10,
@@ -40,7 +40,7 @@ def test_source_option_picks_one_site():
     state = main.to_state(args)
     assert state["sources"] == ["jobkorea"]
     assert state["count"] == 30
-    assert state["location"] is None and state["region_code"] is None
+    assert state["locations"] == [] and state["region_codes"] == []
 
 
 @pytest.mark.parametrize("count", ["0", "31"])

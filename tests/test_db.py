@@ -126,3 +126,39 @@ def test_engine_creates_table_on_first_connect(monkeypatch, tmp_path):
     finally:
         db.engine().dispose()
         db.engine.cache_clear()
+
+
+def test_delete_rows_keeps_applied_rows(memory):
+    """지원한 공고는 남기고 나머지를 지운 뒤 지운 줄을 돌려준다 (v0.6.1 F30)."""
+    db.append_row(collected(id="1"))
+    applied = db.append_row(collected(id="2"))
+    db.set_applied(applied, True)
+    db.append_row(collected(id="3"))
+
+    removed = db.delete_rows(keep_applied=True)
+
+    assert sorted(row["id"] for row in removed) == ["1", "3"]
+    assert [row["id"] for row in db.read_rows()] == ["2"]
+
+
+def test_delete_rows_all(memory):
+    applied = db.append_row(collected(id="1"))
+    db.set_applied(applied, True)
+    db.append_row(collected(id="2"))
+
+    removed = db.delete_rows(keep_applied=False)
+
+    assert len(removed) == 2 and db.read_rows() == []
+    assert db.delete_rows(keep_applied=False) == []  # 빈 표도 오류 없음
+
+
+def test_store_delete_rows_only_in_db_mode(memory, monkeypatch):
+    monkeypatch.delenv("JOBVIS_STORAGE", raising=False)
+    monkeypatch.setattr(sheets, "_sheet", lambda: pytest.fail("시트는 지우지 않음"))
+
+    with pytest.raises(store.StorageError, match="DB 저장에서만"):
+        store.delete_rows(True)
+
+    monkeypatch.setenv("JOBVIS_STORAGE", "db")
+    db.append_row(collected())
+    assert len(store.delete_rows(True)) == 1

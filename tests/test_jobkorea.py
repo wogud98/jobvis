@@ -74,7 +74,7 @@ def test_split_condition(text, expected):
 
 
 def test_search_url_has_keyword_only():
-    parts = urlsplit(jobkorea.search_url("FDE", {"region_code": "101000", "job_code": "84", "career": "신입"}))
+    parts = urlsplit(jobkorea.search_url("FDE", {"region_codes": ["101000"], "job_code": "84", "career": "신입"}))
 
     assert parts.netloc == "www.jobkorea.co.kr"
     assert parts.path == "/Search/"

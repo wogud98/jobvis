@@ -96,6 +96,26 @@ python -m pytest        # 592 passed (590개 → 592개, F28 포함)
 | F28 | 요약 칸 높이 맞춤 CSS | `test_summary_tiles_keep_same_height` | 통과 |
 | F27 | 기본 `color-scheme: light dark`, 스크립트가 앱 칸 테마를 html로 옮김, 화면에 스크립트가 들어감 | `test_popups_follow_app_theme` | 통과 |
 
+### 보완 (F29–F30)
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 95 files already formatted
+python -m pytest        # 612 passed (592개 → 612개)
+```
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F29 | 목록·"서울,경기" 글자 모두 받고 겹친 이름 뺌, 모르는 이름 하나면 멈춤 | `test_region_names_from_list_or_comma_text`, `test_collect_state_from_screen_inputs`, `test_collect_state_unknown_region_stops_before_request`, `test_names_become_codes_and_both_sources_by_default` | 통과 |
+| F29 | 사람인 주소 `loc_mcd=101000,102000`, 지역 없으면 `loc_mcd` 없음 | `test_search_url_joins_several_regions_with_comma`, `test_search_url_without_region_has_no_loc_mcd` | 통과 |
+| F29 | 잡코리아는 고른 지역 중 하나라도 맞으면 남김 | `test_matches_any_of_several_locations`, `test_jobkorea_keeps_any_of_several_locations` | 통과 |
+| F29 | 화면 지역 칸 여러 개, 기본값 프로필 희망 지역(재택·원격 뺌), 프로필 없으면 빈칸 | `test_collect_button_starts_collect_with_inputs`, `test_collect_regions_start_from_profile`, `test_collect_regions_empty_without_profile`, `test_default_regions_follow_profile_but_skip_unknown` | 통과 |
+| F30 | DB에서 지원한 공고 남기기·모두 지우기, 빈 표 | `test_delete_rows_keeps_applied_rows`, `test_delete_rows_all` | 통과 |
+| F30 | 시트 저장이면 지우지 않고 오류, 화면에 버튼 없음 | `test_store_delete_rows_only_in_db_mode`, `test_reset_postings_in_sheet_mode_is_refused`, `test_reset_hidden_in_sheet_mode` | 통과 |
+| F30 | 지운 공고의 원문·받은함·done 이미지만 지우고 남긴 공고·모르는 파일은 그대로, 폴더 없을 때 | `test_reset_postings_removes_rows_and_their_files_only`, `test_reset_postings_without_files_or_folders` | 통과 |
+| F30 | 수집·평가 중이면 막음 | `test_reset_postings_refused_while_job_runs` | 통과 |
+| F30 | 확인 창(지울 수, 지원한 공고 수), 취소, 남기기 끄고 지우기, 알림, 오류는 창에 남음, 지울 것 없으면 버튼 꺼짐 | `test_reset_asks_with_counts_then_removes`, `test_reset_error_stays_in_dialog`, `test_reset_button_disabled_when_only_applied_kept` | 통과 |
+
 F17로 키 칸 테스트 3개를 창 테스트로 바꿈. 테스트 화면은 기본으로 가짜 키가 있는 상태로 띄움(키가 없으면 키 창이 먼저 떠서 사용법 창 테스트가 달라짐).
 
 F16 재현 시도: 평가를 가짜로 바꾼 화면(한 건 2초, 0초 두 경우)에서 Playwright로 "평가 전 전부 평가"를 눌렀을 때 두 경우 모두 끝나자마자 점수가 보였음. 재리 PC에서 생긴 조건은 재현 못 함.
@@ -116,9 +136,13 @@ F16 재현 시도: 평가를 가짜로 바꾼 화면(한 건 2초, 0초 두 경�
 | 1300px 밝은·어두운(F26) | 점 무늬 바탕, 라임 제목·꼬리표, 라임 수집·평가 버튼, 요약 칸 4색과 고른 칸 검정, 카드 도넛 원·왼쪽 라임 띠, 자세히 창 사선 띠, TOP 5 코발트 막대(바탕 비침), 프로필 칸 제목 글꼴·"전체 초기화" 글자 안 잘림 | 확인 |
 | 1300·1000·800px(F28) | 요약 네 칸 높이: 1300px 모두 182px, 1000·800px 모두 204px(이미지 필요 칸 글이 두 줄이어도 같음) | 확인 |
 | 1300px(F27) | 자세히 창 바탕: 시스템 어두운 → 어두운 카드색, 그 상태로 ⋮ Light → 밝은 카드색, 시스템 밝은 → 밝은, ⋮ Dark → 어두운. 고치기 전에는 시스템 어두운에서도 밝은 크림색. 스크립트 칸 때문에 생긴 빈 줄 없음 | 확인 |
+| 1300px(F30) | DB 저장(SQLite) 공고 3건 중 지원 1건: 🗑 공고 초기화 → 창 "지원한 공고는 남기기 (1건)", "2건" → 체크 끄면 "3건"(창 유지) → 다시 켜고 지우기 → 창 닫힘, 알림 "공고 2건 지움, 지원한 공고 1건 남김", 목록 1건, DB에 지원한 줄만, 원문 파일도 그 공고 것만 남음 | 확인 |
 | 900px | 수집 카드 사이트 칸 키워드가 줄을 바꿔 보임(칸이 좁아 "잡코…"처럼 끝이 줄어듦) | 확인 |
 
 ## 미확인
+
+- **F29 사람인 여러 지역**: `loc_mcd`에 코드를 쉼표로 이어 넣는 주소를 사람인이 받아 여러 지역 공고를 주는지 실제 사이트로 확인 못 함(작업 환경은 사이트 접속 막힘). 재리 PC에서 "서울+경기" 수집으로 확인 필요. 안 되면 지역마다 따로 요청하는 방식으로 바꿔야 함.
+- **F30 실제 Postgres**: SQLite로만 확인. Docker compose의 Postgres에서 지우기는 재리 PC 확인 필요.
 
 - **F16 원인**: 재리 PC에서 갱신이 안 된 조건을 재현하지 못함. 놓칠 수 있는 길을 막았지만 같은 증상이 다시 나면 조건(시트/DB, 평가 건수, 탭) 확인 필요.
 - **알림(F5) 실제 화면**: AppTest로만 확인. 실제 수집을 돌려 브라우저에서 알림이 뜨는 모습은 보지 않음.

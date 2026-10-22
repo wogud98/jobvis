@@ -23,8 +23,8 @@ MAX_BODY = 6000  # LLM에 넘기는 원문 최대 글자 수 (F16)
 class State(TypedDict, total=False):
     keyword: str
     sources: list[str]
-    location: str | None  # 지역 이름. 주소에 지역 조건을 못 넣는 사이트에서 거를 때 쓴다
-    region_code: str | None
+    locations: list[str]  # 지역 이름들. 주소에 지역 조건을 못 넣는 사이트에서 거를 때 쓴다 (v0.6.1 F29)
+    region_codes: list[str]
     job_code: str | None
     career: str | None
     count: int
@@ -77,7 +77,7 @@ def _keep(job: dict, state: State, source: str) -> bool:
     if not codes.matches_career(job["experience"], state.get("career")):
         return False
     # 사람인은 지역을 검색 주소에 넣는다. 잡코리아는 받은 목록에서 지역 이름으로 거른다 (F3).
-    return source == saramin.SOURCE or codes.matches_location(job["location"], state.get("location"))
+    return source == saramin.SOURCE or codes.matches_location(job["location"], state.get("locations"))
 
 
 def fetch(state: State) -> State:

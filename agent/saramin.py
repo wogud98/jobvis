@@ -19,8 +19,8 @@ EXPERIENCE_CODES = {"신입": "1", "경력": "2"}
 
 def search_url(keyword: str, filters: dict) -> str:
     params = {"searchword": keyword, "recruitPageCount": PAGE_SIZE, "sort": "RD"}  # 등록일순
-    if filters.get("region_code"):
-        params["loc_mcd"] = filters["region_code"]
+    if filters.get("region_codes"):
+        params["loc_mcd"] = ",".join(filters["region_codes"])  # 여러 지역은 쉼표로 (v0.6.1 F29)
     if filters.get("job_code"):
         params["cat_kewd"] = filters["job_code"]
     if filters.get("career"):

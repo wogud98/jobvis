@@ -71,7 +71,14 @@ def test_matches_career_by_text(experience, new, experienced):
 
 
 def test_matches_location():
-    assert codes.matches_location("서울 강남구", "서울")
-    assert not codes.matches_location("부산 해운대구", "서울")
-    assert not codes.matches_location("", "서울")
+    assert codes.matches_location("서울 강남구", ["서울"])
+    assert not codes.matches_location("부산 해운대구", ["서울"])
+    assert not codes.matches_location("", ["서울"])
     assert codes.matches_location("", None)
+    assert codes.matches_location("", [])
+
+
+def test_matches_any_of_several_locations():
+    """여러 지역 중 하나라도 맞으면 남긴다 (v0.6.1 F29)."""
+    assert codes.matches_location("경기 성남시", ["서울", "경기"])
+    assert not codes.matches_location("부산 해운대구", ["서울", "경기"])

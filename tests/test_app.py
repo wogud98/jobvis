@@ -8,7 +8,7 @@ import streamlit as st
 import yaml
 from streamlit.testing.v1 import AppTest
 
-from agent import ocr, postings, profile_form, runner, sheets
+from agent import db, ocr, postings, profile_form, runner, sheets
 
 APP = str(Path(__file__).parent.parent / "app.py")
 
@@ -204,7 +204,7 @@ def test_collect_button_starts_collect_with_inputs(app, monkeypatch):
     monkeypatch.setattr(runner, "start_collect", lambda state: started.append(state))
     at = app([])
     next(s for s in at.selectbox if s.label == "키워드 *").set_value(runner.JOB_NAMES[0])
-    next(s for s in at.selectbox if s.label == "지역").set_value("서울")
+    next(m for m in at.multiselect if m.label == "지역").set_value(["서울", "경기"])
     next(r for r in at.radio if r.label == "경력").set_value("신입")
     next(m for m in at.multiselect if m.label == "사이트").set_value(["잡코리아"])
     next(n for n in at.number_input if n.label == "사이트당 개수").set_value(5)
@@ -215,8 +215,8 @@ def test_collect_button_starts_collect_with_inputs(app, monkeypatch):
         {
             "keyword": runner.JOB_NAMES[0],
             "sources": ["jobkorea"],
-            "location": "서울",
-            "region_code": runner.codes.to_region_code("서울"),
+            "locations": ["서울", "경기"],
+            "region_codes": ["101000", "102000"],
             "job_code": None,
             "career": "신입",
             "count": 5,
@@ -1113,3 +1113,87 @@ def test_summary_tiles_keep_same_height():
 
     assert ':has(> div[class*="st-key-box-summary-"]) { flex: 1 1 auto; }' in screen.CSS  # v0.6.1 F28
     assert 'div[class*="st-key-box-summary-"] { height: 100%; }' in screen.CSS
+
+
+# ---- 지역 여러 개 (v0.6.1 F29) ----
+
+
+def test_collect_regions_start_from_profile(app, tmp_path):
+    (tmp_path / "profile.yaml").write_text(
+        PROFILE_TEXT.replace("goals: 에이전트 개발", "goals: 에이전트 개발, locations: [경기, 재택·원격]"),
+        encoding="utf-8",
+    )
+    at = app([])
+
+    regions = next(m for m in at.multiselect if m.label == "지역")
+    assert regions.value == ["경기"]  # 프로필 희망 지역. 사이트 지역에 없는 "재택·원격"은 뺌
+
+
+def test_collect_regions_empty_without_profile(app):
+    at = app([])
+
+    assert next(m for m in at.multiselect if m.label == "지역").value == []  # 비우면 전체
+
+
+# ---- DB 공고 초기화 (v0.6.1 F30) ----
+
+
+def test_reset_hidden_in_sheet_mode(app, monkeypatch):
+    monkeypatch.delenv("JOBVIS_STORAGE", raising=False)
+    at = app([make_row(2)])
+
+    assert not [b for b in at.button if b.key == "reset-open"]
+
+
+def db_app(app, monkeypatch, rows):
+    monkeypatch.setenv("JOBVIS_STORAGE", "db")
+    monkeypatch.setattr(db, "read_rows_readonly", lambda: rows)
+    return app(rows)
+
+
+def test_reset_asks_with_counts_then_removes(app, monkeypatch):
+    calls = []
+
+    def fake_reset(keep):
+        calls.append(keep)
+        return runner.ResetResult(rows=1, files=2, kept=1)
+
+    monkeypatch.setattr(runner, "reset_postings", fake_reset)
+    at = db_app(app, monkeypatch, [make_row(2), make_row(3, applied="TRUE")])
+
+    at.button(key="reset-open").click().run()
+    assert len(at.get("dialog")) == 1 and not calls  # 바로 지우지 않고 묻는다
+    assert "1건" in at.checkbox(key="reset-keep").label  # 지원한 공고 수
+    assert any("**1건**" in m.value for m in at.markdown)  # 지울 공고 수 (지원한 공고 남김)
+    at.button(key="reset-no").click().run()
+    assert not calls  # 취소
+
+    at.button(key="reset-open").click().run()
+    at.checkbox(key="reset-keep").uncheck()
+    at.button(key="reset-yes").click().run()
+
+    assert calls == [False]
+    assert any("공고 1건 지움, 지원한 공고 1건 남김" in t.value for t in at.toast)
+
+
+def test_reset_error_stays_in_dialog(app, monkeypatch):
+    def fail(keep):
+        raise runner.RunError("수집을 실행하는 중입니다. 끝난 뒤 다시 눌러 주세요.")
+
+    monkeypatch.setattr(runner, "reset_postings", fail)
+    at = db_app(app, monkeypatch, [make_row(2)])
+
+    at.button(key="reset-open").click().run()
+    at.button(key="reset-yes").click().run()
+
+    assert any("실행하는 중" in e.value for e in at.error)
+    assert not at.toast
+
+
+def test_reset_button_disabled_when_only_applied_kept(app, monkeypatch):
+    monkeypatch.setattr(runner, "reset_postings", lambda keep: pytest.fail("지울 공고가 없으면 누를 수 없음"))
+    at = db_app(app, monkeypatch, [make_row(2, applied="TRUE")])
+
+    at.button(key="reset-open").click().run()
+
+    assert at.button(key="reset-yes").disabled

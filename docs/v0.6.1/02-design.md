@@ -61,6 +61,45 @@
 
 | D28 | 요약 칸도 프로필 칸(D7)과 같이 감싼 `stLayoutWrapper`를 늘리고 칸 `height: 100%` (F28) | 같은 방법이 이미 프로필에서 확인됨 |
 
+## 보완 결정 (F29–F30)
+
+| ID | 결정 | 이유 |
+| --- | --- | --- |
+| D29 | State `location`·`region_code`(글자 하나)를 `locations`·`region_codes`(목록)로 바꿈. `runner.collect_state`가 목록이나 "서울,경기" 글자를 받아 겹친 이름을 빼고 코드로 바꿈. 모르는 이름이 하나라도 있으면 요청 전에 멈춤(v0.2 F11 그대로). 사람인 `loc_mcd`는 코드를 쉼표로 이음. 잡코리아는 `codes.matches_location`이 이름 중 하나라도 들어 있으면 남김. 화면 기본값은 `runner.default_regions(profile)` | 화면·터미널이 같은 함수를 씀(v0.5.2 F14). 사람인 검색 화면이 여러 지역을 쉼표로 넘기는 모양을 따름(실제 응답은 미확인) |
+| D30 | `db.delete_rows(keep_applied)`가 지울 줄을 읽고 지운 뒤 돌려줌. `store.delete_rows`는 DB일 때만, 시트면 `StorageError`. `runner.reset_postings`가 작업 잠금 안에서 지우고, 지운 줄의 (출처, 공고ID)로 `data/postings/출처_ID.txt`와 `data/inbox`·`done`의 같은 이름 이미지를 지움. 이름 형식이 아닌 파일·남긴 공고 파일은 그대로. 화면은 `st.dialog` 확인 창, 지우기는 버튼 콜백에서(창 안만 다시 그려질 때도 지움), 못 지우면 창에 이유를 다시 보임 | 남긴 공고의 원문·이미지까지 지우면 다시 평가할 때 본문이 사라짐. 작업 중 지우면 수집이 지운 공고를 다시 쓸 수 있어 같은 잠금으로 막음 |
+
+```mermaid
+classDiagram
+    class State {
+        keyword: str
+        sources: list~str~
+        locations: list~str~
+        region_codes: list~str~
+        job_code: str | None
+        career: str | None
+        count: int
+    }
+    note for State "F29: location → locations, region_code → region_codes"
+```
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant A as app (사이드바·확인 창)
+    participant R as runner.reset_postings
+    participant D as store / db
+    participant F as data/postings, data/inbox
+    U->>A: 🗑 공고 초기화
+    A->>U: 확인 창 (지울 수, 지원한 공고 남기기)
+    U->>A: 지우기
+    A->>R: reset_postings(keep)
+    R->>R: 작업 잠금 (수집·평가 중이면 RunError)
+    R->>D: delete_rows(keep) → 지운 줄
+    R->>F: 지운 줄의 원문·이미지 삭제
+    R-->>A: ResetResult(지운 수, 파일 수, 남긴 수)
+    A->>A: reload_rows, 알림 "공고 n건 지움"
+```
+
 v0.5.3 다크 모드 흐름은 아래로 바뀜.
 
 ```mermaid

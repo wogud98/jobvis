@@ -6,7 +6,7 @@ import pytest
 import requests
 from langchain_core.exceptions import ModelNotFoundError
 
-from agent import codes, inbox, ocr, reports, runner, scoring, sheets, user_profile
+from agent import codes, inbox, ocr, postings, reports, runner, scoring, sheets, store, user_profile
 
 
 @pytest.fixture(autouse=True)
@@ -31,13 +31,13 @@ class FakeGraph:
 
 
 def test_collect_state_from_screen_inputs():
-    state = runner.collect_state(" 백엔드 ", "서울", None, "신입", ["saramin"], 5)
+    state = runner.collect_state(" 백엔드 ", ["서울", "경기", "서울"], None, "신입", ["saramin"], 5)
 
     assert state == {
         "keyword": "백엔드",
         "sources": ["saramin"],
-        "location": "서울",
-        "region_code": codes.to_region_code("서울"),
+        "locations": ["서울", "경기"],  # 겹친 이름은 한 번
+        "region_codes": ["101000", "102000"],
         "job_code": None,
         "career": "신입",
         "count": 5,
@@ -48,7 +48,7 @@ def test_collect_state_all_career_and_default_sources():
     state = runner.collect_state("백엔드", career=runner.CAREER_ALL)
 
     assert state["career"] is None and state["sources"] == list(runner.SOURCES)
-    assert state["location"] is None and state["region_code"] is None
+    assert state["locations"] == [] and state["region_codes"] == []
 
 
 @pytest.mark.parametrize(
@@ -68,7 +68,23 @@ def test_collect_state_rejects_bad_input(args, message):
 
 def test_collect_state_unknown_region_stops_before_request():
     with pytest.raises(codes.CodeNotFoundError):
-        runner.collect_state("백엔드", location="없는지역")
+        runner.collect_state("백엔드", locations=["서울", "없는지역"])
+
+
+def test_region_names_from_list_or_comma_text():
+    """화면은 목록, 터미널은 "서울,경기" 글자로 준다 (v0.6.1 F29)."""
+    assert runner.region_names(["서울", " 경기 ", "", "서울"]) == ["서울", "경기"]
+    assert runner.region_names("서울, 경기,,") == ["서울", "경기"]
+    assert runner.region_names("") == [] and runner.region_names(None) == []
+    assert runner.collect_state("백엔드", "서울,경기")["region_codes"] == ["101000", "102000"]
+
+
+def test_default_regions_follow_profile_but_skip_unknown():
+    raw = {"direction": {"locations": ["서울", "재택·원격", "경기"]}}
+
+    assert runner.default_regions(raw) == ["서울", "경기"]  # 사이트 지역 이름에 없는 "재택·원격"은 뺀다
+    assert runner.default_regions(None) == []
+    assert runner.default_regions({"direction": {"locations": "서울"}}) == ["서울"]  # 글자 하나도 목록으로 읽음
 
 
 def test_keyword_options_put_profile_first_without_duplicates():
@@ -306,3 +322,74 @@ def test_error_text_hides_key_in_unknown_error(monkeypatch):
     job = runner.start("collect", boom, wait=True)
 
     assert "AIzaSyFAKE-runner-0000" not in job.error and "••••" in job.error  # v0.6.1 F12
+
+
+# ---- DB 공고 초기화 (v0.6.1 F30) ----
+
+
+def stored(number: int, **changes) -> dict:
+    row = dict.fromkeys(sheets.KEYS, "")
+    return row | {"row": number, "source": "사람인", "id": str(number)} | changes
+
+
+def test_reset_counts_total_and_applied():
+    rows = [stored(1, applied="TRUE"), stored(2, applied="FALSE"), stored(3)]
+
+    assert runner.reset_counts(rows) == (3, 1)
+    assert runner.reset_counts([]) == (0, 0)
+
+
+def test_reset_postings_removes_rows_and_their_files_only(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    removed = [stored(1), stored(2, source="잡코리아", id="77")]
+    left = [stored(3, applied="TRUE")]
+    monkeypatch.setattr(store, "delete_rows", lambda keep: removed if keep else pytest.fail("남기기를 넘겨야 함"))
+    monkeypatch.setattr(store, "read_rows", lambda: left)
+    for source, job_id in (("saramin", "1"), ("jobkorea", "77"), ("saramin", "3")):
+        postings.save(source, job_id, "원문")
+    inbox.DIR.mkdir(parents=True)
+    inbox.DONE.mkdir()
+    (inbox.DIR / "saramin_1.png").write_bytes(b"x")
+    (inbox.DONE / "jobkorea_77_2.png").write_bytes(b"x")
+    (inbox.DIR / "saramin_3.png").write_bytes(b"x")  # 남긴 공고 이미지
+    (inbox.DIR / "메모.txt").write_text("이름 형식 아님")
+
+    result = runner.reset_postings(keep_applied=True)
+
+    assert (result.rows, result.files, result.kept) == (2, 4, 1)
+    assert not postings.path("saramin", "1").exists() and not postings.path("jobkorea", "77").exists()
+    assert postings.path("saramin", "3").exists() and (inbox.DIR / "saramin_3.png").exists()
+    assert (inbox.DIR / "메모.txt").exists()  # 모르는 파일은 건드리지 않음
+
+
+def test_reset_postings_without_files_or_folders(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(store, "delete_rows", lambda keep: [stored(1)])
+    monkeypatch.setattr(store, "read_rows", lambda: pytest.fail("모두 지우면 다시 셀 필요 없음"))
+
+    result = runner.reset_postings(keep_applied=False)
+
+    assert (result.rows, result.files, result.kept) == (1, 0, 0)
+
+
+def test_reset_postings_refused_while_job_runs(monkeypatch):
+    release = threading.Event()
+    job = runner.start("collect", lambda job: reports.Summary(release.wait(5) and "끝"))
+    monkeypatch.setattr(store, "delete_rows", lambda keep: pytest.fail("작업 중에는 지우지 않음"))
+    try:
+        with pytest.raises(runner.RunError, match="수집을 실행하는 중"):
+            runner.reset_postings()
+    finally:
+        release.set()
+    for _ in range(100):
+        if job.finished:
+            break
+        threading.Event().wait(0.05)
+
+
+def test_reset_postings_in_sheet_mode_is_refused(monkeypatch):
+    monkeypatch.delenv("JOBVIS_STORAGE", raising=False)
+    monkeypatch.setattr(sheets, "_sheet", lambda: pytest.fail("시트는 지우지 않음"))
+
+    with pytest.raises(store.StorageError, match="DB 저장에서만"):
+        runner.reset_postings()

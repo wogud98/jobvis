@@ -67,7 +67,7 @@ def test_parse_deadline(text, today, expected):
 
 
 def test_search_url_puts_conditions_in_address():
-    url = saramin.search_url("백엔드 신입", {"region_code": "101000", "job_code": "84", "career": "신입"})
+    url = saramin.search_url("백엔드 신입", {"region_codes": ["101000"], "job_code": "84", "career": "신입"})
 
     parts = urlsplit(url)
     assert parts.netloc == "www.saramin.co.kr"
@@ -115,3 +115,16 @@ def test_parse_detail_without_body_area_is_empty():
 
     assert detail.text == ""
     assert detail.images == []
+
+
+def test_search_url_joins_several_regions_with_comma():
+    """여러 지역은 loc_mcd 하나에 쉼표로 (v0.6.1 F29). 사람인이 받는지는 재리 PC에서 확인 (미확인)."""
+    query = parse_qs(urlsplit(saramin.search_url("백엔드", {"region_codes": ["101000", "102000"]})).query)
+
+    assert query["loc_mcd"] == ["101000,102000"]
+
+
+def test_search_url_without_region_has_no_loc_mcd():
+    query = parse_qs(urlsplit(saramin.search_url("백엔드", {"region_codes": []})).query)
+
+    assert "loc_mcd" not in query
