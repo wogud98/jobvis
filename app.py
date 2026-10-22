@@ -79,21 +79,45 @@ GUIDE_SHOWN = "guide_shown"  # 처음 연 화면에서 사용법 창을 띄웠�
 CLEARED = "profile_cleared"  # 화면에서 비운 프로필 칸 {칸 keys} (v0.5.5 F1)
 GENERATION = "profile_generation"  # 칸을 비울 때마다 올려 입력란을 새로 그린다 {칸 keys: 번호} (v0.5.5 F1)
 
-# 테마별 색 (v0.5.3 F13–F15). 테두리·그림자·글자(ink), 바탕(paper), 카드 면(card), 흐린 글자(muted)
+# 테마별 색 (v0.5.3 F13–F15). 테두리·그림자(ink), 글자(text), 바탕(paper), 카드 면(card), 흐린 글자(muted)
 PALETTES = {
     "light": {
-        "ink": "#111111", "paper": "#fffdf5", "card": "#ffffff", "field": "#ffffff", "green": "#059669",
-        "muted": "#444444", "sub": "#333333", "highlight": "#6ee7b7", "title": "#111111",
+        "ink": "#111111", "text": "#111111", "paper": "#fffdf5", "card": "#ffffff", "field": "#ffffff",
+        "green": "#059669", "muted": "#444444", "sub": "#333333", "highlight": "#6ee7b7", "title": "#111111",
         "tile0": "#ffe066", "tile1": "#a5d8ff", "tile2": "#8ce99a", "tile3": "#ffc9c9", "tile-text": "#111111",
+        # 고른 요약 칸은 색을 뒤집어 다른 칸과 바로 구분한다 (v0.6.1 F21)
+        "sel": "#111111", "sel-text": "#ffffff",
+        "high": "#8ce99a", "mid": "#ffe066", "low": "#ffa8a8", "closed": "#ced4da", "badge-text": "#111111",
     },
     "dark": {
-        # 바탕은 더 어둡게, 칸은 한 단계 밝게, 입력란은 칸보다 어둡게 (v0.5.4 F13)
-        "ink": "#999090", "paper": "#0e1013", "card": "#323B4B", "field": "#1a1d23", "green": "#34d399",
-        "muted": "#b0b4ba", "sub": "#d0d3d8", "highlight": "#047857", "title": "#ffffff",
-        # 요약 칸은 같은 색 계열의 짙은 톤 + 밝은 글자 (v0.5.4 F11)
-        "tile0": "#5c4a12", "tile1": "#1d3f5e", "tile2": "#1f4d33", "tile3": "#5c2626", "tile-text": "#f1f1f1",
+        # 회청색 한 계열로 맞추고, 순백·순흑과 쨍한 색을 피해 눈부심을 줄인다 (v0.6.1 F22)
+        "ink": "#4b5563", "text": "#e5e7eb", "paper": "#14161a", "card": "#1f232a", "field": "#181b20",
+        "green": "#34d399", "muted": "#9ca3af", "sub": "#cbd0d6", "highlight": "#047857", "title": "#ffffff",
+        "tile0": "#4a4024", "tile1": "#24384d", "tile2": "#243f31", "tile3": "#4a2c30", "tile-text": "#e5e7eb",
+        "sel": "#d1d5db", "sel-text": "#111318",
+        "high": "#2f5a43", "mid": "#5a4d22", "low": "#5c3034", "closed": "#3a3f47", "badge-text": "#e5e7eb",
     },
 }  # fmt: skip
+
+
+def chart_spec(data: list[tuple[str, int]]) -> dict:
+    """TOP 5 가로 막대 명세. 선택·확대 params가 없어 움직이지 않는다 (v0.6.1 F23)."""
+    return {
+        "data": {"values": [{"공고": name, "종합점수": score} for name, score in data]},
+        "mark": {"type": "bar", "color": ACCENT},
+        "encoding": {
+            "y": {
+                "field": "공고",
+                "type": "nominal",
+                "sort": "-x",
+                "title": None,
+                "axis": {"labelLimit": 260},
+            },  # 높은 점수가 위 (F42)
+            "x": {"field": "종합점수", "type": "quantitative", "scale": {"domain": [0, 100]}},
+            "tooltip": [{"field": "공고"}, {"field": "종합점수"}],
+        },
+        "height": CHART_HEIGHT,
+    }
 
 
 def css(theme: str | None) -> str:
@@ -136,9 +160,12 @@ div[class*="st-key-box-profile"] div[class*="st-key-clear-"] button {
   background: transparent !important; font-size: 1.1rem; color: var(--jv-muted) !important; }
 div[class*="st-key-box-profile"] div[class*="st-key-clear-"] button:hover {
   color: var(--jv-green) !important; transform: none !important; box-shadow: none !important; }
-/* 지금 적용 중인 칸은 굵은 테두리 + 제목 앞 ✓. 초록은 다른 곳에도 써서 모양으로 구분 (v0.5.4 F12, v0.6.1 F15) */
+/* 지금 적용 중인 칸은 굵은 테두리 + 제목 앞 ✓. 초록은 다른 곳에도 써서 모양으로 구분 (v0.5.4 F12, v0.6.1 F15).
+   면 색도 뒤집어 한눈에 보이게 (v0.6.1 F21) */
 div[class*="st-key-box-summary"][class*="-on"] { border-width: 5px !important; transform: translate(-2px, -2px);
   box-shadow: 9px 9px 0 var(--jv-ink); }
+div[class*="st-key-box-summary"][class*="-on"] { background: var(--jv-sel) !important; }
+div[class*="st-key-box-summary"][class*="-on"] * { color: var(--jv-sel-text) !important; }
 div[data-testid="stExpander"] details {
   background: var(--jv-card); border: 2px solid var(--jv-ink) !important; border-radius: 6px !important;
   box-shadow: 3px 3px 0 var(--jv-ink);
@@ -178,7 +205,7 @@ div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
 }
 div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg { width: 0.7em; height: 0.7em; }
 div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
-div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: var(--jv-ink); }
+div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: var(--jv-text); }
 /* 제목은 크게, 어두운 테마에서는 흰색 (v0.6.1 F1). 뒤 형광 줄은 뺐다 (v0.6.1 F19) */
 .jv-hero h1 { margin: 0; padding: 0; font-size: 4rem; font-weight: 900; color: var(--jv-title);
   letter-spacing: -0.03em; line-height: 1.05; }
@@ -187,12 +214,12 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
 .jv-muted { color: var(--jv-muted); font-size: 0.9rem; }
 .jv-badge { display: inline-block; margin-right: 6px; padding: 1px 9px; border: 2px solid var(--jv-ink);
   border-radius: 4px; font-size: 0.8rem; font-weight: 800; }
-.jv-verdict { background: var(--jv-card); color: var(--jv-ink); }
-.jv-high { background: #8ce99a; color: #111111; }
-.jv-mid { background: #ffe066; color: #111111; }
-.jv-low { background: #ffa8a8; color: #111111; }
-.jv-closed { background: #ced4da; color: #111111; }
-.jv-plain { background: var(--jv-card); color: var(--jv-ink); }
+.jv-verdict { background: var(--jv-card); color: var(--jv-text); }
+.jv-high { background: var(--jv-high); color: var(--jv-badge-text); }
+.jv-mid { background: var(--jv-mid); color: var(--jv-badge-text); }
+.jv-low { background: var(--jv-low); color: var(--jv-badge-text); }
+.jv-closed { background: var(--jv-closed); color: var(--jv-badge-text); }
+.jv-plain { background: var(--jv-card); color: var(--jv-text); }
 .jv-new { background: var(--jv-green); color: var(--jv-card); }
 /* 자세히 (v0.5.3 F1–F5) */
 .jv-bar-row { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
@@ -202,8 +229,8 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
 .jv-bar > div.jv-high, .jv-bar > div.jv-mid, .jv-bar > div.jv-low { border-radius: 0; }
 .jv-bar-num { width: 2.2em; text-align: right; font-weight: 900; }
 .jv-chip { display: inline-block; margin: 0 6px 6px 0; padding: 2px 10px; border: 2px solid var(--jv-ink);
-  border-radius: 4px; font-size: 0.85rem; font-weight: 700; background: var(--jv-card); color: var(--jv-ink); }
-.jv-chip.jv-mine { background: #8ce99a; color: #111111; }
+  border-radius: 4px; font-size: 0.85rem; font-weight: 700; background: var(--jv-card); color: var(--jv-text); }
+.jv-chip.jv-mine { background: var(--jv-high); color: var(--jv-badge-text); }
 .jv-strength { color: var(--jv-sub); font-size: 0.9rem; }
 /* 카드 체크·점수·버튼 칸은 창이 좁아져도 글자가 잘리지 않게 (v0.6.1 F4) */
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"] div[class*="st-key-check-"]) {
@@ -696,15 +723,8 @@ def show_postings() -> None:
     if data:  # 점수 있는 공고가 있을 때만 칸을 보인다 (v0.6.1 F6)
         with st.container(border=True, key="box-chart"):  # 필터가 사이드바로 가서 가로 전체 (v0.5.4 F1)
             st.markdown(f"**종합점수 TOP {view.TOP}**")
-            st.bar_chart(
-                {"공고": [name for name, _ in data], "종합점수": [score for _, score in data]},
-                x="공고",
-                y="종합점수",
-                horizontal=True,
-                sort="-종합점수",  # 기본은 이름순이라 높은 점수가 위로 오게 (F42)
-                color=ACCENT,
-                height=CHART_HEIGHT,
-            )
+            # 확대·끌기 없는 고정 차트. st.bar_chart는 늘 움직여서 vega-lite 명세로 그린다 (v0.6.1 F23)
+            st.vega_lite_chart(spec=chart_spec(data), width="stretch")
 
     show_score_bar(rows)  # 목록 바로 위. 대상 수는 필터와 상관없이 전체 시트 기준 (F38)
     if st.session_state.get(PAGE_FILTERS) != filters:  # 필터·정렬을 바꾸면 1쪽부터 (F41)

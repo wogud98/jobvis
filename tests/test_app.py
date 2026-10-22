@@ -668,10 +668,10 @@ def test_css_follows_theme_and_guide_mentions_theme(app):
     import app as screen  # 저장소 app.py
 
     dark = screen.css("dark")
-    assert "--jv-paper: #0e1013" in dark and "--jv-card: #323B4B" in dark  # v0.5.4 F13, PR #37 색 조정
+    assert "--jv-paper: #14161a" in dark and "--jv-card: #1f232a" in dark  # v0.6.1 F22 색 다시 맞춤
     assert "--jv-paper: #fffdf5" in screen.css("light") and "--jv-paper: #fffdf5" in screen.css(None)
     assert "/*VARS*/" not in screen.css("dark")
-    assert "--jv-tile0: #5c4a12" in screen.css("dark") and "--jv-tile-text: #f1f1f1" in screen.css("dark")  # v0.5.4 F11
+    assert "--jv-tile0: #4a4024" in dark and "--jv-tile-text: #e5e7eb" in dark  # v0.5.4 F11, v0.6.1 F22
     at = app([])
     assert any("Theme" in m.value for m in at.markdown)
 
@@ -970,3 +970,43 @@ def test_sidebar_filter_is_a_card_and_selected_tile_is_marked():
     assert 'st-key-box-filter"] { padding: 16px; }' in screen.CSS  # v0.6.1 F20
     assert "background: var(--jv-paper); }" in screen.CSS
     assert '[class*="-on"] { border-width: 5px !important;' in screen.CSS  # 초록 대신 굵은 테두리 (F15)
+
+
+# ---- v0.6.1 보완 3차: 고른 칸 색, 어두운 테마, 고정 차트 ----
+
+
+def test_selected_tile_inverts_colors():
+    import app as screen
+
+    assert 'div[class*="st-key-box-summary"][class*="-on"] { background: var(--jv-sel) !important; }' in screen.CSS
+    assert '[class*="-on"] * { color: var(--jv-sel-text) !important; }' in screen.CSS  # v0.6.1 F21
+    assert "--jv-sel: #111111" in screen.css("light") and "--jv-sel-text: #ffffff" in screen.css("light")
+    # 고른 칸 면 색은 요약 칸 4색과 겹치지 않는다
+    for theme in ("light", "dark"):
+        palette = screen.PALETTES[theme]
+        assert palette["sel"] not in {palette[f"tile{i}"] for i in range(4)}
+
+
+def test_dark_theme_avoids_glare_and_badges_follow_theme():
+    import app as screen
+
+    dark = screen.PALETTES["dark"]
+    assert dark["text"] != "#ffffff" and dark["paper"] != "#000000"  # 순백 글자·순흑 바탕 피함 (v0.6.1 F22)
+    assert set(dark) == set(screen.PALETTES["light"])  # 두 테마가 같은 이름을 모두 채움
+    assert ".jv-high { background: var(--jv-high); color: var(--jv-badge-text); }" in screen.CSS
+    assert "#8ce99a" not in screen.CSS  # 배지 색도 테마를 따름
+    config = (Path(screen.__file__).parent / ".streamlit" / "config.toml").read_text(encoding="utf-8")
+    assert 'backgroundColor = "#14161a"' in config and 'borderColor = "#4b5563"' in config  # PALETTES와 같게
+
+
+def test_top5_chart_is_static(app):
+    import app as screen
+
+    spec = screen.chart_spec([("회사1", 80), ("회사2", 60)])
+    assert "params" not in spec and "selection" not in str(spec)  # 확대·끌기 없음 (v0.6.1 F23)
+    assert spec["encoding"]["y"]["sort"] == "-x"  # 높은 점수가 위 (F42)
+    assert [v["종합점수"] for v in spec["data"]["values"]] == [80, 60]
+    at = app([scorable(2), make_row(3, score="70", verdict="추천", trust="높음", body="글자")])
+    assert not at.exception
+    [chart] = at.get("vega_lite_chart")  # st.bar_chart(늘 확대·끌기 됨) 대신 명세 차트
+    assert '"params"' not in chart.proto.spec and "#059669" in chart.proto.spec

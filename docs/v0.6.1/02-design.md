@@ -1,6 +1,6 @@
 # v0.6.1 설계
 
-모듈 구조, 호출 순서, 저장 칸은 v0.6과 같다. 그래서 UML은 [v0.6 설계](../v0.6/02-design.md)를 그대로 쓴다. 바뀌는 곳은 `app.py`(화면·CSS·키 삭제), `agent/resume.py`(합치기), `agent/settings.py`(`delete_key`, `redact` 함수 추가), `runner.error_text`·`reports`(가리기 호출), `docker-compose.yml`·`Dockerfile`이다. 새 모듈과 State 필드는 없다.
+모듈 구조, 호출 순서, 저장 칸은 v0.6과 같다. 그래서 UML은 [v0.6 설계](../v0.6/02-design.md)를 그대로 쓴다. 바뀌는 곳은 `app.py`(화면·CSS·키 삭제), `agent/resume.py`(합치기), `agent/settings.py`(`delete_key`, `redact` 함수 추가), `runner.error_text`·`reports`(가리기 호출), `docker-compose.yml`·`Dockerfile`이다. 새 모듈과 State 필드는 없다. 보완 3차(F21–F23)는 `app.py`에 `chart_spec()` 함수 하나, 팔레트 이름 몇 개, `.streamlit/config.toml` 어두운 테마 값만 바뀐다.
 
 ## 결정
 
@@ -26,5 +26,14 @@
 | D13 | 창은 한 번에 하나라, 키가 없으면 키 창이 먼저, 키를 넣은 뒤 사용법 창 (F17) | 처음 쓰는 사람이 키부터 넣게 |
 | D14 | 이력서 칸은 `st.expander(expanded=프로필 비었음 or 채운 값 있음)` (F18) | 막지 않고 접어서 글을 줄임 |
 | D15 | 사이드바 `background: var(--jv-paper)`, 필터는 `box-filter` 컨테이너(카드 CSS 그대로) (F20) | 메인 카드와 같은 규칙을 그대로 씀 |
+
+## 보완 결정 (F21–F23)
+
+| ID | 결정 | 이유 |
+| --- | --- | --- |
+| D16 | 팔레트에 `sel`·`sel-text`를 두고 `-on` 칸의 면·글자에 씀 (F21) | 요약 칸 4색과 겹치지 않는 색이 뒤집은 색뿐 |
+| D17 | 팔레트에 글자색 `text`를 따로 둠. 지금까지 `ink`(테두리·그림자)를 글자에도 써서 어두운 테마에서 테두리를 차분하게 하면 글자가 흐려졌음. 판정 배지·내 기술 칩 색(`high`·`mid`·`low`·`closed`·`badge-text`)도 팔레트로 옮김 (F22) | 어두운 테마 배지가 밝은 테마 색 그대로라 눈부심 |
+| D18 | `.streamlit/config.toml` `[theme.dark]`를 팔레트와 같은 값으로 맞춤(바탕 `#14161a`, 글자 `#e5e7eb`, 테두리 `#4b5563`, 주 색 `#059669`) (F22) | 입력란·버튼 같은 Streamlit 기본 요소도 같은 계열로 |
+| D19 | TOP 5는 `st.bar_chart` 대신 `st.vega_lite_chart(spec=chart_spec(data))`. 명세에 `params`(선택·확대)가 없어 움직이지 않음. 축 0–100 고정, 이름 260px까지 (F23) | `st.bar_chart`는 늘 `.interactive()`를 붙여 끌기·확대가 됨. 새 의존성 없이 Streamlit 안에서 해결 |
 
 CSS는 v0.5.1 N5처럼 key로 붙는 `st-key-*` 클래스와 `data-testid`에만 건다. Streamlit 판을 올리면 F4·F7·F9 모양을 다시 확인한다.
