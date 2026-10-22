@@ -7,7 +7,17 @@ import os
 
 MIN_SIDE = 300  # 가로나 세로가 이보다 작으면 장식으로 보고 건너뛴다 (F12)
 MAX_IMAGES = 10  # 공고당 최대 장수 (F12)
-INSTALL_HINT = "이미지 OCR을 쓰려면 `pip install -r requirements-ocr.txt`"
+OCR_EXTRA = "약 350MB"  # OCR 이미지를 고르면 더 받는 크기 (v0.6.2 N2, 03-test.md 실측)
+
+
+def install_hint() -> str:
+    """OCR이 없을 때 할 일. 시작 파일로 받은 기본 이미지면 OCR 포함 이미지를 고르라고 한다 (v0.6.2 F7, D5)."""
+    if os.getenv("JOBVIS_IMAGE", "").strip().lower() == "base":
+        return f"OCR을 쓰려면 `JOBVIS 시작.bat`을 다시 열고 OCR 포함을 고르세요({OCR_EXTRA} 더 받음)"
+    return "이미지 OCR을 쓰려면 `pip install -r requirements-ocr.txt`"
+
+
+INSTALL_HINT = install_hint()
 
 
 def available() -> bool:

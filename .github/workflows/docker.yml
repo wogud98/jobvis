@@ -1,7 +1,7 @@
 name: Docker
 
-# 반 배포 이미지가 빌드되고 compose로 뜨는지 확인한다 (v0.6 N3, D11).
-# 이미지가 2.5GB 안팎이라 Docker 관련 파일이 바뀐 PR과 main push에서만 돈다. 이미지를 올리지는 않는다.
+# 반 배포 이미지가 빌드되고 compose로 뜨는지 확인한다 (v0.6 N3, D11, v0.6.2 N3, D4).
+# 이미지가 2.5GB 안팎이라 Docker 관련 파일이 바뀐 PR과 main push에서만 돈다. 올리기는 publish.yml.
 on:
   push:
     branches: [main]
@@ -12,7 +12,9 @@ on:
       - requirements.txt
       - requirements-ocr.txt
       - scripts/warm_ocr.py
+      - scripts/check_image.sh
       - agent/ocr.py
+      - start/**
       - .github/workflows/docker.yml
   pull_request:
     paths:
@@ -22,7 +24,9 @@ on:
       - requirements.txt
       - requirements-ocr.txt
       - scripts/warm_ocr.py
+      - scripts/check_image.sh
       - agent/ocr.py
+      - start/**
       - .github/workflows/docker.yml
 
 jobs:
@@ -32,8 +36,30 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build (OCR 모델 받기 포함)
         run: docker compose build
+      - name: Build base (OCR 없음)
+        run: docker build --target base -t jobvis:base .
       - name: Image size
-        run: docker image ls jobvis:0.6
+        run: |
+          docker image ls jobvis
+          # 받는 크기에 가까운 값(압축). 시작 파일 질문의 "약 N MB 더"를 맞출 때 씀 (v0.6.2 N2)
+          for image in jobvis:base jobvis:0.6; do
+            echo "$image 압축 $(( $(docker save "$image" | gzip -1 | wc -c) / 1000000 ))MB"
+          done
+      - name: 기본 이미지에 OCR 없음
+        run: |
+          docker run --rm jobvis:base python -c "
+          import importlib.util, os
+          assert importlib.util.find_spec('paddleocr') is None
+          from agent import ocr
+          assert not ocr.available() and 'JOBVIS 시작.bat' in ocr.INSTALL_HINT
+          print('기본 이미지 OCR 없음, 안내 문구 맞음')
+          "
+      - name: 비밀 파일 검사
+        run: |
+          sh scripts/check_image.sh jobvis:base
+          sh scripts/check_image.sh jobvis:0.6
+      - name: 시작 파일 compose 확인
+        run: docker compose -f start/compose.yml config -q
       - name: Start
         run: docker compose up -d --wait
       - name: Health

@@ -1,0 +1,41 @@
+# 반 사람용 시작 파일 묶음 (v0.6.2 D6). 소스 코드 없이 GHCR에 올린 이미지를 받아 띄운다.
+# `JOBVIS 시작.bat`이 jobvis.env의 JOBVIS_TAG(latest: OCR 없음, ocr: OCR 포함)로 이미지를 고른다.
+# 볼륨 이름은 저장소의 docker-compose.yml과 같다. 어느 쪽으로 켜도 키·프로필·공고가 이어진다 (D7)
+name: jobvis
+
+services:
+  app:
+    image: ghcr.io/wogud98/jobvis:${JOBVIS_TAG:-latest}
+    ports:
+      - "127.0.0.1:8501:8501"  # 이 PC에서만 열림 (v0.6 D10)
+    environment:
+      JOBVIS_STORAGE: db
+      DATABASE_URL: postgresql+psycopg://jobvis:jobvis@db:5432/jobvis
+      JOBVIS_PROFILE: /app/data/profile.yaml
+      LLM_MODEL: google_genai:gemini-flash-lite-latest
+      # 키는 환경변수로 넘기지 않는다. 화면에서 넣어 볼륨 안 파일에만 둔다 (v0.6.1 F13)
+    volumes:
+      - jobvis-data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: jobvis
+      POSTGRES_PASSWORD: jobvis
+      POSTGRES_DB: jobvis
+    volumes:
+      - jobvis-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobvis -d jobvis"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  jobvis-data:
+  jobvis-db:

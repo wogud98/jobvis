@@ -14,13 +14,19 @@
 
 ## 반 사람용 시작하기 (Docker)
 
-Docker만 있으면 됩니다. 구글 시트·서비스 계정 설정은 필요 없고, 결과는 내 PC 안의 DB(Postgres)에 저장됩니다.
+Docker Desktop만 있으면 됩니다. 코드를 받거나 빌드할 필요가 없고, 결과는 내 PC 안의 DB(Postgres)에 저장됩니다.
 
-1. 코드를 받습니다: `git clone https://github.com/wogud98/jobvis.git` → `cd jobvis`
-2. `docker compose up -d` (처음엔 이미지를 만드느라 몇 분 걸립니다. OCR 포함 약 2.5GB)
-3. 브라우저에서 http://localhost:8501 을 엽니다.
-4. 처음 열면 뜨는 키 창(또는 오른쪽 위 **🔑 키 넣기**)에 **Gemini API 키**를 붙여넣고 저장합니다. 키는 https://aistudio.google.com/apikey 에서 무료로 발급합니다(구글 로그인 → Create API key).
-5. 👤 프로필 탭에서 이력서로 프로필을 채우고 저장 → 📋 공고 탭에서 수집 → 평가.
+1. 받은 시작 파일 묶음(`JOBVIS 시작.bat`, `JOBVIS 끄기.bat`, `compose.yml`)을 한 폴더에 풉니다. 저장소의 `start/` 폴더와 같습니다.
+2. Docker Desktop을 켜고 **`JOBVIS 시작.bat`**을 더블클릭합니다.
+3. 처음 한 번 "OCR도 받을까요"에 답합니다. 공고 본문이 이미지일 때 글자를 읽는 기능이고 약 350MB를 더 받습니다. 다음부터는 시작할 때 5초 안에 Y를 누르면 바꿀 수 있습니다.
+4. 이미지를 받고(처음 몇 분) 화면이 준비되면 브라우저가 http://localhost:8501 을 엽니다.
+5. 처음 열면 뜨는 키 창(또는 오른쪽 위 **🔑 키 넣기**)에 **Gemini API 키**를 붙여넣고 저장합니다. 키는 https://aistudio.google.com/apikey 에서 무료로 발급합니다(구글 로그인 → Create API key).
+6. 👤 프로필 탭에서 이력서로 프로필을 채우고 저장 → 📋 공고 탭에서 수집 → 평가.
+7. 끌 때는 **`JOBVIS 끄기.bat`**. 키·프로필·공고·점수는 남습니다.
+
+### 직접 빌드하기 (저장소를 받은 사람)
+
+`git clone https://github.com/wogud98/jobvis.git` → `cd jobvis` → `docker compose up -d` (처음엔 이미지를 만드느라 몇 분 걸립니다. OCR 포함 약 2.5GB). 시작 파일과 같은 데이터(볼륨)를 씁니다. 아래 명령은 저장소 폴더에서 씁니다(시작 파일로 쓰면 켜기·끄기는 `.bat`으로).
 
 | 하고 싶은 일 | 명령 |
 | --- | --- |
@@ -28,7 +34,7 @@ Docker만 있으면 됩니다. 구글 시트·서비스 계정 설정은 필요 
 | 다시 켜기 | `docker compose up -d` |
 | 코드를 새로 받은 뒤 | `git pull` → `docker compose up -d --build` |
 | 공고만 지우고 다시 모으기 (프로필·키는 남음) | 화면 사이드바 맨 아래 **🗑 공고 초기화** (지원한 공고는 남길 수 있음) |
-| 내 데이터까지 모두 지우기 | `docker compose down -v` |
+| 내 데이터까지 모두 지우기 | `docker compose -p jobvis down -v` (어느 폴더에서나) |
 | OCR 끄기 (OCR이 안 도는 PC) | `JOBVIS_OCR=off docker compose up -d` (PowerShell: `$env:JOBVIS_OCR="off"; docker compose up -d`) |
 
 - 데이터가 남는 곳: Docker 볼륨 `jobvis-data`(키 `settings.env`, `profile.yaml`, 공고 원문, 받은함)와 `jobvis-db`(공고·점수). 모두 내 PC 안에만 있습니다. 평가와 이력서 채우기 때 공고·프로필 글이 Gemini로 전송됩니다.
