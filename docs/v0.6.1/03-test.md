@@ -71,6 +71,18 @@ python -m pytest        # 588 passed (584개 → 588개)
 | F24 | 전체 초기화 → 🔄 → 파일 값 복구·파일 그대로, 저장 안 한 입력·이력서 값 버림, 파일 없을 때 오류 없음 | `test_refresh_restores_saved_profile_after_clear_all`, `test_refresh_drops_unsaved_typing_and_resume_fill`, `test_refresh_without_profile_file_keeps_empty_form` | 통과 |
 | F25 | 모든 색이 `light-dark(밝은, 어두운)`, 사용법 메뉴 이름 | `test_css_lets_browser_pick_theme`, 색 값 테스트 3개(새 형식으로 고침) | 통과 |
 
+### 보완 (F26)
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 95 files already formatted
+python -m pytest        # 590 passed (588개 → 590개)
+```
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F26 | 라임 색·점 무늬·글꼴·주 버튼·사선 띠 CSS, 도넛 원 채움·평가 전 빈 원, 카드 색 띠 표시, 라임 제목·검정 테두리, config.toml과 팔레트 일치 | `test_figma_theme_background_font_and_buttons`, `test_score_ring_fills_by_score_and_card_gets_tone`, `test_title_is_lime_with_dark_edge_and_large`, `test_dark_theme_avoids_glare_and_badges_follow_theme`(두 테마 비교로 고침), 색 값 테스트 2개(새 색으로 고침) | 통과 |
+
 F17로 키 칸 테스트 3개를 창 테스트로 바꿈. 테스트 화면은 기본으로 가짜 키가 있는 상태로 띄움(키가 없으면 키 창이 먼저 떠서 사용법 창 테스트가 달라짐).
 
 F16 재현 시도: 평가를 가짜로 바꾼 화면(한 건 2초, 0초 두 경우)에서 Playwright로 "평가 전 전부 평가"를 눌렀을 때 두 경우 모두 끝나자마자 점수가 보였음. 재리 PC에서 생긴 조건은 재현 못 함.
@@ -88,6 +100,7 @@ F16 재현 시도: 평가를 가짜로 바꾼 화면(한 건 2초, 0초 두 경�
 | 1300px 밝은·어두운(보완 3차) | "평가 완료" 눌렀을 때 그 칸만 검정(밝은)·밝은 회색(어두운) 면, 나머지 3칸 색 유지, 어두운 테마 카드·배지·차트 톤, TOP 5 공고 이름이 잘리지 않음 | 확인 |
 | 1300px(보완 4차) | 프로필 키워드 19개 → 전체 초기화 0개 → 🔄 새로고침 19개(고치기 전에는 0개 그대로, F5만 복구) | 확인 |
 | 1300px(보완 4차) | 열어 둔 채 시스템 테마 밝은 → 어두운 → 밝은, ⋮ 메뉴 Dark → Light, 메뉴 Light로 고른 뒤 시스템 어두운: 요약 칸·바탕 색이 F5 없이 그때마다 맞게 바뀌고, 메뉴에서 고른 테마가 시스템보다 우선 | 확인 |
+| 1300px 밝은·어두운(F26) | 점 무늬 바탕, 라임 제목·꼬리표, 라임 수집·평가 버튼, 요약 칸 4색과 고른 칸 검정, 카드 도넛 원·왼쪽 라임 띠, 자세히 창 사선 띠, TOP 5 코발트 막대(바탕 비침), 프로필 칸 제목 글꼴·"전체 초기화" 글자 안 잘림 | 확인 |
 | 900px | 수집 카드 사이트 칸 키워드가 줄을 바꿔 보임(칸이 좁아 "잡코…"처럼 끝이 줄어듦) | 확인 |
 
 ## 미확인
@@ -96,6 +109,7 @@ F16 재현 시도: 평가를 가짜로 바꾼 화면(한 건 2초, 0초 두 경�
 - **알림(F5) 실제 화면**: AppTest로만 확인. 실제 수집을 돌려 브라우저에서 알림이 뜨는 모습은 보지 않음.
 - **실제 이력서 여러 개로 중복 합치기(F8)**: 프롬프트 규칙의 효과는 실제 Gemini로 확인 못 함. 코드 합치기는 테스트로 확인.
 - **재리 PC Windows 브라우저**: 재리 확인 필요. 어두운 테마 색(F22)이 눈에 편한지는 재리 판단 필요.
+- **F26 글꼴**: Black Han Sans는 Google Fonts에서 받음. 작업 환경에서는 받아져 보였고, 인터넷이 막힌 PC에서는 기본 글꼴로 보임(확인 안 함). 피그마 원본 글꼴 이름은 캡처만 보고 비슷한 무료 글꼴로 고름.
 - **F25 재리 PC 브라우저 판**: `light-dark()`는 Chrome·Edge 123 이상 필요. 작업 환경 Chromium으로만 확인.
 - **F23 끌기·확대 직접 조작**: 명세에 `params`가 없는 것으로 확인. 브라우저에서 휠·끌기를 직접 해 보지는 않음.
 - **F12 범위**: 화면·결과 문구만 가림. 터미널(`main.py`)에서 잡지 못한 예외의 traceback, 라이브러리가 남기는 로그는 가리지 않음. 실제 Gemini 오류에 키가 섞이는지는 확인 못 함.

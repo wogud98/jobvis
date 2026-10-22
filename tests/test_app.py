@@ -668,10 +668,10 @@ def test_css_follows_theme_and_guide_mentions_theme(app):
     import app as screen  # 저장소 app.py
 
     css = screen.css()  # 두 테마 색을 light-dark(밝은, 어두운)로 함께 넣음 (v0.6.1 F25)
-    assert "--jv-paper: light-dark(#fffdf5, #14161a);" in css and "--jv-card: light-dark(#ffffff, #1f232a);" in css
+    assert "--jv-paper: light-dark(#f3efe7, #17181c);" in css and "--jv-card: light-dark(#fffdf8, #212329);" in css
     assert "/*VARS*/" not in css
-    assert "--jv-tile0: light-dark(#ffe066, #4a4024);" in css  # v0.5.4 F11, v0.6.1 F22
-    assert "--jv-tile-text: light-dark(#111111, #e5e7eb);" in css
+    assert "--jv-tile0: light-dark(#ffd23f, #5a4a1c);" in css  # v0.5.4 F11, v0.6.1 F22, F26
+    assert "--jv-tile-text: light-dark(#141414, #ece8df);" in css
     at = app([])
     assert any("⋮ → Light·Dark" in m.value for m in at.markdown)
 
@@ -901,11 +901,12 @@ def test_key_is_a_top_button_not_a_card(app, no_key):
     assert "COLLAPSED" in str(key_box(at).label_visibility)  # 입력란과 저장 버튼 한 줄
 
 
-def test_title_is_white_and_larger_in_dark_theme():
+def test_title_is_lime_with_dark_edge_and_large():
     import app as screen
 
-    assert "--jv-title: light-dark(#111111, #ffffff);" in screen.css()  # 어두운 테마 흰색, 밝은 테마 검정 (v0.6.1 F1)
-    assert "font-size: 4rem; font-weight: 900; color: var(--jv-title)" in screen.CSS  # F1, F19
+    assert "--jv-title: light-dark(#c8f53a, #c8f53a);" in screen.css()  # 라임 제목 (v0.6.1 F26, F1을 바꿈)
+    assert "-webkit-text-stroke: 2px var(--jv-title-edge)" in screen.CSS  # 검정 테두리로 두 테마 모두 읽힘
+    assert "font-size: 4rem; font-weight: 900; color: var(--jv-title)" in screen.CSS  # F19
     assert "--jv-highlight) 58%" not in screen.CSS  # 제목 뒤 형광 줄 없음 (F19)
 
 
@@ -979,8 +980,8 @@ def test_selected_tile_inverts_colors():
 
     assert 'div[class*="st-key-box-summary"][class*="-on"] { background: var(--jv-sel) !important; }' in screen.CSS
     assert '[class*="-on"] * { color: var(--jv-sel-text) !important; }' in screen.CSS  # v0.6.1 F21
-    assert "--jv-sel: light-dark(#111111, #d1d5db);" in screen.css()
-    assert "--jv-sel-text: light-dark(#ffffff, #111318);" in screen.css()
+    assert "--jv-sel: light-dark(#141414, #ece8df);" in screen.css()
+    assert "--jv-sel-text: light-dark(#fffdf8, #17181c);" in screen.css()
     # 고른 칸 면 색은 요약 칸 4색과 겹치지 않는다
     for theme in ("light", "dark"):
         palette = screen.PALETTES[theme]
@@ -996,7 +997,11 @@ def test_dark_theme_avoids_glare_and_badges_follow_theme():
     assert ".jv-high { background: var(--jv-high); color: var(--jv-badge-text); }" in screen.CSS
     assert "#8ce99a" not in screen.CSS  # 배지 색도 테마를 따름
     config = (Path(screen.__file__).parent / ".streamlit" / "config.toml").read_text(encoding="utf-8")
-    assert 'backgroundColor = "#14161a"' in config and 'borderColor = "#4b5563"' in config  # PALETTES와 같게
+    for theme in ("light", "dark"):  # config.toml과 PALETTES가 같은 색 (v0.6.1 F22, F26)
+        palette = screen.PALETTES[theme]
+        section = config.split(f"[theme.{theme}]")[1].split("[theme.")[0]
+        assert f'backgroundColor = "{palette["paper"]}"' in section
+        assert f'borderColor = "{palette["ink"]}"' in section and f'textColor = "{palette["text"]}"' in section
 
 
 def test_top5_chart_is_static(app):
@@ -1009,7 +1014,7 @@ def test_top5_chart_is_static(app):
     at = app([scorable(2), make_row(3, score="70", verdict="추천", trust="높음", body="글자")])
     assert not at.exception
     [chart] = at.get("vega_lite_chart")  # st.bar_chart(늘 확대·끌기 됨) 대신 명세 차트
-    assert '"params"' not in chart.proto.spec and "#059669" in chart.proto.spec
+    assert '"params"' not in chart.proto.spec and screen.ACCENT in chart.proto.spec
 
 
 # ---- v0.6.1 보완 4차: 새로고침으로 프로필 되돌리기, 테마 바로 적용 ----
@@ -1062,3 +1067,29 @@ def test_css_lets_browser_pick_theme():
     names = screen.PALETTES["light"]
     assert css.count("light-dark(") == len(names)  # 모든 색이 두 테마 값을 함께 가짐 (v0.6.1 F25)
     assert all(f"--jv-{name}: light-dark(" in css for name in names)
+
+
+# ---- v0.6.1 보완 5차: 피그마 테마 ----
+
+
+def test_figma_theme_background_font_and_buttons():
+    import app as screen
+
+    css = screen.css()
+    assert "--jv-lime: light-dark(#c8f53a, #b6e22e);" in css  # v0.6.1 F26
+    assert "radial-gradient(var(--jv-dot)" in screen.CSS  # 점 무늬 바탕
+    assert "family=Black+Han+Sans" in screen.CSS  # 제목 글꼴, 없으면 기본 글꼴
+    assert 'button[data-testid="stBaseButton-primary"]' in screen.CSS and "var(--jv-lime-text)" in screen.CSS
+    assert "repeating-linear-gradient(135deg, var(--jv-lime)" in screen.CSS  # 자세히 창 사선 띠
+
+
+def test_score_ring_fills_by_score_and_card_gets_tone(app):
+    at = app([scorable(2), scored(3), make_row(4, score="35", verdict="비추천", trust="높음", body="글자")])
+
+    texts = [m.value for m in at.markdown]
+    assert any('<div class="jv-score" style="--p:35">35</div>' in t for t in texts)  # 도넛 원 채움 (F26)
+    assert any('<div class="jv-score">-</div>' in t for t in texts)  # 평가 전은 빈 원
+    heads = {t.split("**")[1].split(" · ")[0]: t for t in texts if t.startswith("**회사")}
+    assert heads["회사2"].endswith("<span class='jv-tone-none'></span>")
+    assert heads["회사4"].endswith("<span class='jv-tone-low'></span>")  # 40 아래는 코랄 띠
+    assert ":has(.jv-tone-low) { border-left: 10px solid var(--jv-tile3)" in __import__("app").CSS

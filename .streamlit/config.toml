@@ -5,16 +5,17 @@ baseRadius = "0.4rem"
 showWidgetBorder = true
 
 [theme.light]
-primaryColor = "#059669"
-backgroundColor = "#fffdf5"
-secondaryBackgroundColor = "#ffffff"
-textColor = "#111111"
-borderColor = "#111111"
+# 피그마 테마(v0.6.1 F26). app.py PALETTES["light"]와 같게
+primaryColor = "#6b8afd"
+backgroundColor = "#f3efe7"
+secondaryBackgroundColor = "#fffdf8"
+textColor = "#141414"
+borderColor = "#141414"
 
 [theme.dark]
-# 회청색 한 계열, 순백 글자·밝은 테두리를 피해 눈부심을 줄임 (v0.6.1 F22). app.py PALETTES["dark"]와 같게
-primaryColor = "#059669"
-backgroundColor = "#14161a"
-secondaryBackgroundColor = "#181b20"
-textColor = "#e5e7eb"
-borderColor = "#4b5563"
+# 순백 글자·밝은 테두리를 피해 눈부심을 줄임 (v0.6.1 F22, F26). app.py PALETTES["dark"]와 같게
+primaryColor = "#8ea2ff"
+backgroundColor = "#17181c"
+secondaryBackgroundColor = "#1b1d22"
+textColor = "#ece8df"
+borderColor = "#5a5e66"
