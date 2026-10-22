@@ -1,0 +1,50 @@
+name: Publish
+
+# 반 사람이 받는 이미지 두 개를 GHCR에 올린다 (v0.6.2 F9, D2, D3).
+# main push: latest(OCR 없음), ocr(OCR 포함). v* 태그 push: 0.6.2, 0.6.2-ocr 같은 버전 태그.
+# 처음 올린 뒤 패키지 설정에서 한 번 공개로 바꿔야 로그인 없이 받는다(다시 비공개로 못 바꿈).
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/wogud98/jobvis
+      SOURCE: https://github.com/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: |
+          docker build --target base --label "org.opencontainers.image.source=$SOURCE" -t jobvis:base .
+          docker build --target ocr --label "org.opencontainers.image.source=$SOURCE" -t jobvis:ocr .
+      - name: 비밀 파일 검사
+        run: |
+          sh scripts/check_image.sh jobvis:base
+          sh scripts/check_image.sh jobvis:ocr
+      - name: Image size
+        run: docker image ls jobvis
+      - name: Login
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Push
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+            base_tag="$version"; ocr_tag="$version-ocr"
+          else
+            base_tag="latest"; ocr_tag="ocr"
+          fi
+          docker tag jobvis:base "$IMAGE:$base_tag"
+          docker tag jobvis:ocr "$IMAGE:$ocr_tag"
+          docker push "$IMAGE:$base_tag"
+          docker push "$IMAGE:$ocr_tag"

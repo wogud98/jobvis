@@ -1,8 +1,13 @@
 # 반 사람용 실행 (v0.6 F2, F3). docker compose up -d → http://localhost:8501
 # 끄기: docker compose down / 데이터까지 지우기: docker compose down -v
+# 볼륨 이름을 폴더 이름과 상관없이 jobvis_*로 고정한다. 시작 파일 묶음(start/compose.yml)과 같은 데이터 (v0.6.2 D7)
+name: jobvis
+
 services:
   app:
-    build: .
+    build:
+      context: .
+      target: ocr  # OCR 포함. OCR 없이 빌드하려면 base (v0.6.2 D1)
     image: jobvis:0.6
     ports:
       - "127.0.0.1:8501:8501"  # 이 PC에서만 열림. 같은 와이파이의 다른 PC는 못 들어옴 (D10)
