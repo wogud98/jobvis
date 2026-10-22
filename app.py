@@ -300,9 +300,10 @@ div[data-testid="stMultiSelect"] div:has(> span > [data-tag]) {
   min-width: 0; flex: 1 1 0; }
 div[data-testid="stMultiSelect"] [data-tag] { flex-shrink: 0; max-width: 100%; }
 div[data-testid="stMultiSelect"] div:has(> div > span > [data-tag]) { max-height: none; height: auto; }
-/* 프로필 네 칸은 같은 줄끼리 높이를 맞춘다 (v0.6.1 F9) */
-div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-profile-"]) { flex: 1 1 auto; }
-div[class*="st-key-box-profile-"] { height: 100%; }
+/* 프로필 네 칸, 요약 네 칸은 같은 줄끼리 높이를 맞춘다. 창이 좁아 글이 줄을 바꿔도 같음 (v0.6.1 F9, F28) */
+div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-profile-"]),
+div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-summary-"]) { flex: 1 1 auto; }
+div[class*="st-key-box-profile-"], div[class*="st-key-box-summary-"] { height: 100%; }
 </style>
 """
 

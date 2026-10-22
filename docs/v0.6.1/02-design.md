@@ -59,6 +59,8 @@
 | --- | --- | --- |
 | D27 | 원인: 떠오르는 창은 앱 칸(`.stApp`) 밖(body 아래)에 그려져서, Streamlit이 앱 칸에만 정한 `color-scheme`을 받지 못하고 `light-dark()`가 밝은 값을 고름. `st.html(SCHEME_SYNC, unsafe_allow_javascript=True)`로 작은 스크립트를 넣어 앱 칸의 `color-scheme`을 0.3초마다 `html`에 옮겨 적음. 스크립트가 못 돌면 `:root { color-scheme: light dark }`로 컴퓨터 설정을 따름 | CSS만으로는 앱 칸 밖에서 Streamlit 테마를 알 방법이 없음. 스크립트는 고정 글이고 사용자 입력이 들어가지 않음 |
 
+| D28 | 요약 칸도 프로필 칸(D7)과 같이 감싼 `stLayoutWrapper`를 늘리고 칸 `height: 100%` (F28) | 같은 방법이 이미 프로필에서 확인됨 |
+
 v0.5.3 다크 모드 흐름은 아래로 바뀜.
 
 ```mermaid

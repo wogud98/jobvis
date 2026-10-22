@@ -1106,3 +1106,10 @@ def test_popups_follow_app_theme(app):
     assert "document.documentElement.style.colorScheme = scheme" in screen.SCHEME_SYNC
     at = app([])
     assert any("jvSchemeSync" in str(h.proto) for h in at.get("html"))  # 화면마다 넣음
+
+
+def test_summary_tiles_keep_same_height():
+    import app as screen
+
+    assert ':has(> div[class*="st-key-box-summary-"]) { flex: 1 1 auto; }' in screen.CSS  # v0.6.1 F28
+    assert 'div[class*="st-key-box-summary-"] { height: 100%; }' in screen.CSS
