@@ -1,6 +1,6 @@
 # v0.6.1 설계
 
-모듈 구조, 호출 순서, 저장 칸은 v0.6과 같다. 그래서 UML은 [v0.6 설계](../v0.6/02-design.md)를 그대로 쓴다. 바뀌는 곳은 `app.py`(화면·CSS·키 삭제), `agent/resume.py`(합치기), `agent/settings.py`(`delete_key`, `redact` 함수 추가), `runner.error_text`·`reports`(가리기 호출), `docker-compose.yml`·`Dockerfile`이다. 새 모듈과 State 필드는 없다. 보완 3차(F21–F23)는 `app.py`에 `chart_spec()` 함수 하나, 팔레트 이름 몇 개, `.streamlit/config.toml` 어두운 테마 값만 바뀐다.
+모듈 구조, 호출 순서, 저장 칸은 v0.6과 같다. 그래서 UML은 [v0.6 설계](../v0.6/02-design.md)를 그대로 쓴다. 바뀌는 곳은 `app.py`(화면·CSS·키 삭제), `agent/resume.py`(합치기), `agent/settings.py`(`delete_key`, `redact` 함수 추가), `runner.error_text`·`reports`(가리기 호출), `docker-compose.yml`·`Dockerfile`이다. 새 모듈과 State 필드는 없다. 보완 3차(F21–F23)는 `app.py`에 `chart_spec()` 함수 하나, 팔레트 이름 몇 개, `.streamlit/config.toml` 어두운 테마 값만 바뀐다. 보완 4차(F24–F25)는 `reload_profile()` 추가와 `css(theme)` → `css()`(테마 흐름은 아래 D21 그림).
 
 ## 결정
 
@@ -35,5 +35,27 @@
 | D17 | 팔레트에 글자색 `text`를 따로 둠. 지금까지 `ink`(테두리·그림자)를 글자에도 써서 어두운 테마에서 테두리를 차분하게 하면 글자가 흐려졌음. 판정 배지·내 기술 칩 색(`high`·`mid`·`low`·`closed`·`badge-text`)도 팔레트로 옮김 (F22) | 어두운 테마 배지가 밝은 테마 색 그대로라 눈부심 |
 | D18 | `.streamlit/config.toml` `[theme.dark]`를 팔레트와 같은 값으로 맞춤(바탕 `#14161a`, 글자 `#e5e7eb`, 테두리 `#4b5563`, 주 색 `#059669`) (F22) | 입력란·버튼 같은 Streamlit 기본 요소도 같은 계열로 |
 | D19 | TOP 5는 `st.bar_chart` 대신 `st.vega_lite_chart(spec=chart_spec(data))`. 명세에 `params`(선택·확대)가 없어 움직이지 않음. 축 0–100 고정, 이름 260px까지 (F23) | `st.bar_chart`는 늘 `.interactive()`를 붙여 끌기·확대가 됨. 새 의존성 없이 Streamlit 안에서 해결 |
+
+## 보완 결정 (F24–F25)
+
+| ID | 결정 | 이유 |
+| --- | --- | --- |
+| D20 | `reload_profile()`: `CLEARED`·`FILL`을 버리고 모든 칸의 `GENERATION`을 올림. 🔄 새로고침에서 `reload_rows()` 다음에 부름 (F24) | 입력란 key가 바뀌어야 저장 안 한 입력도 버려지고 파일 값으로 다시 그려짐. ↺·전체 초기화와 같은 방식 |
+| D21 | `css()`는 인자 없이 모든 색을 `--jv-이름: light-dark(밝은, 어두운)`으로 넣음. `st.context.theme.type`은 쓰지 않음 (F25) | Streamlit이 테마에 따라 앱 칸에 `color-scheme`을 정하므로 브라우저가 바로 고름. 서버가 다시 그릴 때까지 기다리지 않음. Chrome·Edge 123, Firefox 120, Safari 17.5 이상 필요 |
+
+v0.5.3 다크 모드 흐름은 아래로 바뀜.
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자 / 컴퓨터 설정
+    participant S as Streamlit 화면
+    participant B as 브라우저 CSS
+    participant A as app.main
+    A->>S: 처음 그릴 때 st.markdown(css()) 두 테마 색 모두
+    U->>S: 시스템 다크 모드 또는 ⋮ → Light·Dark
+    S->>S: config.toml [theme.light] / [theme.dark] 색, 앱 칸 color-scheme 바꿈
+    S->>B: color-scheme light | dark
+    B->>B: light-dark()로 --jv-* 값 고름 (서버 다시 실행 없음)
+```
 
 CSS는 v0.5.1 N5처럼 key로 붙는 `st-key-*` 클래스와 `data-testid`에만 건다. Streamlit 판을 올리면 F4·F7·F9 모양을 다시 확인한다.
