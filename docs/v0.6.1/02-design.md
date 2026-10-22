@@ -53,6 +53,12 @@
 | D25 | 카드 색 띠는 카드 머리 글 끝의 빈 표시 `<span class='jv-tone-…'>`를 CSS `:has()`로 찾아 카드 왼쪽 테두리를 바꿈. 카드 key는 그대로 | key를 바꾸면 기존 테스트·상태 key가 흔들림 |
 | D26 | 주 버튼 색은 CSS로 라임·검정 글자. `primaryColor`는 토글·선택 표시용으로 코발트 | Streamlit 주 버튼 글자는 흰색이라 라임 면에서 안 읽힘 |
 
+## 보완 결정 (F27)
+
+| ID | 결정 | 이유 |
+| --- | --- | --- |
+| D27 | 원인: 떠오르는 창은 앱 칸(`.stApp`) 밖(body 아래)에 그려져서, Streamlit이 앱 칸에만 정한 `color-scheme`을 받지 못하고 `light-dark()`가 밝은 값을 고름. `st.html(SCHEME_SYNC, unsafe_allow_javascript=True)`로 작은 스크립트를 넣어 앱 칸의 `color-scheme`을 0.3초마다 `html`에 옮겨 적음. 스크립트가 못 돌면 `:root { color-scheme: light dark }`로 컴퓨터 설정을 따름 | CSS만으로는 앱 칸 밖에서 Streamlit 테마를 알 방법이 없음. 스크립트는 고정 글이고 사용자 입력이 들어가지 않음 |
+
 v0.5.3 다크 모드 흐름은 아래로 바뀜.
 
 ```mermaid
@@ -65,6 +71,7 @@ sequenceDiagram
     U->>S: 시스템 다크 모드 또는 ⋮ → Light·Dark
     S->>S: config.toml [theme.light] / [theme.dark] 색, 앱 칸 color-scheme 바꿈
     S->>B: color-scheme light | dark
+    B->>B: SCHEME_SYNC가 앱 칸 color-scheme을 html에 옮김 (F27, 떠오르는 창용)
     B->>B: light-dark()로 --jv-* 값 고름 (서버 다시 실행 없음)
 ```
 

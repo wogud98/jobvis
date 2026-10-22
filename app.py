@@ -126,6 +126,23 @@ def chart_spec(data: list[tuple[str, int]]) -> dict:
     }
 
 
+# 자세히 창·사용법 창·알림은 앱 칸(.stApp) 밖에 그려져서 Streamlit이 정한 color-scheme을 못 받는다.
+# 앱 칸의 color-scheme을 문서 맨 위(html)에 0.3초마다 옮겨 적어 light-dark()가 같은 테마를 고르게 한다 (v0.6.1 F27).
+# 고정된 글이고 사용자 입력은 들어가지 않는다
+SCHEME_SYNC = """<script>
+(() => {
+  const sync = () => {
+    const app = document.querySelector(".stApp");
+    if (!app) return;
+    const scheme = getComputedStyle(app).colorScheme;
+    if (document.documentElement.style.colorScheme !== scheme) document.documentElement.style.colorScheme = scheme;
+  };
+  sync();
+  if (!window.jvSchemeSync) window.jvSchemeSync = setInterval(sync, 300);
+})();
+</script>"""
+
+
 def css() -> str:
     """두 테마 색을 모두 넣은 CSS. 브라우저가 Streamlit이 정한 color-scheme에 맞춰 light-dark()로 고르므로
     테마를 바꾸면 다시 그리지 않아도 바로 바뀐다 (v0.6.1 F25)."""
@@ -140,7 +157,7 @@ CSS = """
 <style>
 /* 제목·숫자 글꼴. 인터넷이 없으면 기본 글꼴로 보인다 (v0.6.1 F26) */
 @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap');
-:root { /*VARS*/ }
+:root { color-scheme: light dark; /*VARS*/ }  /* 스크립트가 못 돌면 컴퓨터 설정을 따름 (v0.6.1 F27) */
 /* 베이지 바탕에 점 무늬 (F26) */
 .stApp { background-color: var(--jv-paper);
   background-image: radial-gradient(var(--jv-dot) 1.2px, transparent 1.4px); background-size: 20px 20px; }
@@ -1110,6 +1127,7 @@ def main() -> None:
     settings.load()  # .env 다음, 비어 있는 값만 (v0.6 D6)
     st.set_page_config(page_title="JOBVIS", layout="wide")
     st.markdown(css(), unsafe_allow_html=True)  # 테마는 브라우저가 고른다 (v0.6.1 F25)
+    st.html(SCHEME_SYNC, unsafe_allow_javascript=True)  # 자세히·사용법 창도 같은 테마 (v0.6.1 F27)
     remember_visit()
     if settings.has_key():  # 키가 없으면 키 창이 먼저 뜬다. 창은 한 번에 하나 (v0.6.1 F17)
         open_guide_first_time()
