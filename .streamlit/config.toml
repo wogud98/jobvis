@@ -1,10 +1,19 @@
-# 화면 테마 (v0.5.1 F17, v0.5.2 F23 초록 포인트, F28 네오 브루탈리즘). 밝은 테마 하나
+# 화면 테마 (v0.5.1 F17, v0.5.2 F23 초록 포인트, F28 네오 브루탈리즘, v0.5.3 F13–F14 밝은·어두운 테마)
+# 시스템 설정을 따르고, ⋮ → Settings → Theme에서 바꿀 수 있음
 [theme]
-base = "light"
+baseRadius = "0.4rem"
+showWidgetBorder = true
+
+[theme.light]
 primaryColor = "#059669"
 backgroundColor = "#fffdf5"
 secondaryBackgroundColor = "#ffffff"
 textColor = "#111111"
-baseRadius = "0.4rem"
 borderColor = "#111111"
-showWidgetBorder = true
+
+[theme.dark]
+primaryColor = "#34d399"
+backgroundColor = "#16181d"
+secondaryBackgroundColor = "#22262e"
+textColor = "#f1f1f1"
+borderColor = "#e8e8e8"

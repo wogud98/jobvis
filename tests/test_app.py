@@ -1,5 +1,6 @@
 """Streamlit 화면을 가짜 시트로 띄워 본다. 실제 시트·브라우저 없음 (v0.5 N5)."""
 
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -534,3 +535,129 @@ def test_hide_failure_keeps_card_and_shows_error(app, monkeypatch):
     assert not at.exception
     assert names(at) == ["회사2"]
     assert any("관심 없음을 시트에 쓰지 못했습니다" in e.value for e in at.error)
+
+
+# ---- v0.5.3 자세히 개편·마감·NEW·검색·지원함·다크 모드 ----
+
+
+def scored(number: int, **changes) -> dict:
+    values = {
+        "score": "75", "verdict": "추천", "skills": "85", "experience_score": "60", "culture": "-",
+        "career": "30", "strengths": "Python 경험, 신입 지원 가능", "gaps": "Kubernetes 없음",
+        "requirements": "백엔드 API 개발, 사내 서비스 운영", "duties": "", "preferred": "AWS 경험",
+        "stack": "Python, Django, Kubernetes",
+    }  # fmt: skip
+    return scorable(number, **(values | changes))
+
+
+def test_scored_details_show_bars_columns_bullets_chips_and_guide(app, tmp_path):
+    text = "skills: {main: [python]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
+    at = app([scored(2)])
+
+    texts = [m.value for m in at.markdown]
+    bars = next(v for v in texts if v.startswith("<div class='jv-bar-row'>"))
+    assert bars.count("jv-bar-row") == 3 and "문화" not in bars  # 문화 "-"는 그리지 않음 (F6)
+    assert "jv-high" in bars and "jv-mid" in bars and "jv-low" in bars  # 85·60·30 (F1)
+    assert "**✅ 강점**\n\n- Python 경험\n- 신입 지원 가능" in texts  # 두 칸 (F2)
+    assert "**⚠️ 부족한 점**\n\n- Kubernetes 없음" in texts
+    assert "**요약**\n\n- 백엔드 API 개발\n- 사내 서비스 운영" in texts  # 글머리표 (F3)
+    assert not any(v.startswith("**주요업무**") for v in texts)  # 빈 칸은 숨김
+    chips = next(v for v in texts if v.startswith("**기술스택**"))
+    assert "jv-chip jv-mine'>Python<" in chips and "jv-chip'>Django<" in chips  # 대소문자 무시 (F4)
+    assert "점수 기준" in [e.label for e in at.expander]  # F5
+    assert any("0–100점" in v and "가중 평균" in v for v in texts)
+
+
+def test_card_head_shows_first_strength_only_when_scored(app):
+    at = app([scored(2), scorable(3, strengths="남은 글자")])
+
+    heads = [m.value for m in at.markdown if m.value.startswith("**회사")]
+    assert "💪 Python 경험" in heads[0] and "신입 지원 가능" not in heads[0]  # F12
+    assert "💪" not in heads[1]
+
+
+def test_deadline_badges_and_closed_card_is_dimmed(app):
+    today = date.today()
+    soon = (today + timedelta(days=3)).isoformat()
+    past = (today - timedelta(days=1)).isoformat()
+    far = (today + timedelta(days=30)).isoformat()
+    at = app([scored(2, deadline=soon), scored(3, deadline=past), scored(4, deadline=far)])
+
+    heads = {v.split("**")[1].split(" · ")[0]: v for v in (m.value for m in at.markdown) if v.startswith("**회사")}
+    assert 'jv-low">D-3<' in heads["회사2"]  # F7
+    assert 'jv-closed">마감<' in heads["회사3"]
+    assert "D-" not in heads["회사4"].split("jv-muted")[0]
+    keys = [c.key for c in at.get("flex_container") if getattr(c, "key", None)]
+    assert any(k == "box-dim-card-3" for k in keys) and not any(k == "box-dim-card-2" for k in keys)
+
+    next(s for s in at.selectbox if s.label == "정렬").set_value("마감 임박 순").run()
+    assert names(at) == ["회사2", "회사4", "회사3"]  # 다가오는 마감 → 지난 마감 (F8)
+
+
+def test_new_badge_uses_last_visit_and_updates_it(app, tmp_path):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "last_seen.txt").write_text("2026-10-21 12:00", encoding="utf-8")
+    at = app([scored(2, saved_at="2026-10-21 13:00"), scored(3, saved_at="2026-10-21 11:00")])
+
+    heads = [m.value for m in at.markdown if m.value.startswith("**회사")]
+    assert 'jv-new">NEW<' in heads[0] and "NEW" not in heads[1]  # F9
+    assert (tmp_path / "data" / "last_seen.txt").read_text(encoding="utf-8") != "2026-10-21 12:00"
+
+
+def test_first_visit_has_no_new_badge(app):
+    at = app([scored(2, saved_at="2026-10-21 13:00")])
+
+    assert not any("NEW" in m.value for m in at.markdown if m.value.startswith("**회사"))
+
+
+def test_search_filters_by_company_and_title(app):
+    at = app([scored(2), scored(3, title="데이터 엔지니어"), scored(4, company="회사카카오")])
+
+    at.text_input(key="search").set_value("데이터").run()
+    assert names(at) == ["회사3"]  # F10
+    at.text_input(key="search").set_value("카카오").run()
+    assert names(at) == ["회사카카오"]
+
+
+def test_apply_button_marks_card_and_applied_filter(app, monkeypatch):
+    written = []
+    monkeypatch.setattr(sheets, "set_applied", lambda row, applied: written.append((row, applied)))
+    at = app([scored(2), scored(3, score="60")])
+
+    at.button(key="apply-3").click().run()
+
+    assert written == [(3, True)]  # 시트 "지원" 칸 (F11)
+    assert at.button(key="apply-3").label == "✓ 지원함"
+    head = next(m.value for m in at.markdown if m.value.startswith("**회사3"))
+    assert 'jv-high">지원함<' in head
+    next(t for t in at.toggle if t.label == "지원한 공고만 보기").set_value(True).run()
+    assert names(at) == ["회사3"]
+
+    at.button(key="apply-3").click().run()
+    assert written[-1] == (3, False) and names(at) == []
+
+
+def test_apply_failure_shows_error_without_secret(app, monkeypatch):
+    def broken(row, applied):
+        raise FileNotFoundError("C:/secret/service_account.json")
+
+    monkeypatch.setattr(sheets, "set_applied", broken)
+    at = app([scored(2)])
+
+    at.button(key="apply-2").click().run()
+
+    assert not at.exception
+    assert at.button(key="apply-2").label == "지원함"
+    error = next(e.value for e in at.error if "지원함을 시트에 쓰지 못했습니다" in e.value)
+    assert "secret" not in error
+
+
+def test_css_follows_theme_and_guide_mentions_theme(app):
+    import app as screen  # 저장소 app.py
+
+    assert "--jv-paper: #16181d" in screen.css("dark")  # F13, F14
+    assert "--jv-paper: #fffdf5" in screen.css("light") and "--jv-paper: #fffdf5" in screen.css(None)
+    assert "/*VARS*/" not in screen.css("dark")
+    at = app([])
+    assert any("Theme" in m.value for m in at.markdown)

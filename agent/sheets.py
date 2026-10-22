@@ -39,6 +39,7 @@ HEADER = [
     "신뢰",
     "보정",
     "관심없음",
+    "지원",
 ]
 # read_rows()가 돌려주는 dict의 키. HEADER와 순서가 같다.
 KEYS = [
@@ -72,12 +73,14 @@ KEYS = [
     "trust",
     "adjust",
     "hidden",
+    "applied",
 ]
 V01_HEADER = HEADER[:5]
 V02_HEADER = HEADER[:7]
 V03_HEADER = HEADER[:21]
 V04_HEADER = HEADER[:27]
 V05_HEADER = HEADER[:29]  # v0.5–v0.5.2 F39까지. "관심없음"은 v0.5.2 F44
+V052_HEADER = HEADER[:30]  # v0.5.2 F44까지. "지원"은 v0.5.3 F11
 CHECK_COLUMN = HEADER.index("평가")  # 0부터 (시트 API 범위용)
 SCORED_AT_COLUMN = HEADER.index("평가시각") + 1  # gspread 열 번호는 1부터
 DUTIES_COLUMN = HEADER.index("주요업무") + 1
@@ -114,7 +117,7 @@ def _sheet() -> gspread.Worksheet:
     if first_row in (V01_HEADER, V02_HEADER):
         sheet.update([HEADER], "A1")  # 예전 제목 줄 뒤에 새 열 이름을 붙인다
         _add_checkboxes(sheet)
-    elif first_row in (V03_HEADER, V04_HEADER, V05_HEADER):
+    elif first_row in (V03_HEADER, V04_HEADER, V05_HEADER, V052_HEADER):
         sheet.update([HEADER], "A1")  # 체크박스 규칙은 v0.3에서 이미 걸었다
     elif first_row != HEADER:
         sheet.insert_row(HEADER, 1)
@@ -208,6 +211,11 @@ def set_check(row_number: int, checked: bool) -> None:
 def set_hidden(row_number: int, hidden: bool) -> None:
     """화면 카드의 "관심 없음"을 "관심없음" 열에 쓴다 (v0.5.2 F44). 줄은 지우지 않는다(다시 수집되지 않게)."""
     update_cells(row_number, {"관심없음": bool(hidden)})
+
+
+def set_applied(row_number: int, applied: bool) -> None:
+    """화면 카드의 "지원함"을 "지원" 열에 쓴다 (v0.5.3 F11)."""
+    update_cells(row_number, {"지원": bool(applied)})
 
 
 def _span(row_number: int, first: int, last: int) -> str:
