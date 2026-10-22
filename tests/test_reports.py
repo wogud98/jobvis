@@ -105,3 +105,18 @@ def test_llm_hint_names_the_model(monkeypatch):
 
     assert "LLM 모델(google_genai:gemini-2.5-flash)을 찾지 못했습니다" in hint  # v0.5.2 F33
     assert "gemini-flash-lite-latest" in hint
+
+
+def test_failure_lines_hide_key(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyFAKE-report-1111")
+    result = {
+        "saved": [],
+        "failed": [{"source": "saramin", "company": "회사", "title": "직무", "step": "본문",
+                    "error": "CrawlError: key=AIzaSyFAKE-report-1111"}],
+        "blocked": [{"source": "jobkorea", "reason": "AIzaSyFAKE-report-1111 429"}],
+    }  # fmt: skip
+
+    summary = reports.collect_summary(result)
+
+    shown = " ".join([*summary.problems, *summary.details])
+    assert "AIzaSyFAKE-report-1111" not in shown and "••••" in shown  # v0.6.1 F12

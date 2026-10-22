@@ -81,3 +81,37 @@ def test_save_replaces_old_key(clean):
 
     assert clean.read_text(encoding="utf-8").count("GOOGLE_API_KEY=") == 1
     assert settings.masked() == "••••9876"
+
+
+# ---- v0.6.1 키 지키기 ----
+
+
+def test_delete_removes_saved_key_and_environment(clean):
+    settings.save_key(KEY, clean)
+
+    assert settings.delete_key(clean) is True  # F14
+    assert "GOOGLE_API_KEY" not in clean.read_text(encoding="utf-8")
+    assert not settings.has_key()
+
+
+def test_delete_key_from_dotenv_only_clears_this_run(clean, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", KEY)  # .env에서 읽은 키. 저장 파일 없음
+
+    assert settings.delete_key(clean) is False  # .env는 건드리지 않는다
+    assert not settings.has_key() and not clean.exists()
+
+
+def test_redact_hides_key_in_any_text(clean, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", KEY)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-FAKE-9999")
+
+    text = settings.redact(f"400 Bad Request url=...?key={KEY} header=sk-ant-FAKE-9999")
+
+    assert KEY not in text and "sk-ant-FAKE-9999" not in text  # F12
+    assert text.count("••••") == 2
+
+
+def test_redact_leaves_text_without_key_and_ignores_short_values(clean, monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "abc")  # 너무 짧은 값은 흔한 글자까지 가릴 수 있어 건너뜀
+
+    assert settings.redact("abc 연결 실패") == "abc 연결 실패"

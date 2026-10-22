@@ -11,7 +11,7 @@ services:
       DATABASE_URL: postgresql+psycopg://jobvis:jobvis@db:5432/jobvis
       JOBVIS_PROFILE: /app/data/profile.yaml  # 개인 파일은 모두 볼륨 안 data/에 (D7)
       LLM_MODEL: google_genai:gemini-flash-lite-latest  # 새로 받은 무료 키에서 되는 모델 (F12)
-      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}  # 비워 두면 화면에서 넣음 (F4)
+      # 키는 환경변수로 넘기지 않는다. docker inspect에 보이기 때문. 화면에서 넣어 볼륨 안 파일에만 둔다 (v0.6.1 F13)
       JOBVIS_OCR: ${JOBVIS_OCR:-on}  # OCR이 안 도는 PC는 off (F10)
     volumes:
       - jobvis-data:/app/data  # 키(settings.env), 프로필, 공고 원문, 받은함

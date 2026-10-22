@@ -8,7 +8,7 @@ import contextlib
 import os
 from pathlib import Path
 
-from dotenv import dotenv_values, set_key
+from dotenv import dotenv_values, set_key, unset_key
 
 from agent.graph import llm_model
 
@@ -54,6 +54,28 @@ def save_key(key: str, path: Path = PATH) -> None:
     with contextlib.suppress(OSError):  # 윈도우 등 권한을 바꿀 수 없는 곳은 그대로 둔다
         path.chmod(0o600)
     os.environ[key_name()] = key
+
+
+def delete_key(path: Path = PATH) -> bool:
+    """이 PC에 저장한 키를 지운다 (v0.6.1 F14). Google에서 키를 파기하지는 않는다.
+
+    `.env`에 적은 키는 파일을 건드리지 않고 지금 실행에서만 뺀다. 저장 파일에서 지웠으면 True.
+    """
+    removed = False
+    if path.exists() and key_name() in dotenv_values(path):
+        unset_key(path, key_name(), quote_mode="never")
+        removed = True
+    os.environ.pop(key_name(), None)
+    return removed
+
+
+def redact(text: str) -> str:
+    """화면·로그로 나가는 글에서 키와 같은 글자를 가린다 (v0.6.1 F12). 라이브러리 오류에 키가 섞여도 보이지 않게."""
+    for name in KEY_NAMES.values():
+        key = os.environ.get(name, "").strip()
+        if len(key) >= 8 and key in text:
+            text = text.replace(key, "••••")
+    return text
 
 
 def masked() -> str:

@@ -944,6 +944,11 @@ def show_profile() -> None:
 
 
 KEY_SAVED = "key_saved"  # 방금 키를 저장했는지 (v0.6 F4)
+KEY_DELETED = "key_deleted"  # 방금 키를 지웠는지 (v0.6.1 F14)
+
+
+def delete_key() -> None:
+    st.session_state[KEY_DELETED] = settings.delete_key()
 
 
 def save_key_form(where: str) -> None:
@@ -967,10 +972,20 @@ def show_key_card() -> None:
     """LLM 키가 없으면 맨 위에 입력 칸, 있으면 접힌 "바꾸기"만 (v0.6 F4, F5)."""
     if st.session_state.pop(KEY_SAVED, False):
         st.success(f"키를 저장함 ({settings.masked()}). 이제 평가와 이력서 채우기를 쓸 수 있습니다.")
+    deleted = st.session_state.pop(KEY_DELETED, None)
+    if deleted is not None:  # 이 PC에서만 지운다. Google의 키는 그대로 (F14)
+        st.info(
+            "이 PC에서 키를 지웠습니다. 키 자체를 없애려면 "
+            f"[Google AI Studio]({settings.KEY_PAGES['GOOGLE_API_KEY']})에서 삭제하세요."
+            + ("" if deleted else " .env에 적은 키는 .env에서 직접 지워야 다음 실행에도 지워집니다.")
+        )
     if settings.has_key():
-        with st.expander(f"🔑 LLM 키 {settings.masked()} · 바꾸기"):
+        with st.expander(f"🔑 LLM 키 {settings.masked()} · 바꾸기·삭제"):
             st.caption(".env에 키를 적어 두었다면 다음 실행부터는 .env 값이 우선합니다.")
             save_key_form("change")
+            # PC를 넘기거나 키가 샜다고 의심될 때 (v0.6.1 F14)
+            st.button("🗑 이 PC에서 키 삭제", key="key-delete", on_click=delete_key,
+                      help="이 PC에 저장한 키만 지웁니다. Google에서 키를 없애지는 않습니다")  # fmt: skip
         return
     with st.container(border=True, key="key-card"):  # 제목 한 줄 + 입력 한 줄 (v0.6.1 F2)
         page = settings.key_page()
