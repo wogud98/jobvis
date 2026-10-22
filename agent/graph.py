@@ -210,8 +210,9 @@ def _fill(job: dict, found: dict) -> State:
         "출처": sheets.SOURCE_NAMES[job["source"]],
         "지역": job["location"],
         "본문": found["status"],
-        "평가": True,  # 다음 --score에서 새 본문으로 다시 평가 (F46)
     }
+    if target.get("scored"):  # 점수가 있던 줄만 새 본문으로 다시 평가하게 켠다. 평가 전 줄은 그대로 (F46, v0.6.2 F12)
+        changes["평가"] = True
     changes |= {name: job[key] for name, key in (("학력", "education"), ("키워드", "keywords")) if job[key]}
     try:
         # 새 원문을 먼저 저장하고 예전 원문을 지운다. 거꾸로면 실패할 때 둘 다 잃는다.
@@ -259,7 +260,7 @@ def save(state: State) -> State:
         # 이번 실행에서 뒤에 나온 같은 공고: 이 공고가 본문 미확보면 그 본문으로 방금 저장한 줄을 채워 본다 (F46)
         result["backups"] = {k: v for k, v in backups.items() if k != _name(job)}
         if found["status"] == postings.MISSING and number:
-            replace = {"row": number, "source": job["source"], "id": job["id"]}
+            replace = {"row": number, "source": job["source"], "id": job["id"], "scored": False}  # 방금 저장한 줄
             result["queue"] = [backup | {"replace": replace}, *state["queue"]]
         else:
             result["skipped"] = [backup]

@@ -7,7 +7,7 @@
 ```bash
 ruff check .            # All checks passed!
 ruff format --check .   # 98 files already formatted
-python -m pytest        # 621 passed (612개 → 621개)
+python -m pytest        # 623 passed (612개 → 623개, F12 포함)
 docker compose config   # 저장소 compose: build target ocr, name jobvis
 docker compose -f start/compose.yml config -q   # 통과
 JOBVIS_TAG=ocr docker compose -f start/compose.yml config   # image ghcr.io/wogud98/jobvis:ocr
@@ -31,6 +31,12 @@ sh scripts/check_image.sh jobvis:bad            # .env, service_account.json을 
 | F11 | README 시작하기를 시작 파일 기준으로, 직접 빌드는 아래로 | 문서 확인 | 확인 |
 | N3 | 기본 이미지에 `paddleocr` 없음 | 작업 환경 `docker run jobvis:base2`, Docker CI | 통과 |
 | N4 | 이미지 `/app`에 비밀 파일 없음, 있으면 실패 | `scripts/check_image.sh` 정상·나쁜 이미지 | 통과 |
+
+### 보완 (F12)
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F12 | 점수 있던 줄은 채우면서 평가 체크, 평가 전 줄·같은 실행에서 방금 저장한 줄은 체크 안 함, 점수 칸으로 `scored` 판단 | `test_missing_row_in_sheet_is_replaced_by_other_site_posting`, `test_unscored_missing_row_is_filled_without_check`, `test_same_run_second_site_fills_first_missing_posting`, `test_collect_keys_marks_scored_missing_rows` | 통과 |
 
 ## 크기 (N2)
 
