@@ -29,6 +29,9 @@ def no_job(monkeypatch):
 def app(monkeypatch, tmp_path):
     """작업 폴더를 임시 폴더로 바꿔 profile.yaml과 data/inbox/가 저장소에 생기지 않게 한다."""
     monkeypatch.chdir(tmp_path)
+    # 키가 있는 사람 기준. 키 없는 화면은 no_key로 본다 (키가 없으면 키 창이 먼저 뜬다, v0.6.1 F17)
+    monkeypatch.setenv("LLM_MODEL", "google_genai:gemini-flash-lite-latest")
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyFAKE-fixture-0000")
 
     def run(rows=None, error=None):
         def fake_read():
@@ -59,7 +62,7 @@ def test_postings_tab_shows_guide_summary_and_scored_cards(app):
     assert [tab.label for tab in at.tabs] == ["📋 공고", "👤 프로필"]
     assert len(at.get("dialog")) == 1  # 처음 연 화면은 사용법 창 (v0.5.4 F9)
     assert [(m.label, m.value) for m in at.metric] == [
-        ("전체 공고", "3"),
+        ("✓ 전체 공고", "3"),  # 지금 보고 있는 칸 (v0.6.1 F15)
         ("평가 완료", "2"),
         ("추천 이상", "2"),
         ("이미지 필요", "1"),
@@ -821,40 +824,49 @@ def no_key(monkeypatch):
     monkeypatch.setenv("LLM_MODEL", "google_genai:gemini-flash-lite-latest")
 
 
-def test_key_card_shows_when_no_key_and_saves_to_data_folder(app, no_key, tmp_path):
+def key_box(at):
+    return next(t for t in at.text_input if t.label == "GOOGLE_API_KEY")
+
+
+def test_key_dialog_opens_once_when_no_key_and_saves_to_data_folder(app, no_key, tmp_path):
     at = app()
 
+    assert len(at.get("dialog")) == 1  # 키가 없으면 처음 한 번 키 창 (v0.6.1 F17)
     assert any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)  # v0.6 F4
-    box = next(t for t in at.text_input if t.label == "GOOGLE_API_KEY")
-    box.input("AIzaSyFAKE-app-key-5678")
+    assert at.button(key="key-open").label == "🔑 키 넣기"
+    key_box(at).input("AIzaSyFAKE-app-key-5678")
     at.button[[b.label for b in at.button].index("저장")].click()
     at.run()
 
     saved = (tmp_path / "data" / "settings.env").read_text(encoding="utf-8")
     assert "AIzaSyFAKE-app-key-5678" in saved
-    assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)
-    shown = " ".join([s.value for s in at.success] + [e.label for e in at.expander])
+    assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)  # 키 창이 닫히고 사용법 창이 뜸
+    assert any("① 프로필 저장" in m.value for m in at.markdown)
+    shown = " ".join([t.value for t in at.toast] + [b.label for b in at.button])
     assert "••••5678" in shown and "AIzaSyFAKE" not in shown  # 끝 4자리만 (F5)
 
 
-def test_key_card_rejects_bad_key_without_saving(app, no_key, tmp_path):
+def test_key_dialog_rejects_bad_key_without_saving(app, no_key, tmp_path):
     at = app()
-    next(t for t in at.text_input if t.label == "GOOGLE_API_KEY").input("abc def")
+    key_box(at).input("abc def")
     at.button[[b.label for b in at.button].index("저장")].click()
     at.run()
 
-    assert any("빈칸" in e.value for e in at.error)
+    assert any("빈칸" in e.value for e in at.error)  # 창이 다시 떠서 이유를 보인다
     assert not (tmp_path / "data" / "settings.env").exists()
 
 
-def test_key_card_is_folded_when_key_exists(app, monkeypatch):
-    monkeypatch.setenv("LLM_MODEL", "google_genai:gemini-flash-lite-latest")
+def test_key_button_shows_masked_key_and_no_dialog_when_key_exists(app, monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyFAKE-existing-4321")
 
     at = app()
 
     assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)
-    assert any(e.label == "🔑 LLM 키 ••••4321 · 바꾸기·삭제" for e in at.expander)
+    assert at.button(key="key-open").label == "🔑 키 ••••4321"  # v0.6.1 F17
+    assert len(at.get("dialog")) == 1 and any("① 프로필 저장" in m.value for m in at.markdown)  # 사용법 창
+
+    at.button(key="key-open").click().run()
+    assert any("••••4321" in m.value for m in at.markdown) and at.button(key="key-delete")
 
 
 # ---- v0.6.1 화면 다듬기 ----
@@ -880,14 +892,13 @@ def test_collect_card_has_no_site_interval_note(app):
     assert not any("요청 간격" in m.value for m in at.markdown)  # v0.6.1 F3
 
 
-def test_key_card_is_one_line_title_and_input(app, no_key):
+def test_key_is_a_top_button_not_a_card(app, no_key):
     at = app()
 
-    title = next(m.value for m in at.markdown if "LLM 키를 넣어 주세요" in m.value)
-    assert not title.startswith("####")  # 큰 제목 대신 한 줄 (v0.6.1 F2)
-    assert "aistudio.google.com/apikey" in title
-    box = next(t for t in at.text_input if t.label == "GOOGLE_API_KEY")
-    assert "COLLAPSED" in str(box.label_visibility)  # 입력란과 저장 버튼 한 줄
+    assert not [c for c in at.get("flex_container") if getattr(c, "key", None) == "key-card"]  # v0.6.1 F17
+    caption = next(c.value for c in at.caption if "aistudio.google.com/apikey" in c.value)
+    assert "끝 4자리" in caption
+    assert "COLLAPSED" in str(key_box(at).label_visibility)  # 입력란과 저장 버튼 한 줄
 
 
 def test_title_is_white_and_larger_in_dark_theme():
@@ -895,7 +906,8 @@ def test_title_is_white_and_larger_in_dark_theme():
 
     assert "--jv-title: #ffffff" in screen.css("dark")  # v0.6.1 F1
     assert "--jv-title: #111111" in screen.css("light")  # 밝은 바탕에서는 검정
-    assert "font-size: 3.4rem; font-weight: 900; color: var(--jv-title)" in screen.CSS
+    assert "font-size: 4rem; font-weight: 900; color: var(--jv-title)" in screen.CSS  # F1, F19
+    assert "--jv-highlight) 58%" not in screen.CSS  # 제목 뒤 형광 줄 없음 (F19)
 
 
 def test_css_wraps_many_keywords_and_keeps_card_text():
@@ -908,18 +920,53 @@ def test_css_wraps_many_keywords_and_keeps_card_text():
 
 def test_key_card_deletes_key_from_this_pc(app, no_key, tmp_path):
     at = app()
-    next(t for t in at.text_input if t.label == "GOOGLE_API_KEY").input("AIzaSyFAKE-app-key-7777")
+    key_box(at).input("AIzaSyFAKE-app-key-7777")
     at.button[[b.label for b in at.button].index("저장")].click()
     at.run()
+    at.button(key="key-open").click().run()
 
     at.button(key="key-delete").click().run()  # v0.6.1 F14
 
     assert "AIzaSyFAKE" not in (tmp_path / "data" / "settings.env").read_text(encoding="utf-8")
     assert any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)  # 다시 입력 칸
-    assert "Google AI Studio" in at.info[0].value  # 키 자체는 Google에서 지워야 함을 안내
+    assert any("Google AI Studio" in i.value for i in at.info)  # 키 자체는 Google에서 지워야 함을 안내
 
 
 def test_compose_does_not_pass_key_as_environment():
     compose = (Path(__file__).parent.parent / "docker-compose.yml").read_text(encoding="utf-8")
 
     assert "GOOGLE_API_KEY" not in compose and "ANTHROPIC_API_KEY" not in compose  # v0.6.1 F13
+
+
+# ---- v0.6.1 보완 (PC 피드백 2차) ----
+
+
+def test_finished_job_rereads_rows_once_even_without_progress_bar(app, monkeypatch):
+    reads = []
+    at = app([scorable(2)])
+    monkeypatch.setattr(sheets, "read_rows_readonly", lambda: reads.append(1) or [make_row(2, score="77")])
+    runner._job = runner.Job("score", result=runner.reports.Summary("공고 1건을 평가했습니다."), finished=True)
+
+    at.run()  # 진행 막대를 거치지 않고 끝난 작업 (v0.6.1 F16)
+    assert len(reads) == 1 and any("77" in m.value for m in at.markdown)
+    at.run()
+    assert len(reads) == 1  # 같은 작업은 한 번만 다시 읽음
+
+
+def test_resume_box_is_open_for_empty_profile_and_folded_otherwise(app, tmp_path):
+    at = app([])
+    box = next(e for e in at.expander if e.label == "📄 이력서·포트폴리오로 채우기")
+    assert box.proto.expanded  # 프로필이 비어 있으면 펼침 (v0.6.1 F18)
+
+    (tmp_path / "profile.yaml").write_text(PROFILE_TEXT, encoding="utf-8")
+    at.run()
+    box = next(e for e in at.expander if e.label == "📄 이력서·포트폴리오로 채우기")
+    assert not box.proto.expanded  # 채워져 있으면 접음
+
+
+def test_sidebar_filter_is_a_card_and_selected_tile_is_marked():
+    import app as screen
+
+    assert 'st-key-box-filter"] { padding: 16px; }' in screen.CSS  # v0.6.1 F20
+    assert "background: var(--jv-paper); }" in screen.CSS
+    assert '[class*="-on"] { border-width: 5px !important;' in screen.CSS  # 초록 대신 굵은 테두리 (F15)
