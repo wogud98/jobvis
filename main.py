@@ -14,7 +14,7 @@ import argparse
 
 from dotenv import load_dotenv
 
-from agent import codes, gaps, inbox, ocr, postings, reports, runner, sheets, user_profile
+from agent import codes, gaps, inbox, ocr, postings, reports, runner, settings, store, user_profile
 from agent.graph import MAX_COUNT, SOURCES
 
 GAPS_TOP = 10  # 스킬 갭 출력 개수 (F20)
@@ -111,12 +111,13 @@ def run_score(mode: str, profile: user_profile.Profile) -> None:
 
 
 def run_gaps() -> None:
-    print_gaps(*gaps.analyze(sheets.read_rows(), GAPS_TOP))
+    print_gaps(*gaps.analyze(store.read_rows(), GAPS_TOP))
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     load_dotenv()
+    settings.load()  # 화면에서 넣은 키 (v0.6 D6)
     if args.gaps:
         run_gaps()
         return

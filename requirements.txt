@@ -9,4 +9,6 @@ PyYAML>=6.0
 streamlit>=1.50
 pypdf>=5.0  # 이력서 PDF 글자 뽑기 (v0.5.2)
 python-docx>=1.1  # 이력서 Word 글자 뽑기 (v0.5.2)
+sqlalchemy>=2.0  # DB 저장 (v0.6). 테스트는 SQLite 메모리 DB
+psycopg[binary]>=3.2  # Postgres 연결 (v0.6, Docker)
 # Claude로 바꿀 때만 설치: pip install langchain-anthropic

@@ -1,0 +1,58 @@
+name: Docker
+
+# 반 배포 이미지가 빌드되고 compose로 뜨는지 확인한다 (v0.6 N3, D11).
+# 이미지가 2.5GB 안팎이라 Docker 관련 파일이 바뀐 PR과 main push에서만 돈다. 이미지를 올리지는 않는다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - .dockerignore
+      - requirements.txt
+      - requirements-ocr.txt
+      - scripts/warm_ocr.py
+      - agent/ocr.py
+      - .github/workflows/docker.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - .dockerignore
+      - requirements.txt
+      - requirements-ocr.txt
+      - scripts/warm_ocr.py
+      - agent/ocr.py
+      - .github/workflows/docker.yml
+
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (OCR 모델 받기 포함)
+        run: docker compose build
+      - name: Image size
+        run: docker image ls jobvis:0.6
+      - name: Start
+        run: docker compose up -d --wait
+      - name: Health
+        run: curl -fsS http://127.0.0.1:8501/_stcore/health
+      - name: DB 저장 확인
+        run: |
+          docker compose exec -T app python -c "
+          from agent import sheets, store
+          assert store.kind() == 'db'
+          number = store.append_row(['회사', '직무', '', '', 'url', '1'])
+          store.set_check(number, True)
+          assert store.read_rows()[0]['check'] == 'TRUE'
+          print('DB 저장 확인함')
+          "
+      - name: OCR 확인
+        run: docker compose exec -T app python -c "from agent import ocr; assert ocr.available(); ocr._model(); print('OCR 모델 있음')"
+      - name: Logs
+        if: always()
+        run: docker compose logs --tail 50
+      - name: Stop
+        if: always()
+        run: docker compose down -v

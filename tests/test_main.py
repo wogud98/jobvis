@@ -1,6 +1,7 @@
 import pytest
 
 import main
+from agent import sheets
 
 PROFILE = "skills: {main: [Python]}\nexperience: {years: 1}\ndirection: {jobs: [백엔드]}\n"
 
@@ -159,7 +160,7 @@ def test_invalid_option_combinations(argv):
 
 def test_missing_profile_stops_before_collecting(monkeypatch, tmp_path):
     monkeypatch.setattr(main.runner, "build_graph", lambda: pytest.fail("프로필이 없으면 수집도 하지 않아야 함"))
-    monkeypatch.setattr(main.sheets, "read_rows", lambda: pytest.fail("프로필이 없으면 시트를 읽지 않아야 함"))
+    monkeypatch.setattr(sheets, "read_rows", lambda: pytest.fail("프로필이 없으면 시트를 읽지 않아야 함"))
     missing = tmp_path / "profile.yaml"
 
     with pytest.raises(SystemExit) as exc_info:
@@ -171,7 +172,7 @@ def test_missing_profile_stops_before_collecting(monkeypatch, tmp_path):
 
 def test_bad_profile_stops_before_sheet_and_llm(monkeypatch, tmp_path):
     monkeypatch.setattr(main.runner, "build_score_graph", lambda: pytest.fail("프로필이 틀리면 평가하지 않음"))
-    monkeypatch.setattr(main.sheets, "read_rows", lambda: pytest.fail("프로필이 틀리면 시트를 읽지 않아야 함"))
+    monkeypatch.setattr(sheets, "read_rows", lambda: pytest.fail("프로필이 틀리면 시트를 읽지 않아야 함"))
     profile = tmp_path / "profile.yaml"
     profile.write_text("skills: {main: []}\nexperience: {years: 2.5}\ndirection: {jobs: [백엔드]}\n", encoding="utf-8")
 
@@ -193,7 +194,7 @@ def test_collect_then_score_all(monkeypatch, tmp_path, capsys):
     score = Recorder({"done": [rows[0]], "skipped": [rows[2]]})
     monkeypatch.setattr(main.runner, "build_graph", collect)
     monkeypatch.setattr(main.runner, "build_score_graph", score)
-    monkeypatch.setattr(main.sheets, "read_rows", lambda: rows)
+    monkeypatch.setattr(sheets, "read_rows", lambda: rows)
 
     monkeypatch.setattr(main.postings, "DIR", tmp_path)
     monkeypatch.setattr(main.ocr, "available", lambda: True)
@@ -218,7 +219,7 @@ def test_score_only_does_not_collect(monkeypatch, tmp_path):
     score = Recorder({"done": rows})
     monkeypatch.setattr(main.runner, "build_graph", lambda: pytest.fail("--score만 쓰면 수집하지 않음"))
     monkeypatch.setattr(main.runner, "build_score_graph", score)
-    monkeypatch.setattr(main.sheets, "read_rows", lambda: rows)
+    monkeypatch.setattr(sheets, "read_rows", lambda: rows)
 
     main.main(["--score", "--profile", str(profile)])
 
@@ -227,7 +228,7 @@ def test_score_only_does_not_collect(monkeypatch, tmp_path):
 
 def test_gaps_needs_no_profile_and_no_llm(monkeypatch, capsys):
     rows = [{"score": "40", "gaps": "Docker, AWS"}, {"score": "80", "gaps": "docker"}, {"score": "", "gaps": "Git"}]
-    monkeypatch.setattr(main.sheets, "read_rows", lambda: rows)
+    monkeypatch.setattr(sheets, "read_rows", lambda: rows)
     monkeypatch.setattr(main.user_profile, "load", lambda path: pytest.fail("--gaps는 프로필을 읽지 않음"))
     monkeypatch.setattr(main.runner, "build_score_graph", lambda: pytest.fail("--gaps는 평가하지 않음"))
 
@@ -280,7 +281,7 @@ def test_report_prints_filled_rows(capsys):
 def test_inbox_without_ocr_stops_without_touching_files(monkeypatch):
     monkeypatch.setattr(main.ocr, "available", lambda: False)
     monkeypatch.setattr(main.inbox, "run", lambda rows: pytest.fail("OCR이 없으면 파일을 건드리지 않음"))
-    monkeypatch.setattr(main.sheets, "read_rows", lambda: pytest.fail("OCR이 없으면 시트도 읽지 않음"))
+    monkeypatch.setattr(sheets, "read_rows", lambda: pytest.fail("OCR이 없으면 시트도 읽지 않음"))
 
     with pytest.raises(SystemExit) as exc_info:
         main.main(["--inbox"])
@@ -298,7 +299,7 @@ def test_inbox_prints_report(monkeypatch, capsys):
         skipped=[{"file": "saramin_999.png", "reason": "시트에 없는 공고"}],
     )
     monkeypatch.setattr(main.ocr, "available", lambda: True)
-    monkeypatch.setattr(main.sheets, "read_rows", lambda: [])
+    monkeypatch.setattr(sheets, "read_rows", lambda: [])
     monkeypatch.setattr(main.inbox, "run", lambda rows: result)
 
     main.main(["--inbox"])

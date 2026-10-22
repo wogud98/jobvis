@@ -10,8 +10,9 @@ from pathlib import Path
 
 import gspread
 import requests
+import sqlalchemy.exc
 
-from agent import postings, scoring, sheets
+from agent import postings, scoring, sheets, store
 
 UNKNOWN_SOURCE = "미상"  # 출처 칸이 빈 예전 줄 (F6)
 BLANK_EXPERIENCE = "(없음)"  # 경력 칸이 빈 줄의 필터 값
@@ -338,7 +339,7 @@ def chart(items: list[Card], limit: int = TOP) -> list[tuple[str, int]]:
 def summary(items: list[Card]) -> list[tuple[str, int, str]]:
     """요약 칸 4개 [(이름, 수, 설명)]. 필터와 상관없이 시트 전체 기준 (v0.5.1 F2)."""
     return [
-        ("전체 공고", len(items), "시트에 있는 공고"),
+        ("전체 공고", len(items), "시트에 있는 공고" if store.kind() == "sheet" else "저장된 공고"),  # v0.6 D12
         ("평가 완료", sum(card.score is not None for card in items), "점수가 있는 공고"),
         ("추천 이상", sum(card.verdict in RECOMMENDED for card in items), "강력 추천 + 추천"),
         # 본문 미확보 + 이미지 일부 못 읽음. "이미지 필요한 공고만 보기"와 같은 기준 (v0.5.4 F3)
@@ -347,7 +348,17 @@ def summary(items: list[Card]) -> list[tuple[str, int, str]]:
 
 
 def error_message(error: Exception) -> str:
-    """시트 읽기 실패를 화면 문구로. 예외 메시지에는 경로나 키가 섞일 수 있어 쓰지 않는다 (F9)."""
+    """시트·DB 읽기 실패를 화면 문구로. 예외 메시지에는 경로나 키가 섞일 수 있어 쓰지 않는다 (F9)."""
+    try:
+        where = store.kind()
+    except store.StorageError as wrong:  # JOBVIS_STORAGE 값이 틀림
+        return str(wrong)
+    if where == "db":  # v0.6 F6. DB 주소에는 비밀번호가 들어 있어 예외 글을 보여주지 않는다
+        if isinstance(error, KeyError):
+            return "DB 주소(DATABASE_URL)가 없습니다. docker compose로 실행했는지 확인해 주세요."
+        if isinstance(error, sqlalchemy.exc.SQLAlchemyError):
+            return "DB에 연결하지 못했습니다. docker compose ps로 db가 떠 있는지 확인해 주세요."
+        return f"DB를 읽지 못했습니다 ({type(error).__name__})."
     if isinstance(error, (KeyError, FileNotFoundError)):
         return (
             "인증 정보를 찾지 못했습니다. .env의 GOOGLE_SERVICE_ACCOUNT_FILE, GOOGLE_SHEET_ID와 "

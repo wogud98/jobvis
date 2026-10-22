@@ -3,6 +3,7 @@
 import functools
 import importlib.util
 import io
+import os
 
 MIN_SIDE = 300  # 가로나 세로가 이보다 작으면 장식으로 보고 건너뛴다 (F12)
 MAX_IMAGES = 10  # 공고당 최대 장수 (F12)
@@ -10,6 +11,8 @@ INSTALL_HINT = "이미지 OCR을 쓰려면 `pip install -r requirements-ocr.txt`
 
 
 def available() -> bool:
+    if os.getenv("JOBVIS_OCR", "").strip().lower() == "off":  # 꺼 두면 설치 안 된 것과 같다 (v0.6 F10)
+        return False
     return importlib.util.find_spec("paddleocr") is not None
 
 

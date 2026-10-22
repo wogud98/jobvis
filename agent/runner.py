@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from agent import codes, inbox, ocr, profile_form, reports, scoring, sheets, user_profile, view
+from agent import codes, inbox, ocr, profile_form, reports, scoring, store, user_profile, view
 from agent.graph import MAX_COUNT, SOURCES, build_graph, build_score_graph, recursion_limit
 
 KINDS = {"collect": "수집", "score": "평가", "inbox": "받은함 읽기"}
@@ -58,7 +58,7 @@ def error_text(error: Exception) -> str:
     if hint:
         return hint
     message = view.error_message(error)
-    if message.startswith("시트를 읽지 못했습니다"):  # 시트와 상관없는 오류
+    if message.startswith(("시트를 읽지 못했습니다", "DB를 읽지 못했습니다")):  # 저장과 상관없는 오류
         return f"실행하지 못했습니다 ({type(error).__name__}). 터미널 로그를 확인해 주세요."
     return message
 
@@ -189,7 +189,7 @@ def load_profile(path: str = user_profile.DEFAULT) -> user_profile.Profile:
 
 
 def score(mode: str, profile: user_profile.Profile, on_update: Callable[[str, dict], None] | None = None) -> dict:
-    targets, skipped = scoring.select_targets(sheets.read_rows(), mode)
+    targets, skipped = scoring.select_targets(store.read_rows(), mode)
     state = {
         "profile": user_profile.to_prompt(profile),
         "years": profile.experience.years,
@@ -215,7 +215,7 @@ def _score_progress(job: Job) -> Callable[[str, dict], None]:
 
 def start_score(mode: str, profile: user_profile.Profile, *, wait: bool = False) -> Job:
     def work(job: Job) -> reports.Summary:
-        job.stage = "시트를 읽는 중"
+        job.stage = "공고를 읽는 중"
         return reports.score_summary(score(mode, profile, _score_progress(job)))
 
     return start("score", work, wait=wait)
@@ -233,7 +233,7 @@ def inbox_count() -> int:
 def read_inbox() -> inbox.InboxResult:
     if not ocr.available():  # 아무 파일도 건드리지 않는다 (v0.5 F44, v0.5.2 F11)
         raise RunError(f"OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")
-    return inbox.run(sheets.read_rows())
+    return inbox.run(store.read_rows())
 
 
 def start_inbox(*, wait: bool = False) -> Job:

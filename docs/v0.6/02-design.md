@@ -29,8 +29,10 @@ v0.6에서 더하거나 바꾼 것만.
 classDiagram
     direction LR
     class store {
+        +StorageError
         +backend() module
         +kind() "sheet" | "db"
+        +place() "시트" | "DB"
         +existing_keys()
         +append_row(values) int
         +read_rows() list~dict~
@@ -42,12 +44,16 @@ classDiagram
     class sheets {
         +HEADER, KEYS, SOURCE_NAMES
         +normalize / normalize_company / source_code
+        +collect_keys(rows)
+        +existing_keys()
         +append_row / read_rows / read_rows_readonly
         +update_cells / set_* / write_result
     }
     class db {
         +TABLE postings
         +engine() 처음 연결 때 create_all
+        +text(value) str
+        +existing_keys() collect_keys 사용
         +append_row / read_rows / read_rows_readonly
         +update_cells / set_* / write_result
     }
@@ -55,6 +61,7 @@ classDiagram
         +PATH = data/settings.env
         +load()
         +key_name() str
+        +key_page() str
         +has_key() bool
         +save_key(key)
         +masked() str
@@ -63,13 +70,19 @@ classDiagram
         +available() JOBVIS_OCR=off면 거짓
     }
     class user_profile {
-        +DEFAULT = JOBVIS_PROFILE 또는 profile.yaml
+        +default_path() JOBVIS_PROFILE 또는 profile.yaml
+        +DEFAULT = default_path()
+    }
+    class view {
+        +summary() DB면 "저장된 공고"
+        +error_message() DB 오류 문구
     }
     class graph
     class inbox
     class runner
     class app {
         +show_key_card()
+        +save_key_form(where)
     }
     class main
     graph --> store
@@ -82,11 +95,15 @@ classDiagram
     db ..> sheets : HEADER, KEYS
     app --> settings
     main --> settings
+    settings ..> graph : llm_model()
+    view ..> store : kind()
 ```
 
-- `existing_keys()`는 `read_rows()`만 쓰므로 `store`로 옮겨 두 방식이 함께 씀.
+- `existing_keys()`의 계산은 `sheets.collect_keys(rows)`로 떼어 두 방식이 함께 씀. 각 백엔드의 `existing_keys()`는 자기 `read_rows()` 결과를 넘김. 구현하면서 바꿈: 처음 설계는 `store`로 옮기는 것이었으나, 그러면 `graph.sheets.existing_keys`를 바꿔 끼우는 기존 테스트가 시트를 직접 열게 되어 이렇게 함.
 - `normalize`, `source_code`, `HEADER`, `KEYS`, `SOURCE_NAMES`는 저장과 상관없는 값이라 `sheets`에 그대로 둠.
-- `view.error_message`는 DB 연결 오류(`sqlalchemy.exc.OperationalError`) 문구를 더함.
+- `view.error_message`는 DB 오류 문구를 더함. DB 주소에 비밀번호가 들어 있어 예외 글은 보여주지 않음.
+- `store`는 함수를 부를 때마다 고른 모듈에서 찾음. 테스트가 `sheets` 함수를 바꿔 끼우면 그대로 쓰임.
+- `user_profile.DEFAULT`는 import 때 정해짐. `.env`의 `JOBVIS_PROFILE`은 반영되지 않고, 실행 환경 변수(compose)로만 바뀜.
 
 ## 배포 다이어그램
 
@@ -185,17 +202,17 @@ sequenceDiagram
 | `Dockerfile` | 새로 | D9. 의존성 설치 → OCR 모델 미리 받기 → 코드 복사 → `streamlit run app.py --server.address=0.0.0.0` |
 | `docker-compose.yml` | 새로 | `app` + `db`, 볼륨 2개, db 상태 확인(`pg_isready`) 뒤 app 시작 (F2, F3) |
 | `.dockerignore` | 새로 | `.env`, `service_account.json`, `profile.yaml`, `data/`, `.git`, 캐시 (F11) |
-| `scripts/warm_ocr.py` | 새로 | 빌드 때 PaddleOCR 한국어 모델 받기 |
+| `scripts/warm_ocr.py` | 새로 | 빌드 때 `agent.ocr._model()`로 PaddleOCR 한국어 모델 받기 (화면과 같은 설정) |
 | `agent/store.py` | 새로 | D1, D2 |
 | `agent/db.py` | 새로 | D3–D5 |
 | `agent/settings.py` | 새로 | D6 |
-| `agent/sheets.py` | 바뀜 | `existing_keys`를 `store`로 옮김 |
+| `agent/sheets.py` | 바뀜 | `existing_keys` 계산을 `collect_keys`로 뗌 |
 | `agent/graph.py`, `inbox.py`, `runner.py`, `main.py`, `app.py` | 바뀜 | `sheets.` 저장 함수 → `store.`, 키 입력 칸(F4), 문구(D12) |
 | `agent/ocr.py` | 바뀜 | D8 |
 | `agent/user_profile.py` | 바뀜 | D7 |
 | `agent/view.py` | 바뀜 | DB 오류 문구, 요약 칸 문구(D12) |
 | `requirements.txt` | 바뀜 | `sqlalchemy>=2.0`, `psycopg[binary]>=3.2` (N2) |
-| `.github/workflows/ci.yml` | 바뀜 | `docker build` 일 (D11, N3) |
+| `.github/workflows/docker.yml` | 새로 | compose 빌드·실행·DB 저장·OCR 모델 확인. Docker 관련 파일이 바뀐 PR과 main push만 (D11, N3) |
 | `README.md` | 바뀜 | 반 사람용 시작하기 (F13) |
 
 ## 테스트 계획
@@ -204,10 +221,10 @@ sequenceDiagram
 
 - `db`: SQLite 메모리 DB로 append → read → update_cells → write_result → set_* 를 시트 가짜와 같은 기대값으로 검사. 빈 표, 없는 줄 번호, 예전 열이 비어 있는 줄.
 - `store`: `JOBVIS_STORAGE` 없음 → sheet, `db` → db, 이상한 값 → 오류 문구. 두 백엔드가 같은 공개 함수를 갖췄는지.
-- `store.existing_keys`: 지금 `sheets` 테스트를 그대로 옮겨 두 백엔드로 돌림.
+- `existing_keys`: 시트 테스트는 그대로, DB는 같은 규칙(출처 빈칸=사람인, 법인 표기 지움, 본문 미확보)을 따로 검사.
 - `settings`: 키 저장·읽기, `.env` 값 우선, 빈 값만 채움, `masked()`가 끝 4자리만, 키가 오류 문구·로그에 안 나옴(F5).
 - `ocr.available`: `JOBVIS_OCR=off`면 거짓.
-- `user_profile.DEFAULT`: `JOBVIS_PROFILE`을 따름.
+- `user_profile.default_path()`: `JOBVIS_PROFILE`을 따름.
 - 화면(`app`): 키가 없을 때 키 칸이 뜨는지, 저장 뒤 사라지는지(Streamlit AppTest).
 - Docker 이미지 빌드·실행, 이미지 크기, 첫 실행 시간, OCR 메모리는 `03-test.md`에 실측(N5).
 

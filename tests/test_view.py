@@ -3,6 +3,7 @@ from datetime import date, datetime
 import gspread
 import pytest
 import requests
+import sqlalchemy.exc
 
 from agent import postings, sheets, view
 
@@ -392,3 +393,31 @@ def test_recommended_only_keeps_strong_and_recommended():
     shown = view.apply(view.cards(rows), view.Filters([], [], recommended_only=True))
 
     assert [c.row for c in shown] == [2, 3]  # F12
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (KeyError("DATABASE_URL"), "DATABASE_URL"),
+        (sqlalchemy.exc.OperationalError("connect", {}, Exception("postgresql://jobvis:secret@db")), "DB에 연결하지"),
+        (ValueError("secret"), "DB를 읽지 못했습니다 (ValueError)"),
+    ],
+)
+def test_error_message_for_db_hides_address(monkeypatch, error, expected):
+    monkeypatch.setenv("JOBVIS_STORAGE", "db")
+
+    message = view.error_message(error)
+
+    assert expected in message and "secret" not in message  # DB 주소의 비밀번호를 보이지 않음 (v0.6)
+
+
+def test_error_message_for_wrong_storage_setting(monkeypatch):
+    monkeypatch.setenv("JOBVIS_STORAGE", "excel")
+
+    assert "sheet 또는 db" in view.error_message(ValueError("x"))
+
+
+def test_summary_says_saved_postings_for_db(monkeypatch):
+    monkeypatch.setenv("JOBVIS_STORAGE", "db")
+
+    assert view.summary([])[0][2] == "저장된 공고"  # v0.6 D12

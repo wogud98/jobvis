@@ -208,3 +208,11 @@ def test_to_prompt_has_one_can_use_line():
 
     assert "- 다룰 수 있음: Go" in text
     assert "써 본 적 있음" not in text
+
+
+def test_default_path_follows_environment(monkeypatch):
+    monkeypatch.delenv("JOBVIS_PROFILE", raising=False)
+    assert user_profile.default_path() == "profile.yaml"
+
+    monkeypatch.setenv("JOBVIS_PROFILE", "/app/data/profile.yaml")  # Docker 볼륨 (v0.6 D7)
+    assert user_profile.default_path() == "/app/data/profile.yaml"

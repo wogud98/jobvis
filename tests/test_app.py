@@ -804,3 +804,46 @@ def test_saving_after_clear_writes_cleared_value(app, tmp_path):
     saved = yaml.safe_load((tmp_path / "profile.yaml").read_text(encoding="utf-8"))
     assert not saved["skills"]["certificates"] and saved["skills"]["main"] == ["Python"]  # 저장해야 파일에 반영
     assert skill(at, "자격증").value == [] and skill(at, "주력 기술").value == ["Python"]
+
+
+@pytest.fixture
+def no_key(monkeypatch):
+    for name in ("GOOGLE_API_KEY", "ANTHROPIC_API_KEY"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LLM_MODEL", "google_genai:gemini-flash-lite-latest")
+
+
+def test_key_card_shows_when_no_key_and_saves_to_data_folder(app, no_key, tmp_path):
+    at = app()
+
+    assert any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)  # v0.6 F4
+    box = next(t for t in at.text_input if t.label == "GOOGLE_API_KEY")
+    box.input("AIzaSyFAKE-app-key-5678")
+    at.button[[b.label for b in at.button].index("저장")].click()
+    at.run()
+
+    saved = (tmp_path / "data" / "settings.env").read_text(encoding="utf-8")
+    assert "AIzaSyFAKE-app-key-5678" in saved
+    assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)
+    shown = " ".join([s.value for s in at.success] + [e.label for e in at.expander])
+    assert "••••5678" in shown and "AIzaSyFAKE" not in shown  # 끝 4자리만 (F5)
+
+
+def test_key_card_rejects_bad_key_without_saving(app, no_key, tmp_path):
+    at = app()
+    next(t for t in at.text_input if t.label == "GOOGLE_API_KEY").input("abc def")
+    at.button[[b.label for b in at.button].index("저장")].click()
+    at.run()
+
+    assert any("빈칸" in e.value for e in at.error)
+    assert not (tmp_path / "data" / "settings.env").exists()
+
+
+def test_key_card_is_folded_when_key_exists(app, monkeypatch):
+    monkeypatch.setenv("LLM_MODEL", "google_genai:gemini-flash-lite-latest")
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyFAKE-existing-4321")
+
+    at = app()
+
+    assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)
+    assert any(e.label == "🔑 LLM 키 ••••4321 · 바꾸기" for e in at.expander)

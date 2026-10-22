@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agent import ocr, postings, sheets
+from agent import ocr, postings, sheets, store
 
 DIR = Path("data/inbox")  # data/는 .gitignore에 있음 (N7)
 DONE = DIR / "done"
@@ -104,7 +104,7 @@ def run(rows: list[dict]) -> InboxResult:
         status = postings.status(text, ocr_texts, 0)
         if status != row["body"]:
             # 본문이 바뀐 줄은 "평가"를 켜서 다음 --score에서 다시 평가되게 한다 (F40)
-            sheets.update_cells(row["row"], {"본문": status, "평가": True})
+            store.update_cells(row["row"], {"본문": status, "평가": True})
             row["body"] = status
         result.read += len(read_files)
         result.filled.append({"source": source, "id": job_id, "company": row["company"], "status": status})
