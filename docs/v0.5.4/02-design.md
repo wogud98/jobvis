@@ -112,13 +112,14 @@ stateDiagram-v2
 
 | 변수 | 밝은 | 어두운 |
 | --- | --- | --- |
+| `--jv-ink` 테두리·그림자 | #111111 | #999090 (PR #37) |
 | `--jv-paper` 바탕 | #fffdf5 | #0e1013 |
-| `--jv-card` 칸 | #ffffff | #2a2f38 |
+| `--jv-card` 칸 | #ffffff | #323B4B (PR #37, 처음 #2a2f38) |
 | `--jv-field` 입력란 | #ffffff | #1a1d23 |
 | `--jv-tile0–3` 요약 칸 | #ffe066 #a5d8ff #8ce99a #ffc9c9 | #5c4a12 #1d3f5e #1f4d33 #5c2626 |
 | `--jv-tile-text` 요약 칸 글자 | #111111 | #f1f1f1 |
 
-`config.toml`의 `[theme.dark]`도 `backgroundColor = "#0e1013"`, `secondaryBackgroundColor = "#1a1d23"`(입력란·사이드바)로 맞춤. 배지·막대 색 면은 v0.5.3 F15대로 두 테마 같은 색과 검정 글자.
+`config.toml`의 `[theme.dark]`도 `backgroundColor = "#0e1013"`, `secondaryBackgroundColor = "#1a1d23"`(입력란·사이드바)로 맞춤. 버튼 초록 `primaryColor`는 PR #37에서 사용자가 #3d7181로 바꿈. 배지·막대 색 면은 v0.5.3 F15대로 두 테마 같은 색과 검정 글자.
 
 ## 바뀐 기존 코드
 
