@@ -1316,3 +1316,19 @@ def test_page_icon_file_is_in_repo_and_image():
     assert icon.is_file() and icon.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"  # v0.6.2 F18
     ignored = (Path(screen.__file__).parent / ".dockerignore").read_text(encoding="utf-8").split()
     assert "assets/" not in ignored and "assets" not in ignored and "*.png" not in ignored  # 이미지에 들어감
+
+
+def test_app_has_no_bare_expressions_that_magic_would_draw():
+    import ast
+
+    import app as screen
+
+    # 식만 있는 줄(예: a() if c else b())은 Streamlit magic이 화면 맨 위에 그린다.
+    # 펼쳐 두기 콜백에서 None이 CSS 칸을 덮어 테마가 사라졌음 (v0.6.2 F15 보완)
+    tree = ast.parse(Path(screen.__file__).read_text(encoding="utf-8"))
+    bare = [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Expr) and not isinstance(node.value, (ast.Call, ast.Constant))
+    ]
+    assert bare == []

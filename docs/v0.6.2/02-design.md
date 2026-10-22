@@ -47,6 +47,9 @@
 | D19 | `show_score_bar`: 두 대상이 모두 0건이면 안내 한 줄과 체크 오류만 보이고 버튼은 그리지 않음 (F17) | 누를 수 없는 버튼 두 개보다 이유 한 줄이 분명함. 숨기지 않고 줄은 남겨 평가 위치는 보임 |
 | D20 | `assets/icon.png`(256px, 둥근 모서리 밖 투명)를 `st.set_page_config(page_icon=ICON)`. `.dockerignore`에 걸리지 않아 이미지에 들어감 (F18) | 탭 아이콘은 16–32px로 보여 바깥 여백은 뺌 |
 
+| D21 | `pin` 콜백의 `a() if c else b()` 한 줄을 if 문으로. Streamlit magic이 식 한 줄의 값(None)을 그려서, 칸만 다시 그리기(fragment) 때는 그 None이 화면 맨 위 CSS 칸을 덮어 테마가 사라졌음. 테스트로 `app.py`에 호출 아닌 식 한 줄이 없게 막음 (F15 보완) | 전체 다시 그리기 때는 스크립트가 맨 위 칸을 다시 CSS로 덮어 안 보였음 |
+| D22 | 시작·끄기 파일의 `docker compose`는 모두 `-f compose.yml`. 시작 파일 맨 앞에서 `compose.yml`이 없으면 멈춤 (F19) | Docker는 지금 폴더에 compose 파일이 없으면 위 폴더에서 찾음 |
+
 ```mermaid
 sequenceDiagram
     participant U as 사용자

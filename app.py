@@ -395,7 +395,11 @@ def badge(text: str, kind: str, tip: str = "") -> str:
 
 def pin(row: int, pinned: bool) -> None:
     rows = st.session_state.setdefault(PINNED, set())
-    rows.add(row) if pinned else rows.discard(row)
+    # 식 한 줄(a if c else b)로 쓰면 Streamlit magic이 None을 화면 맨 위에 그려 CSS 칸을 덮는다 (v0.6.2 F15 보완)
+    if pinned:
+        rows.add(row)
+    else:
+        rows.discard(row)
 
 
 def show_card(card: view.Card, known: list[str]) -> None:

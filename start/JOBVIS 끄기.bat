@@ -5,7 +5,7 @@ rem JOBVIS 끄기 (v0.6.2 F3). 데이터(키, 프로필, 공고, 점수)는 볼�
 cd /d "%~dp0"
 title JOBVIS 끄기
 if not exist "jobvis.env" (> "jobvis.env" echo JOBVIS_TAG=latest)
-docker compose --env-file jobvis.env down
+docker compose -f compose.yml --env-file jobvis.env down
 if errorlevel 1 (
     echo.
     echo 끄지 못했습니다. Docker Desktop이 켜져 있는지 확인하세요.

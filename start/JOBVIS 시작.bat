@@ -6,6 +6,12 @@ rem 키는 이 파일에서 다루지 않는다. 화면 첫 창에서 넣는다 
 cd /d "%~dp0"
 title JOBVIS 시작
 set "SETTINGS=jobvis.env"
+rem 같은 폴더의 compose.yml만 쓴다. 없으면 Docker가 위 폴더의 compose 파일을 찾아 엉뚱한 이미지를 받는다
+if not exist "compose.yml" (
+    echo compose.yml이 이 파일과 같은 폴더에 없습니다.
+    echo 시작 파일 묶음을 다시 풀거나, 저장소라면 main 브랜치로 받아 주세요.
+    goto fail
+)
 
 echo [1/4] Docker 확인 중...
 docker info >nul 2>&1
@@ -24,7 +30,7 @@ if not exist "%SETTINGS%" (
 )
 
 echo [2/4] 8501 포트 확인 중...
-docker compose --env-file "%SETTINGS%" ps --status running --services 2>nul | findstr /x "app" >nul
+docker compose -f compose.yml --env-file "%SETTINGS%" ps --status running --services 2>nul | findstr /x "app" >nul
 if errorlevel 1 (
     netstat -ano | findstr /r /c:":8501 .*LISTENING" >nul
     if not errorlevel 1 (
@@ -36,7 +42,7 @@ if errorlevel 1 (
 )
 
 echo [3/4] 이미지 받는 중... 처음에는 몇 분 걸립니다.
-docker compose --env-file "%SETTINGS%" pull
+docker compose -f compose.yml --env-file "%SETTINGS%" pull
 if errorlevel 1 (
     echo.
     echo 이미지를 받지 못했습니다. 인터넷 연결을 확인하고 다시 실행하세요.
@@ -44,11 +50,11 @@ if errorlevel 1 (
 )
 
 echo [4/4] JOBVIS 켜는 중... 화면이 준비될 때까지 기다립니다.
-docker compose --env-file "%SETTINGS%" up -d --wait
+docker compose -f compose.yml --env-file "%SETTINGS%" up -d --wait
 if errorlevel 1 (
     echo.
     echo JOBVIS를 켜지 못했습니다. 아래 기록을 확인하세요.
-    docker compose --env-file "%SETTINGS%" logs --tail 30 app
+    docker compose -f compose.yml --env-file "%SETTINGS%" logs --tail 30 app
     goto fail
 )
 

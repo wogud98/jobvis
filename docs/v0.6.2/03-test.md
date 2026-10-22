@@ -43,7 +43,7 @@ sh scripts/check_image.sh jobvis:bad            # .env, service_account.json을 
 ```bash
 ruff check .            # All checks passed!
 ruff format --check .   # 98 files already formatted
-python -m pytest        # 634 passed (623개 → 634개)
+python -m pytest        # 634 passed (623개 → 634개). 보완 3 뒤 636 passed
 ```
 
 작업 환경에서 `streamlit run app.py`(SQLite DB, 가짜 키, 공고 20건)를 띄우고 Chromium(Playwright)으로 확인함.
@@ -57,6 +57,13 @@ python -m pytest        # 634 passed (623개 → 634개)
 | F17 | 0건·0건이면 버튼 없이 한 줄, 한쪽만 0건이면 그 버튼만 비활성 | `test_score_bar_is_one_line_without_targets`, `test_score_button_is_disabled_when_only_one_kind_has_targets`, `test_hide_card_moves_it_to_hidden_view_and_back`, Chromium | 통과 |
 | F18 | `assets/icon.png`가 PNG, `.dockerignore`에 걸리지 않음, 브라우저 탭 아이콘 링크가 이 파일 | `test_page_icon_file_is_in_repo_and_image`, Chromium `link[rel=icon]` | 통과 |
 
+### 보완 3 (F15 보완, F19)
+
+| ID | 확인 내용 | 테스트·명령 | 결과 |
+| --- | --- | --- | --- |
+| F15 보완 | 고치기 전: 펼쳐 두기 뒤 화면 맨 위 칸이 CSS `<style>` → `None`으로 바뀌고 테마가 사라짐(Chromium DOM 확인). 고친 뒤: `<style>` 그대로, 위치도 그대로 | Chromium, `test_app_has_no_bare_expressions_that_magic_would_draw`(고치기 전 코드에서 398번째 줄로 실패 확인) | 통과 |
+| F19 | 모든 `docker compose` 호출이 `-f compose.yml`, compose.yml 확인이 Docker 확인보다 앞, 실패 지점 5곳 | `test_bat_files_use_only_compose_file_next_to_them`, `test_start_bat_steps_and_failures` | 통과 |
+
 ## 크기 (N2)
 
 PR #52 Docker CI(GitHub Actions)에서 잰 값. 받는 크기는 `docker save | gzip -1` 크기로 어림함(레지스트리 층 압축과 비슷함).
@@ -69,6 +76,8 @@ PR #52 Docker CI(GitHub Actions)에서 잰 값. 받는 크기는 `docker save | 
 OCR을 고르면 약 560MB를 더 받음 → 질문 문구·화면 안내 "약 560MB". 처음 넣은 "약 350MB"는 작업 환경 근사값(시스템 라이브러리·모델 빠짐)이라 CI 값으로 고침. 기본 이미지는 받는 크기가 OCR 포함의 약 3분의 1.
 
 ## 미확인
+
+- **F19 Windows 실행**: `-f compose.yml`로 바꾼 시작·끄기 파일은 재리 PC 확인 필요.
 
 - **F15 재리 PC 브라우저**: 작업 환경 Chromium에서는 고침을 확인함. 재리 PC(Windows 브라우저)에서 처음 펼쳐 두기 때 위치가 그대로인지 확인 필요.
 - **F14 실제 키 오류**: 키가 틀렸을 때(있지만 잘못된 키)의 문구는 그대로 v0.6.1 F26 안내. 실제 키로 확인하지 않음.

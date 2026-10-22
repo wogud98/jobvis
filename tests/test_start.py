@@ -66,9 +66,19 @@ def test_start_bat_steps_and_failures():
     assert "Docker Desktop을 켠 뒤 다시 실행하세요" in text
     assert "JOBVIS_TAG=ocr" in text and "JOBVIS_TAG=latest" in text
     assert "choice /c YN /t 5 /d N" in text  # 다시 열면 5초 동안 바꿀 기회 (F6)
-    assert text.count("goto fail") == 4  # Docker, 포트, 받기, 켜기
+    assert text.count("goto fail") == 5  # compose.yml 없음, Docker, 포트, 받기, 켜기
     assert "pause" in text.split("\n:fail\n", 1)[1]
     assert f"({ocr.OCR_EXTRA} 더)" in text  # 묻는 문구의 크기가 화면 안내와 같음 (N2)
+
+
+def test_bat_files_use_only_compose_file_next_to_them():
+    """compose.yml이 없으면 Docker가 위 폴더의 직접 빌드용 compose를 읽어 받기가 실패했음 (v0.6.2 F19)."""
+    for path in BATS:
+        text = path.read_text(encoding="utf-8")
+        calls = [line for line in text.splitlines() if line.strip().startswith("docker compose")]
+        assert calls and all(line.strip().startswith("docker compose -f compose.yml ") for line in calls)
+    start = BATS[0].read_text(encoding="utf-8")
+    assert start.index('if not exist "compose.yml"') < start.index("docker info")
 
 
 def test_bat_files_never_touch_keys():
