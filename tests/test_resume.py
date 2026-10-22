@@ -269,3 +269,32 @@ def test_merge_moves_skill_out_of_can_use_when_resume_puts_it_in_main():
 
     assert merged[("skills", "main")] == ["C++"]
     assert merged[("skills", "can_use")] == ["Git", "Python"]  # 주력과 겹치지 않음 (F37)
+
+
+# ---- v0.6.1 F8 여러 파일 중복 ----
+
+
+def test_merge_drops_items_that_differ_only_in_spaces_or_case():
+    values = profile_form.to_form(None)
+    found = {
+        "skills": {"main": ["Python", "python ", "Spring  Boot", "Spring Boot"]},
+        "experience": {"training": ["SKT  ALEPH 과정", "SKT ALEPH 과정", "SSAFY 수료"]},
+    }
+
+    merged, filled = resume.merge(values, found)
+
+    assert merged[("skills", "main")] == ["Python", "Spring  Boot"]
+    assert merged[("experience", "training")].splitlines() == ["SKT  ALEPH 과정", "SSAFY 수료"]
+    assert "주력 기술" in filled
+
+
+def test_merge_does_not_add_same_item_written_differently_to_existing_list():
+    values = profile_form.to_form({"skills": {"main": ["Docker"]}})
+
+    merged, filled = resume.merge(values, {"skills": {"main": ["docker", "Kubernetes"]}})
+
+    assert merged[("skills", "main")] == ["Docker", "Kubernetes"]
+
+
+def test_prompt_asks_to_merge_same_item_across_files():
+    assert "하나로 합쳐" in resume.SYSTEM_PROMPT

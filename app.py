@@ -26,6 +26,7 @@ HIDDEN = "hidden_overrides"  # 화면에서 바꾼 관심 없음 {시트 줄: �
 APPLIED = "applied_overrides"  # 화면에서 바꾼 지원 {시트 줄: 지원함} (v0.5.3 F11)
 LAST_SEEN = "last_seen"  # 이 화면을 열기 전 마지막으로 연 시각 (v0.5.3 F9)
 CHECK_ERROR = "check_error"
+TOASTED = "toasted_job"  # 결과 알림을 띄운 작업 (v0.6.1 F5)
 PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
 TAGLINE = "채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다"  # JOBVIS 아래 문장 (v0.5.2 F43)
 SORTS = {"점수 높은 순": "score_desc", "점수 낮은 순": "score_asc", "마감 임박 순": "deadline"}  # F40, v0.5.3 F8
@@ -38,7 +39,8 @@ GUIDE = """
 - 이력서·포트폴리오 파일을 올리면 빈 칸을 채워 줍니다. 확인하고 고친 뒤 **💾 저장**을 누르세요.
 
 **② 수집** · 📋 공고 탭
-- 수집 카드에 키워드를 넣고 **🔎 수집**을 누릅니다. 30건 수집은 몇 분 걸립니다.
+- 수집 카드에 키워드를 넣고 **🔎 수집**을 누릅니다. 사람인·잡코리아 공개 페이지를 3초 간격으로 읽어서
+  30건 수집은 몇 분 걸립니다.
 
 **③ 평가**
 - 공고 카드의 **평가** 칸을 체크하고 목록 위 **🧮 체크한 공고 평가**를 누릅니다.
@@ -61,6 +63,10 @@ GUIDE = """
 - 다크 모드는 컴퓨터 설정을 따릅니다. 바꾸려면 오른쪽 위 **⋮ → Settings → Theme**.
 - 터미널(`python main.py --keyword 백엔드`, `--score`, `--inbox`)로 해도 결과는 같습니다.
 """
+RESUME_HELP = (
+    f"PDF(글자 있는 것)·Word·txt·md. 파일 글자(앞 {resume.MAX_TEXT:,}자)가 LLM 제공자(기본 Gemini)로 전송됩니다. "
+    "파일은 저장하지 않습니다."
+)  # 이력서 채우기 도움말 (v0.5.2 N2, N3, v0.6.1 F10)
 TRUST_HELP = (
     "점수를 매길 때 공고 원문을 얼마나 읽었는지입니다. "
     "높음: 원문을 다 읽음 · 보통: 이미지 일부를 못 읽음 · "
@@ -76,13 +82,13 @@ GENERATION = "profile_generation"  # 칸을 비울 때마다 올려 입력란을
 PALETTES = {
     "light": {
         "ink": "#111111", "paper": "#fffdf5", "card": "#ffffff", "field": "#ffffff", "green": "#059669",
-        "muted": "#444444", "sub": "#333333", "highlight": "#6ee7b7",
+        "muted": "#444444", "sub": "#333333", "highlight": "#6ee7b7", "title": "#111111",
         "tile0": "#ffe066", "tile1": "#a5d8ff", "tile2": "#8ce99a", "tile3": "#ffc9c9", "tile-text": "#111111",
     },
     "dark": {
         # 바탕은 더 어둡게, 칸은 한 단계 밝게, 입력란은 칸보다 어둡게 (v0.5.4 F13)
         "ink": "#999090", "paper": "#0e1013", "card": "#323B4B", "field": "#1a1d23", "green": "#34d399",
-        "muted": "#b0b4ba", "sub": "#d0d3d8", "highlight": "#047857",
+        "muted": "#b0b4ba", "sub": "#d0d3d8", "highlight": "#047857", "title": "#ffffff",
         # 요약 칸은 같은 색 계열의 짙은 톤 + 밝은 글자 (v0.5.4 F11)
         "tile0": "#5c4a12", "tile1": "#1d3f5e", "tile2": "#1f4d33", "tile3": "#5c2626", "tile-text": "#f1f1f1",
     },
@@ -171,7 +177,8 @@ div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
 div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg { width: 0.7em; height: 0.7em; }
 div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
 div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: var(--jv-ink); }
-.jv-hero h1 { margin: 0; padding: 0 6px; font-size: 2.6rem; font-weight: 900; color: var(--jv-ink);
+/* 제목은 크게, 어두운 테마에서는 흰색 (v0.6.1 F1) */
+.jv-hero h1 { margin: 0; padding: 0 6px; font-size: 3.4rem; font-weight: 900; color: var(--jv-title);
   letter-spacing: -0.03em; display: inline-block;
   background: linear-gradient(transparent 58%, var(--jv-highlight) 58%); }
 .jv-hero p { margin: 4px 0 0; color: var(--jv-sub); font-weight: 600; }
@@ -197,6 +204,26 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
   border-radius: 4px; font-size: 0.85rem; font-weight: 700; background: var(--jv-card); color: var(--jv-ink); }
 .jv-chip.jv-mine { background: #8ce99a; color: #111111; }
 .jv-strength { color: var(--jv-sub); font-size: 0.9rem; }
+/* 키 칸은 제목과 띄우고 작게 (v0.6.1 F2) */
+div[class*="st-key-key-card"] { margin-top: 1.2rem; padding: 10px 16px; }
+/* 카드 체크·점수·버튼 칸은 창이 좁아져도 글자가 잘리지 않게 (v0.6.1 F4) */
+div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"] div[class*="st-key-check-"]) {
+  flex-wrap: nowrap; }
+div[data-testid="stColumn"]:has(div[class*="st-key-check-"]) { flex: 0 0 4.6rem; min-width: 4.6rem; }
+div[data-testid="stColumn"]:has(div[class*="st-key-apply-"]) { flex: 0 0 7rem; min-width: 7rem; }
+div:has(> .jv-score) > .jv-muted { white-space: nowrap; font-size: 0.8rem; }
+div[data-testid="stColumn"]:has(> div .jv-badge) { flex: 1 1 0; min-width: 0; }
+div[class*="st-key-check-"] label, div[class*="st-key-apply-"] button, div[class*="st-key-hide-"] button,
+div[class*="st-key-run-score"] button { white-space: nowrap; }
+/* 고른 키워드가 많으면 옆으로 숨기지 않고 줄을 바꿔 모두 보인다 (v0.6.1 F7) */
+div[data-testid="stMultiSelect"] div:has(> span > [data-tag]) {
+  flex-wrap: wrap; overflow: visible; height: auto; row-gap: 4px; padding-top: 3px; padding-bottom: 3px;
+  min-width: 0; flex: 1 1 0; }
+div[data-testid="stMultiSelect"] [data-tag] { flex-shrink: 0; max-width: 100%; }
+div[data-testid="stMultiSelect"] div:has(> div > span > [data-tag]) { max-height: none; height: auto; }
+/* 프로필 네 칸은 같은 줄끼리 높이를 맞춘다 (v0.6.1 F9) */
+div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-profile-"]) { flex: 1 1 auto; }
+div[class*="st-key-box-profile-"] { height: 100%; }
 </style>
 """
 
@@ -308,7 +335,9 @@ def show_card(card: view.Card, known: list[str]) -> None:
     # 신뢰 낮음, 마감 지난 공고는 흐리게 (v0.5 F34, F5, v0.5.3 F7)
     key = f"box-{'dim-' if card.dim or closed else ''}card-{card.row}"
     with st.container(border=True, key=key):
-        check, score, head, hide = st.columns([0.7, 1, 6, 1.1], vertical_alignment="center")
+        # 체크와 점수는 한 칸에 위아래로 둬서 좁은 창에서도 회사·직무 칸이 넓게 남는다 (v0.6.1 F4)
+        left, head, hide = st.columns([1, 6, 1.1], vertical_alignment="center")
+        check = score = left
         # 체크하면 시트 "평가" 칸에도 체크된다. 목록 위 평가 줄 버튼으로 평가 (v0.5.2 F38, F39)
         check.checkbox(
             "평가", value=card.checked, key=f"check-{card.row}", on_change=toggle_check, args=(card.row,),
@@ -472,10 +501,13 @@ def show_job_result() -> None:
         st.error(f"{title}\n\n{job.error}")  # 키·경로 없이 (F13)
         return
     result = job.result
-    # 결과 한 줄, 할 일, 문제만 보이고 나머지는 접어 둔다 (F24)
-    st.success(f"{escape(result.headline)}  \n{title}")
-    for line in result.todo:
-        st.warning(escape(line))
+    # 결과 한 줄과 할 일은 잠깐 뜨는 알림으로 한 번만. 화면에 남는 칸은 문제가 있을 때만 (v0.6.1 F5)
+    shown = f"{job.label}-{job.started}"
+    if st.session_state.get(TOASTED) != shown:
+        st.session_state[TOASTED] = shown
+        st.toast(" ".join([result.headline, *result.todo]), icon="✅")
+    if not result.problems:
+        return
     for line in result.problems:
         st.error(escape(line))
     if result.details:
@@ -498,9 +530,7 @@ def start_job(starter, *args) -> None:
 def show_collect_card() -> None:
     busy = runner.running()  # 한 번에 하나만 (F12)
     with st.container(border=True, key="box-run-collect"):
-        st.markdown(
-            "**수집** <span class='jv-muted'>사람인·잡코리아 공개 페이지, 요청 간격 3초</span>", unsafe_allow_html=True
-        )
+        st.markdown("**수집**")  # 사이트·요청 간격 안내는 사용법에만 (v0.6.1 F3)
         try:
             raw = user_profile.read_raw(PROFILE)
         except user_profile.ProfileError:
@@ -553,11 +583,8 @@ def show_score_bar(rows: list[dict]) -> None:
     busy = runner.running()
     checked, unscored = runner.score_targets(rows, "checked"), runner.score_targets(rows, "all")
     with st.container(border=True, key="box-score-bar"):
-        note, left, right = st.columns([2, 1.2, 1.2], vertical_alignment="center")
-        note.markdown(
-            "**평가** <span class='jv-muted'>카드의 평가 칸을 체크하고 누릅니다. 저장된 프로필로 LLM 채점</span>",
-            unsafe_allow_html=True,
-        )
+        st.markdown("**평가** <span class='jv-muted'>카드의 평가 칸을 체크하고 누릅니다</span>", unsafe_allow_html=True)
+        left, right = st.columns(2)  # 버튼 글자가 잘리지 않게 안내 줄 아래 두 칸 (v0.6.1 F4)
         if left.button(
             f"🧮 체크한 공고 평가 ({checked}건)", type="primary", disabled=busy or not checked,
             key="run-score", use_container_width=True,
@@ -652,10 +679,10 @@ def show_postings() -> None:
             ),
         )
     shown = view.apply(items, filters)
-    with st.container(border=True, key="box-chart"):  # 필터가 사이드바로 가서 가로 전체 (v0.5.4 F1)
-        st.markdown(f"**종합점수 TOP {view.TOP}**")
-        data = view.chart(shown)  # 필터를 지난 공고 중 높은 5개 (F42)
-        if data:  # 필터를 지난 공고만 (v0.5 F5)
+    data = view.chart(shown)  # 필터를 지난 공고 중 높은 5개 (F42)
+    if data:  # 점수 있는 공고가 있을 때만 칸을 보인다 (v0.6.1 F6)
+        with st.container(border=True, key="box-chart"):  # 필터가 사이드바로 가서 가로 전체 (v0.5.4 F1)
+            st.markdown(f"**종합점수 TOP {view.TOP}**")
             st.bar_chart(
                 {"공고": [name for name, _ in data], "종합점수": [score for _, score in data]},
                 x="공고",
@@ -665,8 +692,6 @@ def show_postings() -> None:
                 color=ACCENT,
                 height=CHART_HEIGHT,
             )
-        else:
-            st.caption("점수 있는 공고가 없습니다.")
 
     show_score_bar(rows)  # 목록 바로 위. 대상 수는 필터와 상관없이 전체 시트 기준 (F38)
     if st.session_state.get(PAGE_FILTERS) != filters:  # 필터·정렬을 바꾸면 1쪽부터 (F41)
@@ -796,10 +821,7 @@ def show_field_with_clear(field: profile_form.Field, default, taken: list[str]):
 
 def show_resume_fill(values: dict, fill: dict | None) -> None:
     """이력서·포트폴리오 파일 → LLM → 입력란 (v0.5.2 F16–F22). 저장은 하지 않는다."""
-    st.markdown(
-        "**📄 이력서·포트폴리오로 채우기** <span class='jv-muted'>PDF(글자 있는 것)·Word·txt·md, 여러 개 가능</span>",
-        unsafe_allow_html=True,
-    )
+    st.markdown("**📄 이력서·포트폴리오로 채우기**")  # 형식·전송 안내는 파일 칸 ? 도움말로 (v0.6.1 F10)
     if fill:  # 채운 칸 표시 (F20)
         st.markdown(
             "<span class='jv-muted'>이력서에서 채움</span> "
@@ -814,17 +836,15 @@ def show_resume_fill(values: dict, fill: dict | None) -> None:
             st.session_state.pop(FILL, None)
             st.rerun()
     files = st.file_uploader(
-        "이력서 파일",
+        "이력서·포트폴리오 파일 (여러 개 가능)",
         type=[suffix[1:] for suffix in resume.EXTENSIONS],
         accept_multiple_files=True,
         key="resume-files",
-        label_visibility="collapsed",
+        help=RESUME_HELP,  # N2, N3
     )
-    st.caption(
-        f"파일 글자(앞 {resume.MAX_TEXT:,}자)가 LLM 제공자(기본 Gemini)로 전송됩니다. 파일은 저장하지 않습니다."
-    )  # N2, N3
-    overwrite = st.toggle("이미 적은 칸도 바꾸기", key="resume-overwrite")  # 기본은 빈 칸만 (F19)
-    if not st.button("✨ 이력서로 채우기", disabled=not files, key="resume-fill"):
+    run, toggle = st.columns([1, 2], vertical_alignment="center")
+    overwrite = toggle.toggle("이미 적은 칸도 바꾸기", key="resume-overwrite")  # 기본은 빈 칸만 (F19)
+    if not run.button("✨ 이력서로 채우기", disabled=not files, key="resume-fill"):
         return
     text, skipped = resume.read_files([(file.name, file.getvalue()) for file in files])
     for name, reason in skipped:  # 그 파일만 건너뜀 (F21)
@@ -928,8 +948,11 @@ KEY_SAVED = "key_saved"  # 방금 키를 저장했는지 (v0.6 F4)
 
 def save_key_form(where: str) -> None:
     with st.form(f"key_form_{where}", clear_on_submit=True, border=False):
-        key = st.text_input(settings.key_name(), type="password", placeholder="여기에 붙여넣기")
-        if not st.form_submit_button("저장", type="primary"):
+        box, button = st.columns([5, 1], vertical_alignment="bottom")  # 입력란과 저장을 한 줄에 (v0.6.1 F2)
+        key = box.text_input(
+            settings.key_name(), type="password", placeholder="여기에 붙여넣기", label_visibility="collapsed"
+        )
+        if not button.form_submit_button("저장", type="primary", use_container_width=True):
             return
     try:
         settings.save_key(key)
@@ -949,12 +972,12 @@ def show_key_card() -> None:
             st.caption(".env에 키를 적어 두었다면 다음 실행부터는 .env 값이 우선합니다.")
             save_key_form("change")
         return
-    with st.container(border=True):
-        st.markdown("#### 🔑 LLM 키를 넣어 주세요")
+    with st.container(border=True, key="key-card"):  # 제목 한 줄 + 입력 한 줄 (v0.6.1 F2)
         page = settings.key_page()
-        st.caption(
-            f"평가와 이력서 채우기에 씁니다. [{page}]({page})에서 무료로 발급받아 붙여넣으세요. "
-            "키는 이 PC의 data/settings.env에만 저장되고 화면에는 끝 4자리만 보입니다."
+        st.markdown(
+            f"**🔑 LLM 키를 넣어 주세요** <span class='jv-muted'>평가·이력서 채우기에 씀 · "
+            f"<a href='{page}' target='_blank'>무료 발급</a> · 이 PC에만 저장, 화면엔 끝 4자리만</span>",
+            unsafe_allow_html=True,
         )
         save_key_form("new")
 

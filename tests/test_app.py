@@ -239,31 +239,38 @@ def test_running_job_locks_buttons_and_shows_progress(app):
     assert "수집 중" in text and "(2/8)" in text  # F5
 
 
-def test_finished_job_shows_headline_todo_problems_and_folded_details(app):
+def test_finished_job_shows_problems_and_folded_details(app):
     summary = runner.reports.Summary(
         "새 공고 <b>17</b>건을 저장했습니다.",
         todo=["본문 없는 공고 2건: 카드 '자세히'에서 이미지를 넣어 주세요."],
-        problems=["잡코리아 수집이 멈췄습니다: 429"],
+        problems=["잡코리아 수집이 <b>멈췄습니다</b>: 429"],
         details=["사람인 가져옴 20 / 새로 저장 14 / 건너뜀 6 / 실패 0"],
     )
     runner._job = runner.Job("collect", result=summary, finished=True)
     at = app([])
 
-    assert at.success[0].value.startswith("새 공고 &lt;b&gt;17&lt;/b&gt;건을 저장했습니다.")  # 한 줄, escape (F24)
-    assert "수집 결과" in at.success[0].value and "가져옴" not in at.success[0].value  # 로그는 기본으로 안 보임
-    assert "본문 없는 공고 2건" in at.warning[0].value  # 할 일 (F25)
-    assert "--inbox" not in at.warning[0].value
-    assert "수집이 멈췄습니다" in at.error[0].value  # 문제
+    assert "새 공고 <b>17</b>건을 저장했습니다." in at.toast[0].value  # 결과 한 줄은 잠깐 뜨는 알림 (v0.6.1 F5)
+    assert "본문 없는 공고 2건" in at.toast[0].value  # 할 일도 알림에
+    assert not at.success and not at.warning  # 화면에 남는 결과 칸 없음
+    assert "&lt;b&gt;멈췄습니다&lt;/b&gt;" in at.error[0].value  # 문제는 남김, escape
     details = next(e for e in at.expander if e.label == "자세히" and "가져옴" in e.children[0].value)
-    assert "사람인 가져옴 20" in details.children[0].value
+    assert "사람인 가져옴 20" in details.children[0].value  # 문제가 있을 때만 자세히
 
 
-def test_finished_job_without_todo_or_problems_shows_only_headline(app):
-    runner._job = runner.Job("score", result=runner.reports.Summary("공고 3건을 평가했습니다."), finished=True)
+def test_finished_job_without_problems_shows_only_toast_once(app):
+    summary = runner.reports.Summary(
+        "새 공고 18건을 저장했습니다.",
+        todo=["본문 없는 공고 1건: 카드 '자세히'에서 공고 이미지를 넣으면 더 정확하게 평가됩니다."],
+        details=["사람인 가져옴 20 / 새로 저장 18 / 건너뜀 2 / 실패 0"],
+    )
+    runner._job = runner.Job("collect", result=summary, finished=True, started="03:11:45")
     at = app([])
 
-    assert "공고 3건을 평가했습니다." in at.success[0].value
-    assert not at.warning and not at.error
+    assert "새 공고 18건을 저장했습니다." in at.toast[0].value  # v0.6.1 F5
+    assert not at.success and not at.warning and not at.error
+    assert not any("가져옴" in e.children[0].value for e in at.expander if e.label == "자세히")  # 자세히 없음
+    at.run()
+    assert not at.toast  # 다시 그려도 알림은 한 번만
 
 
 def test_failed_job_shows_error(app):
@@ -336,7 +343,8 @@ def test_resume_fill_can_be_discarded(app, tmp_path):
 def test_resume_section_notes_llm_transfer_and_disables_button_without_files(app):
     at = app([])
 
-    assert any("LLM 제공자" in c.value for c in at.caption)  # N3
+    uploader = at.get("file_uploader")[0]
+    assert "LLM 제공자" in uploader.proto.help  # N3, 도움말로 옮김 (v0.6.1 F10)
     assert at.button(key="resume-fill").disabled
     assert next(t for t in at.toggle if t.label == "이미 적은 칸도 바꾸기").value is False  # F19 기본
 
@@ -445,7 +453,7 @@ def test_score_bar_buttons_start_score(app, monkeypatch, tmp_path, key, mode):
 
 
 def test_score_bar_sits_right_above_card_list(app):
-    at = app([scorable(2)])
+    at = app([scorable(2), make_row(3, score="70", verdict="추천", trust="높음", body="글자")])
 
     texts = [m.value for m in at.markdown]
     bar = next(i for i, v in enumerate(texts) if v.startswith("**평가**"))
@@ -847,3 +855,52 @@ def test_key_card_is_folded_when_key_exists(app, monkeypatch):
 
     assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)
     assert any(e.label == "🔑 LLM 키 ••••4321 · 바꾸기" for e in at.expander)
+
+
+# ---- v0.6.1 화면 다듬기 ----
+
+
+def test_chart_only_when_scored_postings_exist(app):
+    at = app([scorable(2)])
+
+    assert not any("종합점수 TOP" in m.value for m in at.markdown)  # 점수 없으면 칸 없음 (v0.6.1 F6)
+    assert not any("점수 있는 공고가 없습니다" in c.value for c in at.caption)
+
+
+def test_chart_shows_with_scored_posting(app):
+    at = app([scorable(2), make_row(3, score="70", verdict="추천", trust="높음", body="글자")])
+
+    assert any(m.value == "**종합점수 TOP 5**" for m in at.markdown)  # v0.6.1 F6
+
+
+def test_collect_card_has_no_site_interval_note(app):
+    at = app([])
+
+    assert any(m.value.startswith("**수집**") for m in at.markdown)
+    assert not any("요청 간격" in m.value for m in at.markdown)  # v0.6.1 F3
+
+
+def test_key_card_is_one_line_title_and_input(app, no_key):
+    at = app()
+
+    title = next(m.value for m in at.markdown if "LLM 키를 넣어 주세요" in m.value)
+    assert not title.startswith("####")  # 큰 제목 대신 한 줄 (v0.6.1 F2)
+    assert "aistudio.google.com/apikey" in title
+    box = next(t for t in at.text_input if t.label == "GOOGLE_API_KEY")
+    assert "COLLAPSED" in str(box.label_visibility)  # 입력란과 저장 버튼 한 줄
+
+
+def test_title_is_white_and_larger_in_dark_theme():
+    import app as screen
+
+    assert "--jv-title: #ffffff" in screen.css("dark")  # v0.6.1 F1
+    assert "--jv-title: #111111" in screen.css("light")  # 밝은 바탕에서는 검정
+    assert "font-size: 3.4rem; font-weight: 900; color: var(--jv-title)" in screen.CSS
+
+
+def test_css_wraps_many_keywords_and_keeps_card_text():
+    import app as screen
+
+    assert "flex-wrap: wrap" in screen.CSS and "[data-tag]" in screen.CSS  # v0.6.1 F7
+    assert 'st-key-check-"] label' in screen.CSS and "white-space: nowrap" in screen.CSS  # F4
+    assert 'st-key-box-profile-"]) { flex: 1 1 auto; }' in screen.CSS  # F9
