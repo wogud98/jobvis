@@ -1093,3 +1093,23 @@ def test_score_ring_fills_by_score_and_card_gets_tone(app):
     assert heads["회사2"].endswith("<span class='jv-tone-none'></span>")
     assert heads["회사4"].endswith("<span class='jv-tone-low'></span>")  # 40 아래는 코랄 띠
     assert ":has(.jv-tone-low) { border-left: 10px solid var(--jv-tile3)" in __import__("app").CSS
+
+
+# ---- v0.6.1 보완 6차: 앱 칸 밖 창도 같은 테마 ----
+
+
+def test_popups_follow_app_theme(app):
+    import app as screen
+
+    assert ":root { color-scheme: light dark;" in screen.CSS  # 스크립트가 못 돌면 컴퓨터 설정 (v0.6.1 F27)
+    assert "getComputedStyle(app).colorScheme" in screen.SCHEME_SYNC
+    assert "document.documentElement.style.colorScheme = scheme" in screen.SCHEME_SYNC
+    at = app([])
+    assert any("jvSchemeSync" in str(h.proto) for h in at.get("html"))  # 화면마다 넣음
+
+
+def test_summary_tiles_keep_same_height():
+    import app as screen
+
+    assert ':has(> div[class*="st-key-box-summary-"]) { flex: 1 1 auto; }' in screen.CSS  # v0.6.1 F28
+    assert 'div[class*="st-key-box-summary-"] { height: 100%; }' in screen.CSS
