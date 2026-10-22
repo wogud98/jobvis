@@ -48,10 +48,23 @@ Streamlit 1.66.1, SQLAlchemy 2.1.6, psycopg 3.3.6.
 | 메모리 (빈 화면, OCR 안 씀) | app 194MiB, db 22MiB |
 | `docker compose down -v` | 볼륨까지 지워짐 |
 
+## GitHub Actions 확인 (PR #41, `docker.yml` compose 일)
+
+원래 Dockerfile 그대로 빌드했다(작업 환경에서 바꾼 두 줄 없이).
+
+| 확인 | 결과 |
+| --- | --- |
+| apt 설치(`libgomp1`, `libgl1`, `libglib2.0-0`) | 통과 |
+| `scripts/warm_ocr.py` | `PP-OCRv5_server_det`, `korean_PP-OCRv5_mobile_rec` 받음, "OCR 모델 준비됨" |
+| 이미지 크기 | 2.16GB (모델 포함) |
+| `docker compose up -d --wait`, health | app·db healthy, `ok` |
+| 컨테이너 안 `store`로 Postgres 저장 | "DB 저장 확인함" |
+| 컨테이너 안 `ocr._model()` | 받아 둔 모델 파일을 그대로 씀(다시 내려받지 않음), "OCR 모델 있음" |
+| 일 전체 | 약 2분 20초 |
+
 ## 미확인
 
-- **OCR 모델 내려받기와 OCR 실제 동작**: 작업 환경에서 모델 저장소가 막혀 확인 못 함. 새 CI 워크플로(`.github/workflows/docker.yml`)가 GitHub Actions에서 빌드·모델 받기·`ocr._model()`까지 확인한다. 이 PR에서 그 결과를 본다.
-- **Dockerfile의 apt 설치**: 위처럼 작업 환경에서는 바꿔 빌드함. CI 워크플로가 원래 Dockerfile로 확인한다.
+- **실제 공고 이미지 OCR 결과**: 모델 받기·불러오기는 CI에서 확인했지만, 공고 이미지를 넣어 글자를 읽어 보지는 않음.
 - **OCR 쓸 때 메모리**: 모델이 없어 재지 못함.
 - **실제 Gemini 키로 평가·이력서 채우기, 실제 사이트 수집**: 가짜 키만 씀.
 - **Windows Docker Desktop**: 재리 PC에서 확인 필요. Mac은 범위 밖(미확인).
