@@ -148,8 +148,15 @@ def existing_keys() -> tuple[set[tuple[str, str]], set[tuple[str, str]], dict[tu
 
     본문 미확보 줄은 {(회사, 제목): {"row", "source", "id"}}. 다른 사이트 본문으로 채울 때 쓴다 (v0.5 F46).
     """
+    return collect_keys(read_rows())
+
+
+def collect_keys(
+    rows: list[dict],
+) -> tuple[set[tuple[str, str]], set[tuple[str, str]], dict[tuple[str, str], dict]]:
+    """existing_keys의 계산 부분. 시트와 DB가 함께 쓴다 (v0.6 D1)."""
     ids, names, missing = set(), set(), {}
-    for row in read_rows():
+    for row in rows:
         if row["id"]:
             ids.add((source_code(row["source"]), row["id"]))
         if row["company"] or row["title"]:

@@ -8,7 +8,13 @@ from typing import Annotated
 import yaml
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, model_validator
 
-DEFAULT = "profile.yaml"
+
+def default_path() -> str:
+    """기본 프로필 경로. Docker는 볼륨 안 data/profile.yaml을 JOBVIS_PROFILE로 넣는다 (v0.6 D7)."""
+    return os.getenv("JOBVIS_PROFILE", "").strip() or "profile.yaml"
+
+
+DEFAULT = default_path()  # 실행 환경 변수로 정해진다. .env는 import 뒤에 읽어 여기 반영되지 않는다
 EXAMPLE = "profile.example.yaml"
 LEGACY = "profile.md"  # v0.3–v0.4 프로필. 자동으로 바꾸지 않는다 (F16)
 MAX_YEARS = 50

@@ -1,0 +1,19 @@
+# 개인정보·키는 이미지에 넣지 않는다 (v0.6 F11)
+.env
+.env.*
+service_account.json
+*.json
+profile.yaml
+profile.md
+data/
+# 실행에 필요 없는 것
+.git/
+.github/
+.claude/
+.venv/
+venv/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+tests/
+docs/

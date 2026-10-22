@@ -1,7 +1,7 @@
 # JOBVIS
 
 자비스에서 영감받은 AI 취업 비서입니다.
-조건(키워드·지역·직무·경력)에 맞는 사람인·잡코리아 채용공고를 공개 페이지에서 모아 구글 시트에 저장하고, 내 프로필과 비교해 LLM(기본 Gemini)으로 적합도를 평가합니다.
+조건(키워드·지역·직무·경력)에 맞는 사람인·잡코리아 채용공고를 공개 페이지에서 모아 구글 시트(또는 Docker로 실행하면 내 PC의 DB)에 저장하고, 내 프로필과 비교해 LLM(기본 Gemini)으로 적합도를 평가합니다.
 평가가 쌓이면 부족한 기술을 모아 무엇을 공부해야 할지 보여줍니다. 결과는 PC 브라우저 화면(Streamlit)에서 점수순 카드로 봅니다.
 
 > **개인 사용만.** 수집한 공고를 공유·공개·판매하지 않습니다. 두 사이트 약관은 동의 없는 복제·제3자 제공·영리 이용을 금지합니다.
@@ -12,7 +12,30 @@
 - 받은함: 이미지뿐이라 본문을 못 읽은 공고는 사람이 저장한 이미지를 `data/inbox/`(또는 화면 카드)에 넣고 `--inbox`로 읽습니다.
 - 스킬 갭: 시트의 부족한 점을 점수로 가중해 순위를 냅니다. LLM을 부르지 않습니다.
 
-## 준비물
+## 반 사람용 시작하기 (Docker)
+
+Docker만 있으면 됩니다. 구글 시트·서비스 계정 설정은 필요 없고, 결과는 내 PC 안의 DB(Postgres)에 저장됩니다.
+
+1. 코드를 받습니다: `git clone https://github.com/wogud98/jobvis.git` → `cd jobvis`
+2. `docker compose up -d` (처음엔 이미지를 만드느라 몇 분 걸립니다. OCR 포함 약 2.5GB)
+3. 브라우저에서 http://localhost:8501 을 엽니다.
+4. 맨 위 칸에 **Gemini API 키**를 붙여넣고 저장합니다. 키는 https://aistudio.google.com/apikey 에서 무료로 발급합니다(구글 로그인 → Create API key).
+5. 👤 프로필 탭에서 이력서로 프로필을 채우고 저장 → 📋 공고 탭에서 수집 → 평가.
+
+| 하고 싶은 일 | 명령 |
+| --- | --- |
+| 끄기 (데이터는 남음) | `docker compose down` |
+| 다시 켜기 | `docker compose up -d` |
+| 코드를 새로 받은 뒤 | `git pull` → `docker compose up -d --build` |
+| 내 데이터까지 모두 지우기 | `docker compose down -v` |
+| OCR 끄기 (OCR이 안 도는 PC) | `JOBVIS_OCR=off docker compose up -d` (PowerShell: `$env:JOBVIS_OCR="off"; docker compose up -d`) |
+
+- 데이터가 남는 곳: Docker 볼륨 `jobvis-data`(키 `settings.env`, `profile.yaml`, 공고 원문, 받은함)와 `jobvis-db`(공고·점수). 모두 내 PC 안에만 있습니다. 평가와 이력서 채우기 때 공고·프로필 글이 Gemini로 전송됩니다.
+- 화면은 이 PC에서만 열립니다(`127.0.0.1`). 같은 와이파이의 다른 PC는 들어올 수 없습니다.
+- Windows·Intel PC에서 쓰는 것을 기준으로 만들었습니다. **Mac(Apple Silicon)은 아직 확인하지 않았습니다.** 안 되면 OCR을 꺼 보세요.
+- 개인 사용만: 각자 자기 PC에서 자기 용도로 씁니다. 수집한 공고를 공유·공개하지 않습니다.
+
+## 준비물 (Docker 없이 파이썬으로 실행할 때)
 
 1. **Gemini API 키 (무료)**: https://aistudio.google.com/apikey 에서 구글 계정으로 로그인 → Create API key. `.env`의 `GOOGLE_API_KEY`에 넣습니다.
 2. **구글 서비스 계정**
@@ -104,6 +127,10 @@ LLM은 항목별 점수(0–100)만 매기고, 나머지는 코드가 계산합�
 | `agent/ocr.py` | 공고 이미지 글자 읽기 (PaddleOCR, 선택 설치) |
 | `agent/postings.py` | 본문 글자 뽑기, 원문 파일 저장·읽기, 본문 상태 |
 | `agent/sheets.py` | 구글 시트 저장, 줄 읽기, 평가 결과 쓰기 |
+| `agent/store.py` | 시트와 DB 중 어디에 저장할지 고름 (`JOBVIS_STORAGE`, 기본 `sheet`) |
+| `agent/db.py` | DB(Postgres) 저장. 시트와 같은 칸을 같은 함수로 |
+| `agent/settings.py` | 화면에서 넣은 LLM 키를 `data/settings.env`에 저장·읽기 |
+| `Dockerfile`, `docker-compose.yml` | 반 배포용 이미지(OCR 포함)와 실행 설정 (앱 + Postgres) |
 
 ## 개발 문서
 

@@ -14,7 +14,7 @@ from html import escape
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent import inbox, ocr, profile_form, resume, runner, scoring, sheets, user_profile, view
+from agent import inbox, ocr, profile_form, resume, runner, scoring, settings, store, user_profile, view
 
 PROFILE = user_profile.DEFAULT
 LIST_FIELDS = ("요약", "주요업무", "우대사항")  # 글머리표로 보일 칸 (v0.5.3 F3)
@@ -201,10 +201,10 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
 """
 
 
-@st.cache_data(show_spinner="시트를 읽는 중")
+@st.cache_data(show_spinner="공고를 읽는 중")
 def load_rows() -> list[dict]:
     # 열 때 한 번 읽고, 새로고침을 누를 때만 다시 읽는다 (F7)
-    return sheets.read_rows_readonly()
+    return store.read_rows_readonly()
 
 
 def reload_rows() -> None:
@@ -222,10 +222,10 @@ def toggle_check(row: int) -> None:
     key = f"check-{row}"
     checked = bool(st.session_state.get(key))
     try:
-        sheets.set_check(row, checked)
+        store.set_check(row, checked)
     except Exception as e:  # 키·경로는 보이지 않는다
         st.session_state.pop(key, None)  # 시트 값으로 다시 그림
-        st.session_state[CHECK_ERROR] = f"체크를 시트에 쓰지 못했습니다. {runner.error_text(e)}"
+        st.session_state[CHECK_ERROR] = f"체크를 {store.place()}에 쓰지 못했습니다. {runner.error_text(e)}"
         return
     st.session_state.setdefault(CHECKS, {})[row] = checked
 
@@ -233,9 +233,9 @@ def toggle_check(row: int) -> None:
 def toggle_hidden(row: int, hidden: bool) -> None:
     """관심 없음으로 빼거나 되돌린다. 시트 "관심없음" 칸에 바로 쓴다 (v0.5.2 F44)."""
     try:
-        sheets.set_hidden(row, hidden)
+        store.set_hidden(row, hidden)
     except Exception as e:  # 키·경로는 보이지 않는다
-        st.session_state[CHECK_ERROR] = f"관심 없음을 시트에 쓰지 못했습니다. {runner.error_text(e)}"
+        st.session_state[CHECK_ERROR] = f"관심 없음을 {store.place()}에 쓰지 못했습니다. {runner.error_text(e)}"
         return
     st.session_state.setdefault(HIDDEN, {})[row] = hidden
 
@@ -243,9 +243,9 @@ def toggle_hidden(row: int, hidden: bool) -> None:
 def toggle_applied(row: int, applied: bool) -> None:
     """지원함 표시를 시트 "지원" 칸에 쓴다 (v0.5.3 F11)."""
     try:
-        sheets.set_applied(row, applied)
+        store.set_applied(row, applied)
     except Exception as e:  # 키·경로는 보이지 않는다
-        st.session_state[CHECK_ERROR] = f"지원함을 시트에 쓰지 못했습니다. {runner.error_text(e)}"
+        st.session_state[CHECK_ERROR] = f"지원함을 {store.place()}에 쓰지 못했습니다. {runner.error_text(e)}"
         return
     st.session_state.setdefault(APPLIED, {})[row] = applied
 
@@ -610,7 +610,7 @@ def show_postings() -> None:
     show_run_panel()
     if error is not None:
         st.error(view.error_message(error))  # v0.5 F9
-        st.sidebar.caption("시트를 읽으면 필터가 보입니다.")
+        st.sidebar.caption("공고를 읽으면 필터가 보입니다.")
         return
     if not rows:
         st.info("공고 없음, 위 수집 카드에서 키워드를 넣고 수집하세요.")  # v0.5 F10
@@ -923,8 +923,45 @@ def show_profile() -> None:
         st.success(f"저장함 ({datetime.now():%Y-%m-%d %H:%M:%S})")
 
 
+KEY_SAVED = "key_saved"  # 방금 키를 저장했는지 (v0.6 F4)
+
+
+def save_key_form(where: str) -> None:
+    with st.form(f"key_form_{where}", clear_on_submit=True, border=False):
+        key = st.text_input(settings.key_name(), type="password", placeholder="여기에 붙여넣기")
+        if not st.form_submit_button("저장", type="primary"):
+            return
+    try:
+        settings.save_key(key)
+    except ValueError as e:  # 문구에 키는 들어 있지 않다 (F5)
+        st.error(str(e))
+        return
+    st.session_state[KEY_SAVED] = True
+    st.rerun()
+
+
+def show_key_card() -> None:
+    """LLM 키가 없으면 맨 위에 입력 칸, 있으면 접힌 "바꾸기"만 (v0.6 F4, F5)."""
+    if st.session_state.pop(KEY_SAVED, False):
+        st.success(f"키를 저장함 ({settings.masked()}). 이제 평가와 이력서 채우기를 쓸 수 있습니다.")
+    if settings.has_key():
+        with st.expander(f"🔑 LLM 키 {settings.masked()} · 바꾸기"):
+            st.caption(".env에 키를 적어 두었다면 다음 실행부터는 .env 값이 우선합니다.")
+            save_key_form("change")
+        return
+    with st.container(border=True):
+        st.markdown("#### 🔑 LLM 키를 넣어 주세요")
+        page = settings.key_page()
+        st.caption(
+            f"평가와 이력서 채우기에 씁니다. [{page}]({page})에서 무료로 발급받아 붙여넣으세요. "
+            "키는 이 PC의 data/settings.env에만 저장되고 화면에는 끝 4자리만 보입니다."
+        )
+        save_key_form("new")
+
+
 def main() -> None:
     load_dotenv()
+    settings.load()  # .env 다음, 비어 있는 값만 (v0.6 D6)
     st.set_page_config(page_title="JOBVIS", layout="wide")
     st.markdown(css(st.context.theme.type), unsafe_allow_html=True)  # 테마를 바꾸면 다시 그린다 (F13)
     remember_visit()
@@ -938,6 +975,7 @@ def main() -> None:
         show_guide()
     if refresh.button("🔄 새로고침", use_container_width=True):
         reload_rows()
+    show_key_card()
     postings_tab, profile_tab = st.tabs(["📋 공고", "👤 프로필"])  # v0.5 F1
     with postings_tab:
         show_postings()

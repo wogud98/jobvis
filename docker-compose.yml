@@ -1,0 +1,41 @@
+# 반 사람용 실행 (v0.6 F2, F3). docker compose up -d → http://localhost:8501
+# 끄기: docker compose down / 데이터까지 지우기: docker compose down -v
+services:
+  app:
+    build: .
+    image: jobvis:0.6
+    ports:
+      - "127.0.0.1:8501:8501"  # 이 PC에서만 열림. 같은 와이파이의 다른 PC는 못 들어옴 (D10)
+    environment:
+      JOBVIS_STORAGE: db
+      DATABASE_URL: postgresql+psycopg://jobvis:jobvis@db:5432/jobvis
+      JOBVIS_PROFILE: /app/data/profile.yaml  # 개인 파일은 모두 볼륨 안 data/에 (D7)
+      LLM_MODEL: google_genai:gemini-flash-lite-latest  # 새로 받은 무료 키에서 되는 모델 (F12)
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}  # 비워 두면 화면에서 넣음 (F4)
+      JOBVIS_OCR: ${JOBVIS_OCR:-on}  # OCR이 안 도는 PC는 off (F10)
+    volumes:
+      - jobvis-data:/app/data  # 키(settings.env), 프로필, 공고 원문, 받은함
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      # compose 안에서만 닿는 DB라 고정 비밀번호를 씀. 포트를 밖으로 열지 않음 (D10)
+      POSTGRES_USER: jobvis
+      POSTGRES_PASSWORD: jobvis
+      POSTGRES_DB: jobvis
+    volumes:
+      - jobvis-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobvis -d jobvis"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  jobvis-data:
+  jobvis-db:

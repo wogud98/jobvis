@@ -13,7 +13,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.prompts import ChatPromptTemplate
 from langgraph.graph import END, START, StateGraph
 
-from agent import codes, crawler, jobkorea, ocr, postings, saramin, scoring, sheets
+from agent import codes, crawler, jobkorea, ocr, postings, saramin, scoring, sheets, store
 
 MAX_COUNT = 30  # 사이트당 최대 개수 (F7)
 SOURCES = {module.SOURCE: module for module in (saramin, jobkorea)}  # 수집 순서이자 사이트 간 중복 때 남는 순서
@@ -108,7 +108,7 @@ def _name(job: dict) -> tuple[str, str]:
 def dedupe(state: State) -> State:
     if not state["queue"]:
         return {}
-    ids, names, missing = sheets.existing_keys()
+    ids, names, missing = store.existing_keys()
     new, skipped, backups, seen = [], [], {}, set()
     for job in state["queue"]:
         name = _name(job)
@@ -216,7 +216,7 @@ def _fill(job: dict, found: dict) -> State:
     try:
         # 새 원문을 먼저 저장하고 예전 원문을 지운다. 거꾸로면 실패할 때 둘 다 잃는다.
         postings.save(job["source"], job["id"], found["content"])
-        sheets.update_cells(target["row"], changes)
+        store.update_cells(target["row"], changes)
         if (target["source"], target["id"]) != (job["source"], job["id"]):
             postings.remove(target["source"], target["id"])
     except Exception as e:
@@ -249,7 +249,7 @@ def save(state: State) -> State:
     ]
     try:
         postings.save(job["source"], job["id"], found["content"])
-        number = sheets.append_row(row)
+        number = store.append_row(row)
     except Exception as e:  # 한 건이 실패해도 나머지는 계속 처리한다
         return {"failed": [_failure(job, "저장", e)]}
     result = {"saved": [job | {"body": found["status"]}]}
@@ -413,7 +413,7 @@ def write(state: ScoreState) -> ScoreState:
     ]
     extra = [evaluation.duties, evaluation.preferred, evaluation.stack]  # 주요업무, 우대사항, 기술스택 (F18)
     try:
-        sheets.write_result(row["row"], evaluation.summary, values, extra, [trust, adjusted.note])
+        store.write_result(row["row"], evaluation.summary, values, extra, [trust, adjusted.note])
     except Exception as e:  # 한 줄이 실패해도 나머지는 계속 처리한다
         return {"failed": [_failure(row, "저장", e)]}
     return {"done": [row]}
@@ -424,7 +424,7 @@ def exclude(state: ScoreState) -> ScoreState:
     row = state["current"]
     values = [False, "", "", scoring.EXCLUDED, "", "", "", "", "", "", _now()]
     try:
-        sheets.write_result(row["row"], None, values, None, ["", ""])
+        store.write_result(row["row"], None, values, None, ["", ""])
     except Exception as e:
         return {"failed": [_failure(row, "저장", e)]}
     return {"excluded": [row]}
