@@ -5,6 +5,8 @@ Streamlit을 import하지 않는다. app.py는 이 결과를 그리기만 해서
 
 import re
 from dataclasses import dataclass, field
+from datetime import date, datetime
+from pathlib import Path
 
 import gspread
 import requests
@@ -22,6 +24,11 @@ PAGE_SIZE = 10  # 한 쪽에 보일 카드 수 (v0.5.2 F41)
 TOP = 5  # 종합점수 차트 막대 수 (v0.5.2 F42)
 RECOMMENDED = ("강력 추천", "추천")  # 요약 칸 "추천 이상" (v0.5.1 F2)
 UPLOADABLE = (postings.MISSING, postings.PARTLY_UNREAD)  # 이미지 넣는 칸을 보일 본문 상태 (F47)
+SCORE_NAMES = ("기술", "경력", "문화", "방향")  # 항목 점수 (v0.5.3 F1)
+LAST_SEEN = Path("data/last_seen.txt")  # 화면을 마지막으로 연 시각, 커밋 안 함 (v0.5.3 F9, N3)
+SOON = 7  # 마감까지 이 날수 이하면 D-n 배지 (v0.5.3 F7)
+SORTS = ("score_desc", "score_asc", "deadline")  # 점수 높은 순, 낮은 순(v0.5.2 F40), 마감 임박 순(v0.5.3 F8)
+_SPLIT = re.compile(r"\s*[,，;\n]\s*|\s+[/·]\s+")  # 글머리표로 나눌 곳. "CI/CD", "Python·SQL"처럼 붙은 /·는 그대로
 
 
 @dataclass
@@ -45,6 +52,11 @@ class Card:
     info: dict[str, str] = field(default_factory=dict)  # 수집 때 받은 칸. 평가 전에도 보인다 (v0.5.2 F31)
     checked: bool = False  # 시트 "평가" 체크박스 (v0.5.2 F39)
     hidden: bool = False  # 시트 "관심없음" (v0.5.2 F44)
+    applied: bool = False  # 시트 "지원" (v0.5.3 F11)
+    saved_at: str = ""  # 시트 "저장시각" (v0.5.3 F9)
+    scores: dict[str, int | None] = field(default_factory=dict)  # 항목 점수, 근거 없으면 None (v0.5.3 F1, F6)
+    strengths: list[str] = field(default_factory=list)  # v0.5.3 F2, F12
+    gaps: list[str] = field(default_factory=list)
 
     @property
     def dim(self) -> bool:
@@ -62,8 +74,10 @@ class Filters:
     sources: list[str]
     experiences: list[str]  # CAREER_GROUPS 중에서
     scored_only: bool = False  # 기본은 평가 전 공고도 보인다 (v0.5.2 F32)
-    lowest_first: bool = False  # 점수 낮은 순. 평가 전은 어느 쪽이든 아래 (v0.5.2 F40)
+    sort: str = "score_desc"  # SORTS 중 하나. 점수 정렬에서 평가 전은 늘 아래 (v0.5.2 F40, v0.5.3 F8)
     hidden_only: bool = False  # 관심 없음으로 뺀 공고만. 기본은 뺀 공고를 숨김 (v0.5.2 F44)
+    query: str = ""  # 회사명·직무 검색 (v0.5.3 F10)
+    applied_only: bool = False  # 지원한 공고만 (v0.5.3 F11)
 
 
 def _score(value: str) -> int | None:
@@ -71,6 +85,57 @@ def _score(value: str) -> int | None:
         return int(value.strip())
     except ValueError:
         return None  # 비었거나 사람이 숫자가 아닌 값을 넣은 줄
+
+
+_SCORE_KEYS = ("skills", "experience_score", "culture", "career")
+
+
+def split_items(text: str) -> list[str]:
+    """시트 한 칸 글을 글머리표 항목으로 (v0.5.3 F2, F3). 빈 항목은 뺀다."""
+    return [item.strip() for item in _SPLIT.split(text or "") if item.strip()]
+
+
+def _skill_key(name: str) -> str:
+    return re.sub(r"\s+", "", name).casefold()
+
+
+def stack_chips(stack: str, known: list[str]) -> list[tuple[str, bool]]:
+    """기술스택 칩 [(기술, 내 프로필에 있는지)] (v0.5.3 F4). 대소문자·공백 무시."""
+    mine = {_skill_key(name) for name in known}
+    return [(item, _skill_key(item) in mine) for item in split_items(stack)]
+
+
+def days_left(deadline: str, today: date) -> int | None:
+    """마감까지 남은 날. 상시·빈칸·모르는 글자는 None (v0.5.3 F7)."""
+    try:
+        return (date.fromisoformat(deadline.strip()[:10]) - today).days
+    except ValueError:
+        return None
+
+
+def deadline_badge(deadline: str, today: date) -> tuple[str, str] | None:
+    """(배지 글자, 색) 또는 None. 7일 이하 D-n, 당일 D-day, 지나면 마감 (F7)."""
+    days = days_left(deadline, today)
+    if days is None or days > SOON:
+        return None
+    if days < 0:
+        return "마감", "closed"
+    return ("D-day" if days == 0 else f"D-{days}"), "low"
+
+
+def _parse_time(text: str) -> datetime | None:
+    for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(text.strip(), pattern)
+        except ValueError:
+            continue
+    return None
+
+
+def is_new(card: Card, last_seen: datetime | None) -> bool:
+    """화면을 마지막으로 연 뒤 저장된 공고 (v0.5.3 F9). 처음(None)이거나 저장시각을 모르면 아님."""
+    saved = _parse_time(card.saved_at)
+    return last_seen is not None and saved is not None and saved > last_seen
 
 
 def _or_none(value: str) -> str:
@@ -128,6 +193,11 @@ def _card(row: dict) -> Card:
         info={name: value.strip() for name, value in info.items() if value.strip()},
         checked=scoring.is_true(row.get("check", "")),  # scoring.select_targets와 같은 규칙
         hidden=scoring.is_true(row.get("hidden", "")),
+        applied=scoring.is_true(row.get("applied", "")),
+        saved_at=row.get("saved_at", "").strip(),
+        scores={name: _score(row[key]) for name, key in zip(SCORE_NAMES, _SCORE_KEYS, strict=True)},
+        strengths=split_items(row["strengths"]),
+        gaps=split_items(row["gaps"]),
     )
 
 
@@ -141,17 +211,40 @@ def preview(card: Card, limit: int = PREVIEW) -> str:
     return whole if len(whole) <= limit else whole[:limit].rstrip() + " …"
 
 
-def with_checks(rows: list[dict], checks: dict[int, bool], hidden: dict[int, bool] | None = None) -> list[dict]:
-    """화면에서 바꾼 체크·관심 없음을 읽어 둔 시트 줄에 덮는다. 시트를 다시 읽지 않고 맞춘다 (v0.5.2 F39, F44)."""
+def with_checks(
+    rows: list[dict],
+    checks: dict[int, bool],
+    hidden: dict[int, bool] | None = None,
+    applied: dict[int, bool] | None = None,
+) -> list[dict]:
+    """화면에서 바꾼 체크·관심 없음·지원을 읽어 둔 시트 줄에 덮는다. 시트를 다시 읽지 않고 맞춘다.
+
+    (v0.5.2 F39, F44, v0.5.3 F11)
+    """
     changed = []
     for row in rows:
         number = row["row"]
-        if number in checks:
-            row = row | {"check": "TRUE" if checks[number] else "FALSE"}
-        if hidden and number in hidden:
-            row = row | {"hidden": "TRUE" if hidden[number] else "FALSE"}
+        for key, overrides in (("check", checks), ("hidden", hidden), ("applied", applied)):
+            if overrides and number in overrides:
+                row = row | {key: "TRUE" if overrides[number] else "FALSE"}
         changed.append(row)
     return changed
+
+
+def read_last_seen(path: Path) -> datetime | None:
+    """화면을 마지막으로 연 시각 (v0.5.3 F9). 없거나 읽지 못하면 None (N3)."""
+    try:
+        return _parse_time(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def write_last_seen(path: Path, now: datetime) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"{now:%Y-%m-%d %H:%M:%S}", encoding="utf-8")
+    except OSError:
+        pass  # 못 써도 화면은 뜬다. 다음에 NEW가 더 많이 보일 뿐 (N3)
 
 
 def cards(rows: list[dict]) -> list[Card]:
@@ -183,7 +276,7 @@ def options(items: list[Card]) -> tuple[list[str], list[str]]:
     return sources, [group for group in (*CAREER_GROUPS, OTHER_CAREER, BLANK_EXPERIENCE) if group in found]
 
 
-def apply(items: list[Card], filters: Filters) -> list[Card]:
+def apply(items: list[Card], filters: Filters, today: date | None = None) -> list[Card]:
     """거르고 정렬한다. items는 cards()의 순서(점수 높은 순, 같으면 시트 줄 순, 평가 전은 뒤)."""
     shown = [
         card
@@ -192,11 +285,29 @@ def apply(items: list[Card], filters: Filters) -> list[Card]:
         and (not filters.experiences or set(career_groups(card.experience)) & set(filters.experiences))
         and (not filters.scored_only or card.score is not None)
         and card.hidden == filters.hidden_only
+        and (not filters.applied_only or card.applied)
+        and _matches(card, filters.query)
     ]
-    if filters.lowest_first:  # 같은 점수는 시트 줄 순 그대로 (F40)
+    if filters.sort == "score_asc":  # 같은 점수는 시트 줄 순 그대로 (F40)
         scored = sorted((c for c in shown if c.score is not None), key=lambda c: (c.score, c.row))
         shown = scored + [c for c in shown if c.score is None]
+    elif filters.sort == "deadline":
+        shown = sorted(shown, key=lambda c: _deadline_key(c, today or date.today()))
     return shown
+
+
+def _matches(card: Card, query: str) -> bool:
+    words = query.casefold().split()
+    text = f"{card.company} {card.title}".casefold()
+    return all(word in text for word in words)  # 여러 낱말이면 모두 들어 있어야 (F10)
+
+
+def _deadline_key(card: Card, today: date) -> tuple[int, int, int]:
+    # 남은 마감 → 상시·빈칸 → 지난 공고, 같으면 시트 줄 순 (v0.5.3 F8)
+    days = days_left(card.deadline, today)
+    if days is None:
+        return 1, 0, card.row
+    return (2, -days, card.row) if days < 0 else (0, days, card.row)
 
 
 def page(items: list[Card], number: int, size: int = PAGE_SIZE) -> tuple[list[Card], int, int]:

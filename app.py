@@ -1,6 +1,6 @@
 """JOBVIS 화면. 실행: streamlit run app.py (PC 전용, localhost. 배포하지 않음, v0.5 N4).
 
-테마는 .streamlit/config.toml과 아래 CSS (v0.5.1 F17–F19).
+테마는 .streamlit/config.toml의 밝은·어두운 테마와 아래 CSS (v0.5.1 F17–F19, v0.5.3 F13–F15).
 
 수집·평가·받은함 버튼은 agent/runner.py를 별도 스레드로 돌린다 (v0.5.2). 이력서 채우기는 agent/resume.py.
 정렬·필터·카드·요약 칸은 agent/view.py, 프로필 입력란은 agent/profile_form.py, 검사는 agent/user_profile.py,
@@ -8,37 +8,40 @@
 """
 
 import hashlib
-from datetime import datetime
+from datetime import date, datetime
 from html import escape
 
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent import inbox, ocr, profile_form, resume, runner, sheets, user_profile, view
+from agent import inbox, ocr, profile_form, resume, runner, scoring, sheets, user_profile, view
 
 PROFILE = user_profile.DEFAULT
-SUMMARY_FIELDS = ("요약", "주요업무", "우대사항", "기술스택")
-SCORE_FIELDS = ("기술", "경력", "문화", "방향")
+LIST_FIELDS = ("요약", "주요업무", "우대사항")  # 글머리표로 보일 칸 (v0.5.3 F3)
 CHART_HEIGHT = 230  # 필터 카드 높이와 비슷하게 차트가 카드를 채우도록 (F21)
 ACCENT = "#059669"  # .streamlit/config.toml의 primaryColor와 같게
 FILL = "profile_fill"  # 이력서에서 채운 입력란 값 (session_state 키)
 CHECKS = "check_overrides"  # 화면에서 바꾼 평가 체크 {시트 줄: 체크} (v0.5.2 F39)
 HIDDEN = "hidden_overrides"  # 화면에서 바꾼 관심 없음 {시트 줄: 뺌} (v0.5.2 F44)
+APPLIED = "applied_overrides"  # 화면에서 바꾼 지원 {시트 줄: 지원함} (v0.5.3 F11)
+LAST_SEEN = "last_seen"  # 이 화면을 열기 전 마지막으로 연 시각 (v0.5.3 F9)
 CHECK_ERROR = "check_error"
 PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
 TAGLINE = "채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다"  # JOBVIS 아래 문장 (v0.5.2 F43)
-SORTS = {"점수 높은 순": False, "점수 낮은 순": True}  # 낮은 순이면 True (F40)
+SORTS = {"점수 높은 순": "score_desc", "점수 낮은 순": "score_asc", "마감 임박 순": "deadline"}  # F40, v0.5.3 F8
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
 POSTINGS_GUIDE = """
 1. **수집** 카드에 키워드를 넣고 수집을 누릅니다. 30건 수집은 몇 분 걸립니다.
    공고 카드의 **평가** 칸을 체크하고 목록 위 **🧮 체크한 공고 평가**를 누릅니다(평가 전 전부도 가능).
    터미널(`python main.py --keyword 백엔드`, `--score`)로 해도 결과는 같습니다.
-2. 카드는 종합점수 높은 순입니다.
-   **자세히**를 누르면 요약, 항목별 점수, 강점·부족한 점, 원문 링크가 나옵니다.
+2. 카드는 종합점수 높은 순입니다. 필터에서 검색하거나 마감 임박 순으로 바꿀 수 있습니다.
+   **자세히**를 누르면 항목 점수, 강점·부족한 점, 요약, 기술(내 기술은 초록), 점수 기준이 나옵니다.
+   **D-n**은 마감까지 남은 날, **NEW**는 지난번에 연 뒤 새로 들어온 공고입니다.
 3. **신뢰 낮음**은 본문 없이 제목만 보고 매긴 점수라 흐리게 보입니다.
    카드에 공고 이미지를 넣고 **받은함 읽기**를 누르면 본문이 채워집니다.
 4. 시트가 바뀌었으면 오른쪽 위 **새로고침**을 누릅니다.
+5. 다크 모드: 컴퓨터 설정을 따릅니다. 바꾸려면 오른쪽 위 **⋮ → Settings → Theme**.
 """
 PROFILE_GUIDE = """
 - `*` 표시한 필수 칸 3개만 채우면 평가할 수 있습니다. 나머지는 채울수록 점수 근거가 정확해집니다.
@@ -47,18 +50,37 @@ PROFILE_GUIDE = """
 - **저장**을 누르면 `profile.yaml`에 씁니다. 파일을 직접 고쳐도 됩니다(주석은 화면에서 저장하면 사라짐).
 """
 
+# 테마별 색 (v0.5.3 F13–F15). 테두리·그림자·글자(ink), 바탕(paper), 카드 면(card), 흐린 글자(muted)
+PALETTES = {
+    "light": {
+        "ink": "#111111", "paper": "#fffdf5", "card": "#ffffff", "green": "#059669",
+        "muted": "#444444", "sub": "#333333", "highlight": "#6ee7b7",
+    },
+    "dark": {
+        "ink": "#e8e8e8", "paper": "#16181d", "card": "#22262e", "green": "#34d399",
+        "muted": "#b0b4ba", "sub": "#d0d3d8", "highlight": "#047857",
+    },
+}  # fmt: skip
+
+
+def css(theme: str | None) -> str:
+    """테마에 맞춘 CSS. 모르는 값(테스트 등)은 밝은 테마."""
+    palette = PALETTES.get(theme or "light", PALETTES["light"])
+    return CSS.replace("/*VARS*/", " ".join(f"--jv-{name}: {value};" for name, value in palette.items()))
+
+
 # 네오 브루탈리즘 (v0.5.2 F28): 굵은 검정 테두리, 흐림 없는 딱딱한 그림자, 단색 면, 초록 포인트 하나.
 # 카드는 key가 "box-"로 시작하는 컨테이너. Streamlit 내부 클래스 대신 key로 붙는 st-key-* 클래스와
 # data-testid에만 건다 (v0.5.1 N5)
 CSS = """
 <style>
-:root { --jv-ink: #111111; --jv-paper: #fffdf5; --jv-green: #059669; }
+:root { /*VARS*/ }
 .stApp { background: var(--jv-paper); }
 [data-testid="stHeader"] { background: transparent; }
 .block-container { max-width: 1200px; padding-top: 2rem; }
 /* 카드: 흰 면 + 3px 검정 테두리 + 오른쪽 아래 딱 떨어지는 그림자 */
 div[class*="st-key-box"] {
-  background: #ffffff !important; border: 3px solid var(--jv-ink) !important; border-radius: 8px !important;
+  background: var(--jv-card) !important; border: 3px solid var(--jv-ink) !important; border-radius: 8px !important;
   box-shadow: 6px 6px 0 var(--jv-ink); padding: 18px 20px;
 }
 div[class*="st-key-box"] div[class*="st-key-box"] { box-shadow: 3px 3px 0 var(--jv-ink); }
@@ -68,8 +90,10 @@ div[class*="st-key-box-summary-0"] { background: #ffe066 !important; }
 div[class*="st-key-box-summary-1"] { background: #a5d8ff !important; }
 div[class*="st-key-box-summary-2"] { background: #8ce99a !important; }
 div[class*="st-key-box-summary-3"] { background: #ffc9c9 !important; }
+/* 색 면 위 글자는 두 테마 모두 검정 (v0.5.3 F15) */
+div[class*="st-key-box-summary"] * { color: #111111 !important; }
 div[data-testid="stExpander"] details {
-  background: #ffffff; border: 2px solid var(--jv-ink) !important; border-radius: 6px !important;
+  background: var(--jv-card); border: 2px solid var(--jv-ink) !important; border-radius: 6px !important;
   box-shadow: 3px 3px 0 var(--jv-ink);
 }
 div[data-testid="stExpander"] summary { font-weight: 700; }
@@ -86,7 +110,7 @@ div[data-testid="stButton"] button:disabled { box-shadow: none; border-style: da
 /* 입력란 */
 div[data-baseweb="select"] > div, div[data-baseweb="input"], div[data-baseweb="textarea"],
 div[data-testid="stFileUploaderDropzone"] {
-  border: 2px solid var(--jv-ink) !important; border-radius: 6px !important; background: #ffffff !important;
+  border: 2px solid var(--jv-ink) !important; border-radius: 6px !important; background: var(--jv-card) !important;
 }
 div[data-testid="stAlert"] > div {
   border: 2px solid var(--jv-ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--jv-ink);
@@ -108,16 +132,30 @@ div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg {
 div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
 div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: var(--jv-ink); }
 .jv-hero h1 { margin: 0; padding: 0 6px; font-size: 2.6rem; font-weight: 900; color: var(--jv-ink);
-  letter-spacing: -0.03em; display: inline-block; background: linear-gradient(transparent 58%, #6ee7b7 58%); }
-.jv-hero p { margin: 4px 0 0; color: #333333; font-weight: 600; }
+  letter-spacing: -0.03em; display: inline-block;
+  background: linear-gradient(transparent 58%, var(--jv-highlight) 58%); }
+.jv-hero p { margin: 4px 0 0; color: var(--jv-sub); font-weight: 600; }
 .jv-score { font-size: 2.2rem; font-weight: 900; line-height: 1; color: var(--jv-green); }
-.jv-muted { color: #444444; font-size: 0.9rem; }
+.jv-muted { color: var(--jv-muted); font-size: 0.9rem; }
 .jv-badge { display: inline-block; margin-right: 6px; padding: 1px 9px; border: 2px solid var(--jv-ink);
   border-radius: 4px; font-size: 0.8rem; font-weight: 800; }
-.jv-verdict { background: #ffffff; color: var(--jv-ink); }
-.jv-high { background: #8ce99a; color: var(--jv-ink); }
-.jv-mid { background: #ffe066; color: var(--jv-ink); }
-.jv-low { background: #ffa8a8; color: var(--jv-ink); }
+.jv-verdict { background: var(--jv-card); color: var(--jv-ink); }
+.jv-high { background: #8ce99a; color: #111111; }
+.jv-mid { background: #ffe066; color: #111111; }
+.jv-low { background: #ffa8a8; color: #111111; }
+.jv-closed { background: #ced4da; color: #111111; }
+.jv-new { background: var(--jv-green); color: var(--jv-card); }
+/* 자세히 (v0.5.3 F1–F5) */
+.jv-bar-row { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
+.jv-bar-name { width: 3em; font-weight: 700; }
+.jv-bar { flex: 1; height: 14px; border: 2px solid var(--jv-ink); border-radius: 4px; background: var(--jv-card); }
+.jv-bar > div { height: 100%; border-right: 2px solid var(--jv-ink); }
+.jv-bar > div.jv-high, .jv-bar > div.jv-mid, .jv-bar > div.jv-low { border-radius: 0; }
+.jv-bar-num { width: 2.2em; text-align: right; font-weight: 900; }
+.jv-chip { display: inline-block; margin: 0 6px 6px 0; padding: 2px 10px; border: 2px solid var(--jv-ink);
+  border-radius: 4px; font-size: 0.85rem; font-weight: 700; background: var(--jv-card); color: var(--jv-ink); }
+.jv-chip.jv-mine { background: #8ce99a; color: #111111; }
+.jv-strength { color: var(--jv-sub); font-size: 0.9rem; }
 </style>
 """
 
@@ -133,6 +171,7 @@ def reload_rows() -> None:
     load_rows.clear()
     st.session_state.pop(CHECKS, None)
     st.session_state.pop(HIDDEN, None)
+    st.session_state.pop(APPLIED, None)
     for key in [key for key in st.session_state if str(key).startswith("check-")]:
         del st.session_state[key]
 
@@ -158,6 +197,16 @@ def toggle_hidden(row: int, hidden: bool) -> None:
         st.session_state[CHECK_ERROR] = f"관심 없음을 시트에 쓰지 못했습니다. {runner.error_text(e)}"
         return
     st.session_state.setdefault(HIDDEN, {})[row] = hidden
+
+
+def toggle_applied(row: int, applied: bool) -> None:
+    """지원함 표시를 시트 "지원" 칸에 쓴다 (v0.5.3 F11)."""
+    try:
+        sheets.set_applied(row, applied)
+    except Exception as e:  # 키·경로는 보이지 않는다
+        st.session_state[CHECK_ERROR] = f"지원함을 시트에 쓰지 못했습니다. {runner.error_text(e)}"
+        return
+    st.session_state.setdefault(APPLIED, {})[row] = applied
 
 
 def show_upload(card: view.Card) -> None:
@@ -190,9 +239,12 @@ def badge(text: str, kind: str) -> str:
     return f'<span class="jv-badge jv-{kind}">{escape(text)}</span>'
 
 
-def show_card(card: view.Card) -> None:
+def show_card(card: view.Card, known: list[str]) -> None:
     # 시트 글자(회사·직무 등)는 HTML로 넣기 전에 escape한다
-    key = f"box-{'dim-' if card.dim else ''}card-{card.row}"  # 신뢰 낮음은 흐리게 (v0.5 F34, F5)
+    today = date.today()
+    closed = (view.days_left(card.deadline, today) or 0) < 0
+    # 신뢰 낮음, 마감 지난 공고는 흐리게 (v0.5 F34, F5, v0.5.3 F7)
+    key = f"box-{'dim-' if card.dim or closed else ''}card-{card.row}"
     with st.container(border=True, key=key):
         check, score, head, hide = st.columns([0.7, 1, 6, 1.1], vertical_alignment="center")
         # 체크하면 시트 "평가" 칸에도 체크된다. 목록 위 평가 줄 버튼으로 평가 (v0.5.2 F38, F39)
@@ -205,15 +257,13 @@ def show_card(card: view.Card) -> None:
             f'<div class="jv-score">{number}</div><div class="jv-muted">{escape(card.stars)}</div>',
             unsafe_allow_html=True,
         )
-        badges = badge(card.verdict, "verdict") + (
-            badge(f"신뢰 {card.trust}", TRUST_CLASS.get(card.trust, "mid")) if card.trust else ""
-        )
-        meta = " · ".join(part for part in (card.source, card.experience, f"마감 {card.deadline or '없음'}") if part)
-        head.markdown(
-            f"**{escape(card.company)} · {escape(card.title)}**  \n"
-            f"{badges}<span class='jv-muted'>{escape(meta)}</span>",
-            unsafe_allow_html=True,
-        )
+        head.markdown(card_head(card, today), unsafe_allow_html=True)
+        # 지원함 (v0.5.3 F11). 다시 누르면 취소
+        hide.button(
+            "✓ 지원함" if card.applied else "지원함", key=f"apply-{card.row}", on_click=toggle_applied,
+            args=(card.row, not card.applied), disabled=runner.running(), use_container_width=True,
+            type="primary" if card.applied else "secondary",
+        )  # fmt: skip
         # 뺀 공고는 목록에서 사라지고 평가 대상에서도 빠진다. "관심 없는 공고만 보기"에서 되돌림 (v0.5.2 F44)
         hide.button(
             "되돌리기" if card.hidden else "관심 없음", key=f"hide-{card.row}", on_click=toggle_hidden,
@@ -223,11 +273,30 @@ def show_card(card: view.Card) -> None:
             if card.score is None:  # 평가 전·제외: 수집 칸과 원문 앞부분 (v0.5.2 F31)
                 show_unscored_details(card)
             else:
-                show_scored_details(card)
+                show_scored_details(card, known)
             if card.url:
                 st.link_button("원문 열기", card.url)  # 새 탭 (v0.5 F4)
             if card.can_upload:
                 show_upload(card)
+
+
+def card_head(card: view.Card, today: date) -> str:
+    """카드 머리: 회사·직무, 배지(판정, 신뢰, 마감, NEW, 지원함), 출처·경력·마감, 첫 강점 (v0.5.3 F7, F9, F11, F12)."""
+    badges = badge(card.verdict, "verdict")
+    if card.trust:
+        badges += badge(f"신뢰 {card.trust}", TRUST_CLASS.get(card.trust, "mid"))
+    deadline = view.deadline_badge(card.deadline, today)
+    if deadline:
+        badges += badge(*deadline)
+    if view.is_new(card, st.session_state.get(LAST_SEEN)):
+        badges += badge("NEW", "new")
+    if card.applied:
+        badges += badge("지원함", "high")
+    meta = " · ".join(part for part in (card.source, card.experience, f"마감 {card.deadline or '없음'}") if part)
+    text = f"**{escape(card.company)} · {escape(card.title)}**  \n{badges}<span class='jv-muted'>{escape(meta)}</span>"
+    if card.score is not None and card.strengths:  # 펼치지 않아도 보이는 강점 한 줄 (F12)
+        text += f"  \n<span class='jv-strength'>💪 {escape(card.strengths[0])}</span>"
+    return text
 
 
 def show_unscored_details(card: view.Card) -> None:
@@ -245,17 +314,63 @@ def show_unscored_details(card: view.Card) -> None:
         st.warning("본문이 없습니다. 아래에 공고 이미지를 넣으면 평가가 정확해집니다.")
 
 
-def show_scored_details(card: view.Card) -> None:
-    # 평가한 공고의 펼침 내용은 v0.5와 같음 (F4)
-    for name in SUMMARY_FIELDS:
-        st.markdown(f"**{name}** {card.details[name]}")
-    st.markdown(" · ".join(f"**{name}** {card.details[name]}" for name in SCORE_FIELDS))
-    st.markdown(f"**강점** {card.details['강점']}")
-    st.markdown(f"**부족한 점** {card.details['부족한 점']}")
+def score_bars(scores: dict[str, int | None]) -> str:
+    """항목 점수 막대 (v0.5.3 F1). 근거 없는 항목(문화 등)은 그리지 않는다 (F6)."""
+    rows = []
+    for name, value in scores.items():
+        if value is None:
+            continue
+        kind = "high" if value >= 70 else "mid" if value >= 40 else "low"
+        rows.append(
+            f"<div class='jv-bar-row'><span class='jv-bar-name'>{name}</span>"
+            f"<div class='jv-bar'><div class='jv-{kind}' style='width:{max(0, min(value, 100))}%'></div></div>"
+            f"<span class='jv-bar-num'>{value}</span></div>"
+        )
+    return "".join(rows)
+
+
+def bullets(items: list[str]) -> str:
+    return "\n".join(f"- {escape(item)}" for item in items) or f"- {view.NONE}"
+
+
+def show_scored_details(card: view.Card, known: list[str]) -> None:
+    """점수 막대 → 강점·부족한 점 두 칸 → 요약·업무·우대 글머리표 → 기술 칩 → 참고·점수 기준 (v0.5.3 F1–F6)."""
+    st.markdown(score_bars(card.scores), unsafe_allow_html=True)
+    good, bad = st.columns(2)
+    good.markdown(f"**✅ 강점**\n\n{bullets(card.strengths)}")
+    bad.markdown(f"**⚠️ 부족한 점**\n\n{bullets(card.gaps)}")
+    for name in LIST_FIELDS:
+        items = view.split_items(card.details[name] if card.details[name] != view.NONE else "")
+        if items:  # 빈 칸은 보이지 않는다 (F3)
+            st.markdown(f"**{name}**\n\n{bullets(items)}")
+    chips = view.stack_chips(card.details["기술스택"] if card.details["기술스택"] != view.NONE else "", known)
+    if chips:
+        html = "".join(f"<span class='jv-chip{' jv-mine' * mine}'>{escape(name)}</span>" for name, mine in chips)
+        st.markdown(f"**기술스택** <span class='jv-muted'>초록은 내 프로필에 있는 기술</span><br>{html}",
+                    unsafe_allow_html=True)  # fmt: skip
+    notes = []
     if card.trust:
-        st.markdown(f"**신뢰** {card.trust} (본문: {card.body or '없음'})")
+        notes.append(f"신뢰 {card.trust} (본문: {card.body or '없음'})")
     if card.adjust:
-        st.markdown(f"**보정** {card.adjust}")
+        notes.append(f"보정 {card.adjust}")
+    if notes:
+        st.caption(" · ".join(notes))
+    with st.expander("점수 기준"):
+        st.markdown(score_guide())
+
+
+def score_guide() -> str:
+    """점수 기준 글 (v0.5.3 F5). 숫자는 scoring 상수에서 가져온다."""
+    pairs = zip(view.SCORE_NAMES, scoring.WEIGHTS.values(), strict=True)
+    weights = " · ".join(f"{name} {weight}" for name, weight in pairs)
+    return (
+        "- 항목 점수(기술·경력·문화·방향)는 0–100점입니다.\n"
+        f"- 종합점수는 가중 평균입니다({weights}). "
+        "공고에 근거가 없는 항목(주로 문화)은 빼고 나머지로 나눕니다.\n"
+        "- 별점은 종합점수 20점마다 1개입니다.\n"
+        f"- 요구 경력이 부족하면 종합 최대 {scoring.CAP_SHORT}점, "
+        f"본문 없이 제목만 보고 매기면 최대 {scoring.CAP_LOW_TRUST}점입니다."
+    )
 
 
 @st.fragment(run_every=1.0)
@@ -404,8 +519,10 @@ def show_postings() -> None:
         st.info("공고 없음, 위 수집 카드에서 키워드를 넣고 수집하세요.")  # v0.5 F10
         return
 
-    # 화면에서 바꾼 체크·관심 없음 (F39, F44)
-    rows = view.with_checks(rows, st.session_state.get(CHECKS, {}), st.session_state.get(HIDDEN, {}))
+    # 화면에서 바꾼 체크·관심 없음·지원 (F39, F44, v0.5.3 F11)
+    rows = view.with_checks(
+        rows, st.session_state.get(CHECKS, {}), st.session_state.get(HIDDEN, {}), st.session_state.get(APPLIED, {})
+    )
     items = view.cards(rows)
     for index, (column, (label, value, note)) in enumerate(zip(st.columns(4), view.summary(items), strict=True)):
         with column.container(border=True, key=f"box-summary-{index}"):  # 칸마다 색 (F28)
@@ -417,12 +534,15 @@ def show_postings() -> None:
     with filter_box.container(border=True, key="box-filters"):
         st.markdown("**필터**")
         filters = view.Filters(
+            query=st.text_input("검색", placeholder="회사명·직무", key="search"),  # v0.5.3 F10
             # 처음엔 비워 두고 "전체"로 보인다. 고른 것이 있을 때만 거른다 (v0.5.2 F29)
             sources=st.multiselect("출처", sources, placeholder="전체"),
             experiences=st.multiselect("경력", experiences, placeholder="전체", help="신입·경력·무관으로 묶음"),
             scored_only=st.toggle("평가된 공고만 보기"),  # 기본은 전체 (v0.5.2 F32)
+            applied_only=st.toggle("지원한 공고만 보기"),  # v0.5.3 F11
             hidden_only=st.toggle("관심 없는 공고만 보기", help="관심 없음으로 뺀 공고. 되돌리기로 목록에 다시 넣음"),
-            lowest_first=SORTS[st.selectbox("정렬", list(SORTS), help="평가 전 공고는 늘 아래")],  # F40
+            # 점수 정렬에서 평가 전은 늘 아래 (F40). 마감 임박 순은 점수와 상관없이 (v0.5.3 F8)
+            sort=SORTS[st.selectbox("정렬", list(SORTS))],
         )
     shown = view.apply(items, filters)
     with chart_box.container(border=True, key="box-chart"):
@@ -448,10 +568,27 @@ def show_postings() -> None:
     first = (number - 1) * view.PAGE_SIZE
     where = f" · {first + 1}–{first + len(cards)}번째" if pages > 1 else ""
     st.caption(f"{len(shown)}건 / 전체 {len(items)}건{where}")
+    known = my_skills()
     for card in cards:
-        show_card(card)
+        show_card(card, known)
     if pages > 1:
         show_pager(number, pages)
+
+
+def my_skills() -> list[str]:
+    """기술 칩에서 초록으로 보일 내 기술: 주력 + 다룰 수 있음 (v0.5.3 F4). 프로필이 없거나 깨졌으면 빈 목록."""
+    try:
+        values = profile_form.to_form(user_profile.read_raw(PROFILE))
+    except user_profile.ProfileError:
+        return []
+    return [*values[("skills", "main")], *values[("skills", "can_use")]]
+
+
+def remember_visit() -> None:
+    """세션을 처음 열 때 지난번에 연 시각을 읽어 두고 지금으로 바꾼다 (v0.5.3 F9)."""
+    if LAST_SEEN not in st.session_state:
+        st.session_state[LAST_SEEN] = view.read_last_seen(view.LAST_SEEN)
+        view.write_last_seen(view.LAST_SEEN, datetime.now())
 
 
 def go_page(number: int) -> None:
@@ -627,7 +764,8 @@ def show_profile() -> None:
 def main() -> None:
     load_dotenv()
     st.set_page_config(page_title="JOBVIS", layout="wide")
-    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(css(st.context.theme.type), unsafe_allow_html=True)  # 테마를 바꾸면 다시 그린다 (F13)
+    remember_visit()
     title, refresh = st.columns([6, 1], vertical_alignment="center")
     title.markdown(
         f'<div class="jv-hero"><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',

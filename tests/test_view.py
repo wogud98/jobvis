@@ -1,3 +1,5 @@
+from datetime import date, datetime
+
 import gspread
 import pytest
 import requests
@@ -222,9 +224,9 @@ def test_sort_lowest_first_keeps_unscored_last():
     items = view.cards([scored(2, 70), make_row(3), scored(4, 85), scored(5, 70), make_row(6)])
 
     assert [c.row for c in view.apply(items, view.Filters([], []))] == [4, 2, 5, 3, 6]  # 높은 순 (기본)
-    low = view.apply(items, view.Filters([], [], lowest_first=True))
+    low = view.apply(items, view.Filters([], [], sort="score_asc"))
     assert [c.row for c in low] == [2, 5, 4, 3, 6]  # 낮은 순, 같은 점수는 줄 순, 평가 전은 아래 (F40)
-    assert [c.row for c in view.apply(items, view.Filters([], [], True, True))] == [2, 5, 4]
+    assert [c.row for c in view.apply(items, view.Filters([], [], scored_only=True, sort="score_asc"))] == [2, 5, 4]
 
 
 def test_page_splits_and_clamps():
@@ -240,7 +242,7 @@ def test_page_splits_and_clamps():
 
 def test_chart_shows_top_five_by_score_whatever_the_sort():
     items = view.cards([scored(n, 40 + n) for n in range(2, 10)] + [make_row(10)])
-    low = view.apply(items, view.Filters([], [], lowest_first=True))
+    low = view.apply(items, view.Filters([], [], sort="score_asc"))
 
     assert [score for _, score in view.chart(low)] == [49, 48, 47, 46, 45]  # 높은 5개 (F42)
     assert len(view.chart(low, limit=10)) == 8
@@ -256,3 +258,113 @@ def test_hidden_cards_only_in_hidden_view():
 
     changed = view.with_checks(rows, {}, {2: True, 3: False})
     assert [row["hidden"] for row in changed] == ["TRUE", "FALSE", "true"]
+
+
+# ---- v0.5.3 ----
+
+TODAY = date(2026, 10, 22)
+
+
+@pytest.mark.parametrize(
+    ("text", "items"),
+    [
+        ("Python, AWS", ["Python", "AWS"]),
+        ("API 개발 · 배포 자동화", ["API 개발", "배포 자동화"]),
+        ("CI/CD 구축 / 모니터링", ["CI/CD 구축", "모니터링"]),  # 붙은 /는 그대로
+        ("Python·LangGraph 경험, 신입 지원 가능", ["Python·LangGraph 경험", "신입 지원 가능"]),  # 붙은 ·도 그대로
+        ("첫째\n둘째;셋째", ["첫째", "둘째", "셋째"]),
+        ("", []),
+        (" , ", []),
+    ],
+)
+def test_split_items(text, items):
+    assert view.split_items(text) == items  # v0.5.3 F2, F3
+
+
+def test_stack_chips_mark_my_skills_ignoring_case_and_spaces():
+    chips = view.stack_chips("python, Spring Boot, AWS", ["Python", "springboot"])
+
+    assert chips == [("python", True), ("Spring Boot", True), ("AWS", False)]  # F4
+    assert view.stack_chips("", ["Python"]) == []
+
+
+@pytest.mark.parametrize(
+    ("deadline", "badge"),
+    [
+        ("2026-10-22", ("D-day", "low")),
+        ("2026-10-25", ("D-3", "low")),
+        ("2026-10-29", ("D-7", "low")),
+        ("2026-10-30", None),  # 8일 남음
+        ("2026-10-21", ("마감", "closed")),
+        ("상시", None),
+        ("", None),
+    ],
+)
+def test_deadline_badge(deadline, badge):
+    assert view.deadline_badge(deadline, TODAY) == badge  # F7
+
+
+def test_sort_by_deadline_soonest_then_open_then_closed():
+    rows = [
+        scored(2, 90, deadline="2026-11-30"),
+        make_row(3, deadline="2026-10-24"),
+        scored(4, 50, deadline="상시"),
+        scored(5, 80, deadline="2026-10-01"),
+        make_row(6, deadline=""),
+        scored(7, 70, deadline="2026-10-24"),
+    ]
+
+    shown = view.apply(view.cards(rows), view.Filters([], [], sort="deadline"), today=TODAY)
+
+    assert [c.row for c in shown] == [3, 7, 2, 4, 6, 5]  # 같은 날은 줄 순, 점수와 상관없이 (F8)
+
+
+def test_search_matches_company_or_title_all_words():
+    items = view.cards([scored(2, 80, company="카카오", title="백엔드 개발자"), scored(3, 70, company="네이버")])
+
+    assert [c.row for c in view.apply(items, view.Filters([], [], query="카카오"))] == [2]
+    assert [c.row for c in view.apply(items, view.Filters([], [], query="  백엔드  "))] == [2, 3]  # 직무도
+    assert [c.row for c in view.apply(items, view.Filters([], [], query="네이버 백엔드"))] == [3]  # 모두 들어 있어야
+    assert [c.row for c in view.apply(items, view.Filters([], [], query="없는회사"))] == []  # F10
+
+
+def test_applied_only_and_override():
+    rows = [scored(2, 80, applied="TRUE"), scored(3, 70)]
+    items = view.cards(rows)
+
+    assert [c.applied for c in items] == [True, False]
+    assert [c.row for c in view.apply(items, view.Filters([], [], applied_only=True))] == [2]  # F11
+    assert [row["applied"] for row in view.with_checks(rows, {}, {}, {3: True})] == ["TRUE", "TRUE"]
+
+
+def test_scores_strengths_gaps_on_card():
+    card = view.cards(
+        [scored(2, 80, skills="85", experience_score="60", culture="-", career="90", strengths="A, B", gaps="Docker")]
+    )[0]
+
+    assert card.scores == {"기술": 85, "경력": 60, "문화": None, "방향": 90}  # 문화 "-"는 None (F6)
+    assert card.strengths == ["A", "B"] and card.gaps == ["Docker"]
+
+
+def test_is_new_and_last_seen_file(tmp_path):
+    card = view.cards([make_row(2, saved_at="2026-10-22 09:30")])[0]
+    path = tmp_path / "data" / "last_seen.txt"
+
+    assert view.read_last_seen(path) is None  # 처음엔 없음 → NEW 없음 (F9)
+    assert not view.is_new(card, None)
+    view.write_last_seen(path, datetime(2026, 10, 22, 9, 0))
+    seen = view.read_last_seen(path)
+    assert seen == datetime(2026, 10, 22, 9, 0)
+    assert view.is_new(card, seen)
+    assert not view.is_new(card, datetime(2026, 10, 22, 10, 0))
+    assert not view.is_new(view.cards([make_row(3, saved_at="모름")])[0], seen)
+
+
+def test_last_seen_broken_or_unwritable_is_ignored(tmp_path):
+    broken = tmp_path / "last_seen.txt"
+    broken.write_text("깨진 값", encoding="utf-8")
+    blocked = tmp_path / "file"
+    blocked.write_text("", encoding="utf-8")
+
+    assert view.read_last_seen(broken) is None
+    view.write_last_seen(blocked / "last_seen.txt", datetime(2026, 10, 22))  # 폴더 자리에 파일: 오류 없이 넘어감 (N3)
