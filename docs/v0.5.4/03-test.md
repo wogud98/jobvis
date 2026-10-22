@@ -6,7 +6,7 @@
 
 ```bash
 ruff check .            # All checks passed!
-ruff format --check .   # 73 files already formatted
+ruff format --check .   # 76 files already formatted
 python -m pytest        # 511 passed (v0.5.3 503개 → 511개)
 ```
 
