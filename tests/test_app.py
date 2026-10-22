@@ -8,7 +8,7 @@ import streamlit as st
 import yaml
 from streamlit.testing.v1 import AppTest
 
-from agent import db, ocr, postings, profile_form, runner, sheets
+from agent import db, ocr, postings, profile_form, resume, runner, sheets
 
 APP = str(Path(__file__).parent.parent / "app.py")
 
@@ -67,7 +67,7 @@ def test_postings_tab_shows_guide_summary_and_scored_cards(app):
         ("추천 이상", "2"),
         ("이미지 필요", "1"),
     ]  # 필터와 상관없이 전체 (F2)
-    heads = [m.value for m in at.markdown if "회사" in m.value]
+    heads = [m.value for m in at.markdown if m.value.startswith("**회사")]  # 사용법 창 글 빼고
     assert len(heads) == 3
     assert heads[0].startswith("**회사2 · 백엔드**") and "신뢰 높음" in heads[0]
     assert "jv-low" in heads[1]  # 신뢰 낮음 배지 색 (F5)
@@ -85,9 +85,9 @@ def test_filters_start_empty_meaning_all(app):
     source, career = (next(m for m in at.multiselect if m.label == name) for name in ("출처", "경력"))
     assert source.value == [] and career.value == []  # 처음엔 아무것도 안 고름 (v0.5.2 F29)
     assert career.options == ["신입", "경력", "무관"]  # 묶음 (F30)
-    assert sum("회사" in m.value for m in at.markdown) == 3  # 비어 있어도 전체가 보임
+    assert sum(m.value.startswith("**회사") for m in at.markdown) == 3  # 비어 있어도 전체가 보임
     career.set_value(["경력"]).run()
-    assert sum("회사" in m.value for m in at.markdown) == 1
+    assert sum(m.value.startswith("**회사") for m in at.markdown) == 1
 
 
 def test_unscored_card_shows_dash_and_sheet_text_is_escaped(app):
@@ -185,10 +185,20 @@ def test_run_panel_shows_collect_and_score_cards(app):
     assert any("수집 카드에 키워드를 넣고" in m.value for m in at.markdown)  # 사용법 창 (F15, v0.5.4 F9)
 
 
-def test_score_button_is_disabled_without_targets(app):
-    at = app([scorable(2, score="70")])
+def test_score_bar_is_one_line_without_targets(app):
+    at = app([scorable(2, score="70")])  # 체크한 공고 0건, 평가 전 0건
 
-    assert at.button(key="run-score").disabled
+    assert not at.exception
+    keys = [b.key for b in at.button]
+    assert "run-score" not in keys and "run-score-all" not in keys  # 누를 수 없는 버튼 대신 (v0.6.2 F17)
+    assert any("평가할 공고가 없습니다" in m.value for m in at.markdown)
+
+
+def test_score_button_is_disabled_when_only_one_kind_has_targets(app):
+    at = app([scorable(2, score="70"), scorable(3)])  # 체크 0건, 평가 전 1건
+
+    assert at.button(key="run-score").disabled and not at.button(key="run-score-all").disabled
+    assert not any("평가할 공고가 없습니다" in m.value for m in at.markdown)
 
 
 def test_collect_without_keyword_shows_error_and_does_not_start(app, monkeypatch):
@@ -524,7 +534,7 @@ def test_hide_card_moves_it_to_hidden_view_and_back(app, monkeypatch):
 
     assert written == [(3, True)]  # 시트 "관심없음" 칸에 씀 (F44)
     assert names(at) == ["회사2"]
-    assert at.button(key="run-score-all").label == "평가 전 전부 평가 (0건)"  # 평가 대상에서도 빠짐
+    assert any("평가할 공고가 없습니다" in m.value for m in at.markdown)  # 평가 대상에서도 빠짐 (v0.6.2 F17)
     next(t for t in at.toggle if t.label == "관심 없는 공고만 보기").set_value(True).run()
     assert names(at) == ["회사3"] and at.button(key="hide-3").label == "되돌리기"
 
@@ -742,11 +752,11 @@ def test_guide_dialog_opens_on_first_visit_and_by_button(app, tmp_path):
     (tmp_path / "data" / "last_seen.txt").write_text("2026-10-21 12:00", encoding="utf-8")
     at = app([])
     assert not at.get("dialog")  # 전에 연 적 있으면 자동으로 띄우지 않음 (F9)
-    assert not any("① 프로필 저장" in m.value for m in at.markdown)  # 화면에 사용법 접기 칸도 없음
+    assert not any("1. **프로필**" in m.value for m in at.markdown)  # 화면에 사용법 접기 칸도 없음
 
     at.button(key="guide").click().run()
 
-    assert len(at.get("dialog")) == 1 and any("① 프로필 저장" in m.value for m in at.markdown)
+    assert len(at.get("dialog")) == 1 and any("1. **프로필**" in m.value for m in at.markdown)
 
 
 # ---- v0.5.5 프로필 칸 비우기·전체 초기화 ----
@@ -841,7 +851,7 @@ def test_key_dialog_opens_once_when_no_key_and_saves_to_data_folder(app, no_key,
     saved = (tmp_path / "data" / "settings.env").read_text(encoding="utf-8")
     assert "AIzaSyFAKE-app-key-5678" in saved
     assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)  # 키 창이 닫히고 사용법 창이 뜸
-    assert any("① 프로필 저장" in m.value for m in at.markdown)
+    assert any("1. **프로필**" in m.value for m in at.markdown)
     shown = " ".join([t.value for t in at.toast] + [b.label for b in at.button])
     assert "••••5678" in shown and "AIzaSyFAKE" not in shown  # 끝 4자리만 (F5)
 
@@ -863,7 +873,7 @@ def test_key_button_shows_masked_key_and_no_dialog_when_key_exists(app, monkeypa
 
     assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)
     assert at.button(key="key-open").label == "🔑 키 ••••4321"  # v0.6.1 F17
-    assert len(at.get("dialog")) == 1 and any("① 프로필 저장" in m.value for m in at.markdown)  # 사용법 창
+    assert len(at.get("dialog")) == 1 and any("1. **프로필**" in m.value for m in at.markdown)  # 사용법 창
 
     at.button(key="key-open").click().run()
     assert any("••••4321" in m.value for m in at.markdown) and at.button(key="key-delete")
@@ -1197,3 +1207,112 @@ def test_reset_button_disabled_when_only_applied_kept(app, monkeypatch):
     at.button(key="reset-open").click().run()
 
     assert at.button(key="reset-yes").disabled
+
+
+# ---- v0.6.2 보완: 사용법·오류 문구·펼쳐 두기·원문 링크·평가 줄·아이콘 ----
+
+
+def test_guide_is_three_basic_steps_and_extras():
+    import app as screen
+
+    lines = [line for line in screen.GUIDE.strip().splitlines() if line]
+    assert [line.split(" · ")[0] for line in lines if line[0].isdigit()] == [
+        "1. **프로필**", "2. **수집**", "3. **평가**",
+    ]  # v0.6.2 F13  # fmt: skip
+    assert "**추가**" in screen.GUIDE and "**이미지 넣기**" in screen.GUIDE and "**공고 보기**" in screen.GUIDE
+    assert len(lines) <= 10  # 짧게
+
+
+def test_score_without_profile_file_shows_only_what_to_do(app, monkeypatch):
+    monkeypatch.setattr(runner, "start_score", lambda *args: pytest.fail("프로필 없이 평가하지 않음"))
+    at = app([scorable(2, check="TRUE")])
+    at.button(key="run-score").click().run()
+
+    message = at.error[0].value
+    assert message.startswith("프로필 입력이 필요합니다.")  # v0.6.2 F14
+    assert "profile" not in message and "streamlit" not in message  # 경로·명령 같은 개발자 글 없음
+
+
+def test_score_with_broken_profile_points_to_profile_tab(app, monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "start_score", lambda *args: pytest.fail("틀린 프로필로 평가하지 않음"))
+    (tmp_path / "profile.yaml").write_text("skills: {}\nexperience: {}\ndirection: {}\n", encoding="utf-8")
+    at = app([scorable(2, check="TRUE")])
+    at.button(key="run-score").click().run()
+
+    assert at.error[0].value.startswith("프로필에 고칠 칸이 있습니다.")
+    assert "skills.main" not in at.error[0].value
+
+
+def test_score_without_key_asks_for_key_and_opens_key_dialog(app, no_key, monkeypatch, tmp_path):
+    monkeypatch.setattr(runner, "start_score", lambda *args: pytest.fail("키 없이 평가하지 않음"))
+    (tmp_path / "profile.yaml").write_text(PROFILE_TEXT, encoding="utf-8")
+    at = app([scorable(2, check="TRUE")])  # 처음 한 번 뜨는 키 창
+    at.button(key="run-score").click().run()
+
+    assert not at.get("dialog")
+    assert at.error[0].value.startswith("제미나이 API 키 입력이 필요합니다.")  # v0.6.2 F14
+    at.button(key="key-ask-score").click().run()
+    assert len(at.get("dialog")) == 1 and any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)
+
+
+def test_resume_fill_without_key_does_not_call_llm(app, no_key, monkeypatch):
+    monkeypatch.setattr(resume, "ask", lambda text: pytest.fail("키 없이 LLM을 부르지 않음"))
+    at = app([])
+    uploader = next(u for u in at.get("file_uploader") if u.key == "resume-files")
+    uploader.set_value(("이력서.txt", "Python 백엔드 2년".encode(), "text/plain")).run()
+    at.button(key="resume-fill").click().run()
+
+    assert [e.value for e in at.error] == [
+        "제미나이 API 키 입력이 필요합니다. 위 🔑 키 넣기를 누르거나 아래 버튼을 눌러 주세요."
+    ]  # pydantic 오류 글 대신 (v0.6.2 F14)
+    at.button(key="key-ask-resume").click().run()
+    assert len(at.get("dialog")) == 1
+
+
+def test_key_label_follows_model(monkeypatch):
+    from agent import settings
+
+    monkeypatch.setenv("LLM_MODEL", "anthropic:claude-haiku-4-5")
+    assert settings.key_label() == "Claude API 키"
+    monkeypatch.setenv("LLM_MODEL", "google_genai:gemini-flash-lite-latest")
+    assert settings.key_label() == "제미나이 API 키"
+
+
+def test_card_heading_links_to_original_in_new_tab(app):
+    at = app([scored(2, url="https://www.saramin.co.kr/x?a=1&b=2"), scored(3, url="javascript:alert(1)")])
+
+    heads = [m.value for m in at.markdown if "· 백엔드**" in m.value and "jv-badge" in m.value]
+    linked = next(h for h in heads if "회사2" in h)
+    assert linked.startswith('<a class="jv-head" href="https://www.saramin.co.kr/x?a=1&amp;b=2" target="_blank"')
+    assert 'rel="noopener noreferrer"' in linked and "**회사2 · 백엔드**" in linked  # v0.6.2 F16
+    plain = next(h for h in heads if "회사3" in h)
+    assert plain.startswith("**회사3 · 백엔드**") and "<a " not in plain  # http(s)만 링크
+
+
+def test_pinned_details_are_a_fragment():
+    import app as screen
+
+    # 펼쳐 두기·접기는 자세히 칸만 다시 그린다. 화면 전체를 다시 그리면 맨 위로 튐 (v0.6.2 F15)
+    assert screen.show_more.__qualname__ == "show_more"
+    source = Path(screen.__file__).read_text(encoding="utf-8")
+    assert "@st.fragment\ndef show_more(" in source
+
+
+def test_image_upload_saves_to_inbox_and_shows_toast(app, tmp_path):
+    at = app([scorable(2, body="본문 미확보", source="사람인")])
+    uploader = next(u for u in at.get("file_uploader") if u.key == "upload-2")
+    uploader.set_value(("공고.png", b"\x89PNG fake", "image/png")).run()
+    at.button(key="save-2").click().run()
+
+    assert not at.exception
+    assert [p.name for p in (tmp_path / "data" / "inbox").iterdir()] == ["saramin_2.png"]
+    assert any("받은함 읽기" in t.value for t in at.toast)  # 화면 전체를 다시 그린 뒤 알림 (v0.6.2 F15)
+
+
+def test_page_icon_file_is_in_repo_and_image():
+    import app as screen
+
+    icon = Path(screen.ICON)
+    assert icon.is_file() and icon.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"  # v0.6.2 F18
+    ignored = (Path(screen.__file__).parent / ".dockerignore").read_text(encoding="utf-8").split()
+    assert "assets/" not in ignored and "assets" not in ignored and "*.png" not in ignored  # 이미지에 들어감

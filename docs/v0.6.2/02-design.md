@@ -35,6 +35,37 @@
 | --- | --- | --- |
 | D13 | `sheets.collect_keys`가 본문 미확보 줄 정보에 `scored`(종합점수 칸이 비었는지)를 더함. 같은 실행에서 방금 저장한 줄은 `scored: False`. `graph._fill`은 `scored`일 때만 `"평가": True`를 씀 | 다시 평가할 이유가 있는 줄(이전 점수가 옛 본문 기준)만 표시. 평가 전 줄은 "평가 전 전부 평가"에 이미 들어감 |
 
+## 보완 결정 2 (F13–F18)
+
+| 번호 | 결정 | 이유 |
+| --- | --- | --- |
+| D14 | `app.GUIDE`를 기본 3줄 + 추가 3줄로 다시 씀. 다크 모드 안내는 "그 밖에" 줄에 남김 (F13) | 처음 쓰는 사람은 순서만 알면 됨. 나머지는 화면에서 보임 |
+| D15 | `app.profile_problem()`: 파일이 없거나 비었으면 "프로필 입력이 필요합니다", 검사에 걸리면 "프로필에 고칠 칸이 있습니다". `start_score`가 먼저 부름. `user_profile.missing_message`(경로·명령)는 터미널(`main.py`)에만 씀 (F14) | 화면 사용자는 경로·`streamlit run`을 쓸 일이 없음 |
+| D16 | `settings.key_label()`(제미나이 API 키 / Claude API 키). `app.need_key(where)`가 키가 없으면 안내와 `🔑 키 넣기` 버튼(`key-ask-{where}`)을 보이고 참을 돌려줌. 버튼은 `KEY_ASKED`를 켜고, 화면 위 `key_button`이 다음 그리기에서 키 창을 엶. `start_score`·이력서 채우기가 LLM을 부르기 전에 확인 (F14) | 키 창은 한 번에 하나만 뜨게 `key_button` 한 곳에서 엶(v0.6.1 F17). LLM을 부르지 않으니 pydantic 오류 글이 나오지 않음 |
+| D17 | 자세히(떠오르는 창·펼쳐 둔 칸)를 `@st.fragment` `show_more(card, known)`로 분리. 펼쳐 두기·접기는 이 칸만 다시 그림. 이미지 저장은 받은함 카드가 보여야 해서 `st.rerun(scope="app")`, 결과 문구는 `UPLOAD_DONE` → 알림(toast) (F15) | 실제 브라우저(Chromium)에서 화면을 연 뒤 처음 펼쳐 두기에서만 스크롤이 0으로 감을 재현. 화면 전체 다시 그리기 때 생김. 칸만 다시 그리면 위치 그대로 |
+| D18 | `card_head`가 `url`이 `http(s)://`이면 회사·직무를 `<a class="jv-head" target="_blank" rel="noopener noreferrer">`로 감싸고 `↗`를 붙임. 주소는 `escape` (F16) | 글자 링크만으로는 누를 수 있는지 모름. 다른 주소(javascript: 등)는 링크로 만들지 않음 |
+| D19 | `show_score_bar`: 두 대상이 모두 0건이면 안내 한 줄과 체크 오류만 보이고 버튼은 그리지 않음 (F17) | 누를 수 없는 버튼 두 개보다 이유 한 줄이 분명함. 숨기지 않고 줄은 남겨 평가 위치는 보임 |
+| D20 | `assets/icon.png`(256px, 둥근 모서리 밖 투명)를 `st.set_page_config(page_icon=ICON)`. `.dockerignore`에 걸리지 않아 이미지에 들어감 (F18) | 탭 아이콘은 16–32px로 보여 바깥 여백은 뺌 |
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant A as 화면(app.py)
+    participant K as key_button
+    U->>A: 🧮 평가 / ✨ 이력서로 채우기
+    A->>A: profile_problem() (평가만)
+    alt 프로필 없음·틀림
+        A-->>U: 할 일 한 줄
+    else 키 없음 (need_key)
+        A-->>U: "제미나이 API 키 입력이 필요합니다" + 🔑 키 넣기
+        U->>A: 🔑 키 넣기 (KEY_ASKED)
+        A->>K: 다음 그리기
+        K-->>U: 키 창
+    else 모두 있음
+        A->>A: 평가 시작 / LLM으로 이력서 읽기
+    end
+```
+
 ## 구성
 
 ```mermaid
