@@ -134,13 +134,20 @@ def adjust(evaluation: Evaluation, years: int, trust_level: str) -> Adjusted:
     return Adjusted(experience, total, stars(total), verdict(total), ", ".join(notes))
 
 
+def is_true(value: str) -> bool:
+    """시트 체크박스 값. 대소문자 무시 ("TRUE", "true")."""
+    return str(value).strip().upper() == "TRUE"
+
+
 def select_targets(rows: list[dict], mode: str) -> tuple[list[dict], list[dict]]:
     """mode가 checked면 체크한 줄(F7), all이면 점수 없는 줄(F8). 공고 정보가 없는 줄은 건너뛴다(F16).
 
     all은 신입 제외 줄을 고르지 않는다. 점수 칸이 비어 매번 다시 골라지기 때문이다 (v0.5 설계).
+    관심 없음으로 뺀 줄은 어느 쪽도 고르지 않는다 (v0.5.2 F44).
     """
+    rows = [row for row in rows if not is_true(row.get("hidden", ""))]
     if mode == "checked":
-        chosen = [row for row in rows if row.get("check", "").strip().upper() == "TRUE"]
+        chosen = [row for row in rows if is_true(row.get("check", ""))]
     else:
         chosen = [
             row for row in rows if not row.get("score", "").strip() and row.get("verdict", "").strip() != EXCLUDED

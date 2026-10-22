@@ -18,6 +18,8 @@ OTHER_CAREER = "기타"  # 묶음으로 나누지 못한 경력 글자 (예: 인
 NOT_SCORED = "평가 전"
 NONE = "없음"  # 빈 칸 표시 (F3)
 PREVIEW = 600  # 평가 전 카드에 보일 원문 글자 수 (v0.5.2 F31)
+PAGE_SIZE = 10  # 한 쪽에 보일 카드 수 (v0.5.2 F41)
+TOP = 5  # 종합점수 차트 막대 수 (v0.5.2 F42)
 RECOMMENDED = ("강력 추천", "추천")  # 요약 칸 "추천 이상" (v0.5.1 F2)
 UPLOADABLE = (postings.MISSING, postings.PARTLY_UNREAD)  # 이미지 넣는 칸을 보일 본문 상태 (F47)
 
@@ -42,6 +44,7 @@ class Card:
     details: dict[str, str] = field(default_factory=dict)
     info: dict[str, str] = field(default_factory=dict)  # 수집 때 받은 칸. 평가 전에도 보인다 (v0.5.2 F31)
     checked: bool = False  # 시트 "평가" 체크박스 (v0.5.2 F39)
+    hidden: bool = False  # 시트 "관심없음" (v0.5.2 F44)
 
     @property
     def dim(self) -> bool:
@@ -59,6 +62,8 @@ class Filters:
     sources: list[str]
     experiences: list[str]  # CAREER_GROUPS 중에서
     scored_only: bool = False  # 기본은 평가 전 공고도 보인다 (v0.5.2 F32)
+    lowest_first: bool = False  # 점수 낮은 순. 평가 전은 어느 쪽이든 아래 (v0.5.2 F40)
+    hidden_only: bool = False  # 관심 없음으로 뺀 공고만. 기본은 뺀 공고를 숨김 (v0.5.2 F44)
 
 
 def _score(value: str) -> int | None:
@@ -121,7 +126,8 @@ def _card(row: dict) -> Card:
         body=row["body"],
         details={name: _or_none(value) for name, value in details.items()},
         info={name: value.strip() for name, value in info.items() if value.strip()},
-        checked=row.get("check", "").strip().upper() == "TRUE",  # scoring.select_targets와 같은 규칙
+        checked=scoring.is_true(row.get("check", "")),  # scoring.select_targets와 같은 규칙
+        hidden=scoring.is_true(row.get("hidden", "")),
     )
 
 
@@ -135,9 +141,17 @@ def preview(card: Card, limit: int = PREVIEW) -> str:
     return whole if len(whole) <= limit else whole[:limit].rstrip() + " …"
 
 
-def with_checks(rows: list[dict], checks: dict[int, bool]) -> list[dict]:
-    """화면에서 바꾼 체크를 읽어 둔 시트 줄에 덮는다. 시트를 다시 읽지 않고 대상 수를 맞춘다 (v0.5.2 F39)."""
-    return [row | {"check": "TRUE" if checks[row["row"]] else "FALSE"} if row["row"] in checks else row for row in rows]
+def with_checks(rows: list[dict], checks: dict[int, bool], hidden: dict[int, bool] | None = None) -> list[dict]:
+    """화면에서 바꾼 체크·관심 없음을 읽어 둔 시트 줄에 덮는다. 시트를 다시 읽지 않고 맞춘다 (v0.5.2 F39, F44)."""
+    changed = []
+    for row in rows:
+        number = row["row"]
+        if number in checks:
+            row = row | {"check": "TRUE" if checks[number] else "FALSE"}
+        if hidden and number in hidden:
+            row = row | {"hidden": "TRUE" if hidden[number] else "FALSE"}
+        changed.append(row)
+    return changed
 
 
 def cards(rows: list[dict]) -> list[Card]:
@@ -170,21 +184,36 @@ def options(items: list[Card]) -> tuple[list[str], list[str]]:
 
 
 def apply(items: list[Card], filters: Filters) -> list[Card]:
-    return [
+    """거르고 정렬한다. items는 cards()의 순서(점수 높은 순, 같으면 시트 줄 순, 평가 전은 뒤)."""
+    shown = [
         card
         for card in items
         if (not filters.sources or card.source in filters.sources)
         and (not filters.experiences or set(career_groups(card.experience)) & set(filters.experiences))
         and (not filters.scored_only or card.score is not None)
+        and card.hidden == filters.hidden_only
     ]
+    if filters.lowest_first:  # 같은 점수는 시트 줄 순 그대로 (F40)
+        scored = sorted((c for c in shown if c.score is not None), key=lambda c: (c.score, c.row))
+        shown = scored + [c for c in shown if c.score is None]
+    return shown
 
 
-def chart(items: list[Card]) -> list[tuple[str, int]]:
-    """막대 차트 자료 [(막대 이름, 종합점수)]. 점수 있는 카드만, 같은 이름은 뒤에 번호 (F5)."""
+def page(items: list[Card], number: int, size: int = PAGE_SIZE) -> tuple[list[Card], int, int]:
+    """(그 쪽 카드, 실제 쪽 번호, 전체 쪽 수). 범위 밖 번호는 처음·끝 쪽으로 (v0.5.2 F41)."""
+    pages = max(1, -(-len(items) // size))
+    number = min(max(1, number), pages)
+    return items[(number - 1) * size : number * size], number, pages
+
+
+def chart(items: list[Card], limit: int = TOP) -> list[tuple[str, int]]:
+    """막대 차트 자료 [(막대 이름, 종합점수)]. 점수 높은 limit개만, 같은 이름은 뒤에 번호 (F5, v0.5.2 F42).
+
+    정렬(F40)과 상관없이 높은 순이다.
+    """
+    best = sorted((c for c in items if c.score is not None), key=lambda c: (-c.score, c.row))[:limit]
     data, used = [], {}
-    for card in items:
-        if card.score is None:
-            continue
+    for card in best:
         name = f"{card.company} · {card.title}"
         used[name] = used.get(name, 0) + 1
         data.append((name if used[name] == 1 else f"{name} ({used[name]})", card.score))

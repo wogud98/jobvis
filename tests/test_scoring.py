@@ -278,3 +278,18 @@ def test_trust_levels(body, with_body, expected):
 )
 def test_newcomer_exclusion(experience, years, expected):
     assert scoring.excluded(experience, years) is expected
+
+
+def test_hidden_rows_are_never_targets():
+    base = {"experience": "신입", "score": "", "verdict": ""}
+    rows = [
+        base | {"check": "TRUE", "hidden": "TRUE"},
+        base | {"check": "true", "hidden": ""},
+        base | {"hidden": "true"},
+    ]
+
+    checked, _ = scoring.select_targets(rows, "checked")
+    unscored, _ = scoring.select_targets(rows, "all")
+
+    assert checked == [rows[1]]  # 관심 없음으로 뺀 줄은 체크돼 있어도 빼고 (v0.5.2 F44)
+    assert unscored == [rows[1]]  # 평가 전 전부에서도 뺌
