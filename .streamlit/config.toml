@@ -1,4 +1,4 @@
-# 화면 테마 (v0.5.1 F17, v0.5.2 F23 초록 포인트, F28 네오 브루탈리즘, v0.5.3 F13–F14 밝은·어두운 테마)
+# 화면 테마 (v0.5.1 F17, v0.5.2 F23 초록 포인트, F28 네오 브루탈리즘, v0.5.3 F13–F14 밝은·어두운 테마, v0.5.4 F13 어두운 칸 구분)
 # 시스템 설정을 따르고, ⋮ → Settings → Theme에서 바꿀 수 있음
 [theme]
 baseRadius = "0.4rem"
@@ -13,7 +13,7 @@ borderColor = "#111111"
 
 [theme.dark]
 primaryColor = "#34d399"
-backgroundColor = "#16181d"
-secondaryBackgroundColor = "#22262e"
+backgroundColor = "#0e1013"
+secondaryBackgroundColor = "#1a1d23"
 textColor = "#f1f1f1"
 borderColor = "#e8e8e8"

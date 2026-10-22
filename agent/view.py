@@ -26,7 +26,7 @@ RECOMMENDED = ("강력 추천", "추천")  # 요약 칸 "추천 이상" (v0.5.1 
 UPLOADABLE = (postings.MISSING, postings.PARTLY_UNREAD)  # 이미지 넣는 칸을 보일 본문 상태 (F47)
 SCORE_NAMES = ("기술", "경력", "문화", "방향")  # 항목 점수 (v0.5.3 F1)
 LAST_SEEN = Path("data/last_seen.txt")  # 화면을 마지막으로 연 시각, 커밋 안 함 (v0.5.3 F9, N3)
-SOON = 7  # 마감까지 이 날수 이하면 D-n 배지 (v0.5.3 F7)
+SOON = 7  # 마감까지 이 날수 이하면 빨간 D-n 배지, 넘으면 흰 배지 (v0.5.3 F7, v0.5.4 F4)
 SORTS = ("score_desc", "score_asc", "deadline")  # 점수 높은 순, 낮은 순(v0.5.2 F40), 마감 임박 순(v0.5.3 F8)
 _SPLIT = re.compile(r"\s*[,，;\n]\s*|\s+[/·]\s+")  # 글머리표로 나눌 곳. "CI/CD", "Python·SQL"처럼 붙은 /·는 그대로
 
@@ -78,6 +78,8 @@ class Filters:
     hidden_only: bool = False  # 관심 없음으로 뺀 공고만. 기본은 뺀 공고를 숨김 (v0.5.2 F44)
     query: str = ""  # 회사명·직무 검색 (v0.5.3 F10)
     applied_only: bool = False  # 지원한 공고만 (v0.5.3 F11)
+    image_only: bool = False  # 이미지를 넣어야 하는 공고만 (v0.5.4 F2)
+    recommended_only: bool = False  # 강력 추천 + 추천만 (v0.5.4 F12)
 
 
 def _score(value: str) -> int | None:
@@ -114,13 +116,13 @@ def days_left(deadline: str, today: date) -> int | None:
 
 
 def deadline_badge(deadline: str, today: date) -> tuple[str, str] | None:
-    """(배지 글자, 색) 또는 None. 7일 이하 D-n, 당일 D-day, 지나면 마감 (F7)."""
+    """(배지 글자, 색) 또는 None. 남은 날 D-n(7일 이하 빨강), 당일 D-day, 지나면 마감 (F7, v0.5.4 F4)."""
     days = days_left(deadline, today)
-    if days is None or days > SOON:
+    if days is None:
         return None
     if days < 0:
         return "마감", "closed"
-    return ("D-day" if days == 0 else f"D-{days}"), "low"
+    return ("D-day" if days == 0 else f"D-{days}"), "low" if days <= SOON else "plain"
 
 
 def _parse_time(text: str) -> datetime | None:
@@ -286,6 +288,8 @@ def apply(items: list[Card], filters: Filters, today: date | None = None) -> lis
         and (not filters.scored_only or card.score is not None)
         and card.hidden == filters.hidden_only
         and (not filters.applied_only or card.applied)
+        and (not filters.image_only or card.can_upload)
+        and (not filters.recommended_only or card.verdict in RECOMMENDED)
         and _matches(card, filters.query)
     ]
     if filters.sort == "score_asc":  # 같은 점수는 시트 줄 순 그대로 (F40)
@@ -337,7 +341,8 @@ def summary(items: list[Card]) -> list[tuple[str, int, str]]:
         ("전체 공고", len(items), "시트에 있는 공고"),
         ("평가 완료", sum(card.score is not None for card in items), "점수가 있는 공고"),
         ("추천 이상", sum(card.verdict in RECOMMENDED for card in items), "강력 추천 + 추천"),
-        ("본문 미확보", sum(card.body == postings.MISSING for card in items), "이미지를 넣으면 채워짐"),
+        # 본문 미확보 + 이미지 일부 못 읽음. "이미지 필요한 공고만 보기"와 같은 기준 (v0.5.4 F3)
+        ("이미지 필요", sum(card.can_upload for card in items), "넣으면 점수가 정확해짐"),
     ]
 
 
