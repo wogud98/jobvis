@@ -9,7 +9,7 @@
 | 질문 | 확인 | 결정 |
 | --- | --- | --- |
 | 저장소가 private이어도 GHCR 이미지만 공개할 수 있나 | GitHub 문서: 저장소와 연결된 패키지는 "접근 권한은 저장소를 따르지만 공개 범위는 따르지 않음". 패키지 설정 Danger Zone에서 따로 공개로 바꿈. 공개 컨테이너 패키지는 로그인 없이 받음. **한 번 공개하면 다시 비공개로 못 바꿈** ([문서](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)) | 됨. 처음 올린 뒤 재리가 패키지 설정에서 공개로 바꿈(한 번만) |
-| 기본 이미지가 실제로 줄어드나 | v0.6.1 때 작업 환경 시험 빌드: OCR 없음 받는 크기 229MB·풀린 크기 1.02GB, OCR 포함 564MB·2.53GB | 받는 크기 약 2.5배 차이라 나눔(F5–F8 유지). 구현 때 최종 이미지로 다시 잼(N2) |
+| 기본 이미지가 실제로 줄어드나 | CI 실측: OCR 없음 받는 크기 약 257MB·풀린 크기 730MB, OCR 포함 약 819MB·2.23GB | 받는 크기 약 3배 차이라 나눔(F5–F8 유지). OCR은 약 560MB 더 받음 |
 | 시작 파일 묶음 받는 방법 | 저장소가 private이라 Releases는 반 사람이 못 받음 | 지금은 저장소 `start/` 폴더를 zip으로 반 채팅방에 나눔. 저장소를 public으로 바꾼 뒤 Releases로 옮김(다음 버전 후보) |
 
 ## 결정

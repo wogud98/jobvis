@@ -7,7 +7,7 @@ import os
 
 MIN_SIDE = 300  # 가로나 세로가 이보다 작으면 장식으로 보고 건너뛴다 (F12)
 MAX_IMAGES = 10  # 공고당 최대 장수 (F12)
-OCR_EXTRA = "약 350MB"  # OCR 이미지를 고르면 더 받는 크기 (v0.6.2 N2, 03-test.md 실측)
+OCR_EXTRA = "약 560MB"  # OCR 이미지를 고르면 더 받는 크기 (v0.6.2 N2, 03-test.md 실측)
 
 
 def install_hint() -> str:
