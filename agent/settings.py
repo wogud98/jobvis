@@ -38,6 +38,14 @@ def key_page() -> str:
     return KEY_PAGES[key_name()]
 
 
+KEY_LABELS = {"GOOGLE_API_KEY": "제미나이 API 키", "ANTHROPIC_API_KEY": "Claude API 키"}
+
+
+def key_label() -> str:
+    """화면 안내에 쓰는 키 이름 (v0.6.2 F14)."""
+    return KEY_LABELS[key_name()]
+
+
 def has_key() -> bool:
     return bool(os.environ.get(key_name(), "").strip())
 

@@ -10,6 +10,7 @@
 import hashlib
 from datetime import date, datetime
 from html import escape
+from pathlib import Path
 
 import streamlit as st
 from dotenv import load_dotenv
@@ -17,6 +18,7 @@ from dotenv import load_dotenv
 from agent import inbox, ocr, profile_form, resume, runner, scoring, settings, store, user_profile, view
 
 PROFILE = user_profile.DEFAULT
+ICON = str(Path(__file__).parent / "assets" / "icon.png")
 LIST_FIELDS = ("요약", "주요업무", "우대사항")  # 글머리표로 보일 칸 (v0.5.3 F3)
 CHART_HEIGHT = 230  # TOP 5 막대가 보기 좋은 높이
 ACCENT = "#6b8afd"  # TOP 5 막대. 피그마 테마의 코발트 (v0.6.1 F26)
@@ -29,6 +31,7 @@ CHECK_ERROR = "check_error"
 TOASTED = "toasted_job"  # 결과 알림을 띄운 작업 (v0.6.1 F5)
 RELOADED = "reloaded_job"  # 결과를 다시 읽은 작업 (v0.6.1 F16)
 RESET_DONE = "reset_done"  # 방금 공고를 초기화한 결과 문구 (v0.6.1 F30)
+UPLOAD_DONE = "upload_done"  # 방금 받은함에 저장한 이미지 문구 (v0.6.2 F15)
 RESET_ERROR = "reset_error"  # 초기화하지 못한 이유 (v0.6.1 F30)
 PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
 TAGLINE = "채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다"  # JOBVIS 아래 문장 (v0.5.2 F43)
@@ -36,37 +39,15 @@ SORTS = {"점수 높은 순": "score_desc", "점수 낮은 순": "score_asc", "�
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
 GUIDE = """
-**① 프로필 저장** · 👤 프로필 탭
-- `*` 표시한 필수 칸 3개만 채우면 평가할 수 있습니다. 나머지는 채울수록 점수 근거가 정확해집니다.
-- 목록 칸은 눌러서 고르고, 목록에 없으면 직접 입력한 뒤 Enter로 추가합니다.
-- 이력서·포트폴리오 파일을 올리면 빈 칸을 채워 줍니다. 확인하고 고친 뒤 **💾 저장**을 누르세요.
+**기본** (v0.6.2 F13)
+1. **프로필** · 👤 프로필 탭에서 `*` 칸을 채우고 **💾 저장** (이력서 파일로 채울 수도 있음)
+2. **수집** · 📋 공고 탭 수집 카드에 키워드를 넣고 **🔎 수집** (키 없이 됨, 몇 분 걸림)
+3. **평가** · 카드의 **평가** 칸을 체크하고 **🧮 체크한 공고 평가** (🔑 키 필요)
 
-**② 수집** · 📋 공고 탭
-- 수집 카드에 키워드를 넣고 **🔎 수집**을 누릅니다. 사람인·잡코리아 공개 페이지를 3초 간격으로 읽어서
-  30건 수집은 몇 분 걸립니다.
-- 지역은 여러 곳을 고를 수 있습니다. 처음엔 프로필 희망 지역이 골라져 있고, 비우면 전체입니다.
-
-**③ 평가**
-- 공고 카드의 **평가** 칸을 체크하고 목록 위 **🧮 체크한 공고 평가**를 누릅니다.
-  평가 전 공고를 한 번에 평가할 수도 있습니다.
-
-**④ 공고 보기**
-- 카드는 종합점수 높은 순입니다. 왼쪽 **필터**에서 검색·정렬하고, 필터는 « 로 접을 수 있습니다.
-- 위 요약 칸의 숫자 아래 글(예: **점수가 있는 공고 →**)을 누르면 그 칸의 공고만 보입니다.
-- **자세히**를 누르면 항목 점수, 강점·부족한 점, 요약, 기술(내 기술은 초록)이 뜹니다. 바깥을 누르면 닫히고,
-  **📌 펼쳐 두기**를 누르면 카드 안에 열어 둡니다.
-- **D-n**은 마감까지 남은 날(7일 이하는 빨강), **NEW**는 지난번에 연 뒤 들어온 공고입니다.
-- 지원한 공고는 **지원함**, 보고 싶지 않은 공고는 **관심 없음**을 누릅니다.
-
-**⑤ 이미지 넣기**
-- **📷 이미지 필요** 배지가 붙은 공고는 사이트가 본문을 이미지로 올려 자동으로 읽지 못한 공고입니다.
-- 자세히 → 원문 열기 → 공고 이미지 저장 → 끌어다 놓기 → **🖼 받은함 읽기** → 다시 평가하면 점수가 정확해집니다.
-
-**그 밖에**
-- 시트를 직접 고쳤으면 오른쪽 위 **🔄 새로고침**을 누릅니다.
-- Docker(DB)로 쓸 때 공고를 지우고 다시 모으려면 사이드바 맨 아래 **🗑 공고 초기화**. 프로필·키는 남습니다.
-- 다크 모드는 컴퓨터 설정을 따릅니다. 바꾸려면 오른쪽 위 **⋮ → Light·Dark**. 바꾸면 바로 적용됩니다.
-- 터미널(`python main.py --keyword 백엔드`, `--score`, `--inbox`)로 해도 결과는 같습니다.
+**추가**
+- **공고 보기**: 회사·직무를 누르면 원문, **자세히**는 점수·강점·부족한 점. 왼쪽 **필터**로 검색·정렬
+- **이미지 넣기**: **📷 이미지 필요** 공고는 자세히에서 공고 이미지를 끌어다 놓고 **🖼 받은함 읽기** → 다시 평가
+- **그 밖에**: 지원함·관심 없음, 🔄 새로고침, 사이드바 🗑 공고 초기화(DB), 다크 모드는 ⋮ → Light·Dark
 """
 RESUME_HELP = (
     f"PDF(글자 있는 것)·Word·txt·md. 파일 글자(앞 {resume.MAX_TEXT:,}자)가 LLM 제공자(기본 Gemini)로 전송됩니다. "
@@ -289,6 +270,8 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
   border-radius: 4px; font-size: 0.85rem; font-weight: 700; background: var(--jv-card); color: var(--jv-text); }
 .jv-chip.jv-mine { background: var(--jv-mint); color: var(--jv-badge-text); }
 .jv-strength { color: var(--jv-sub); font-size: 0.9rem; }
+a.jv-head, a.jv-head:visited { color: inherit; text-decoration: none; }
+a.jv-head:hover { text-decoration: underline; }
 /* 카드 체크·점수·버튼 칸은 창이 좁아져도 글자가 잘리지 않게 (v0.6.1 F4) */
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"] div[class*="st-key-check-"]) {
   flex-wrap: nowrap; }
@@ -386,8 +369,10 @@ def show_upload(card: view.Card) -> None:
         except inbox.UploadError as e:
             st.error(str(e))  # 확장자가 아니거나 10MB 초과 (F49)
     if saved:
-        # 화면은 저장만 하고 OCR은 받은함 읽기에서 (F48)
-        st.success(f"저장함: {', '.join(saved)}. 위 받은함 카드에서 🖼 받은함 읽기를 누르세요.")
+        # 화면은 저장만 하고 OCR은 받은함 읽기에서 (F48). 자세히는 따로 다시 그리는 칸이라
+        # 받은함 카드가 보이게 화면 전체를 다시 그리고 결과는 알림으로 (v0.6.2 F15)
+        st.session_state[UPLOAD_DONE] = f"저장함: {', '.join(saved)}. 위 받은함 카드에서 🖼 받은함 읽기를 누르세요."
+        st.rerun(scope="app")
 
 
 @st.dialog("📖 사용법", width="large")
@@ -446,16 +431,22 @@ def show_card(card: view.Card, known: list[str]) -> None:
             "되돌리기" if card.hidden else "관심 없음", key=f"hide-{card.row}", on_click=toggle_hidden,
             args=(card.row, not card.hidden), disabled=runner.running(), use_container_width=True,
         )  # fmt: skip
-        # 자세히는 떠오르는 창이라 바깥을 누르면 닫힌다. 펼쳐 두면 카드 안에 남는다 (v0.5.4 F5, F6)
-        if card.row in st.session_state.get(PINNED, set()):
-            with st.container(border=True, key=f"box-pinned-{card.row}"):
-                st.button("접기", key=f"unpin-{card.row}", on_click=pin, args=(card.row, False))
-                show_details(card, known)
-        else:
-            with st.popover("자세히", width="stretch", key=f"more-{card.row}"):
-                st.button("📌 펼쳐 두기", key=f"pin-{card.row}", on_click=pin, args=(card.row, True),
-                          help="카드 안에 열어 둡니다. 접기를 누를 때까지 닫히지 않습니다")  # fmt: skip
-                show_details(card, known)
+        show_more(card, known)
+
+
+@st.fragment
+def show_more(card: view.Card, known: list[str]) -> None:
+    """자세히는 떠오르는 창이라 바깥을 누르면 닫힌다. 펼쳐 두면 카드 안에 남는다 (v0.5.4 F5, F6).
+    펼쳐 두기·접기는 이 칸만 다시 그려서 화면이 맨 위로 튀지 않는다 (v0.6.2 F15)."""
+    if card.row in st.session_state.get(PINNED, set()):
+        with st.container(border=True, key=f"box-pinned-{card.row}"):
+            st.button("접기", key=f"unpin-{card.row}", on_click=pin, args=(card.row, False))
+            show_details(card, known)
+    else:
+        with st.popover("자세히", width="stretch", key=f"more-{card.row}"):
+            st.button("📌 펼쳐 두기", key=f"pin-{card.row}", on_click=pin, args=(card.row, True),
+                      help="카드 안에 열어 둡니다. 접기를 누를 때까지 닫히지 않습니다")  # fmt: skip
+            show_details(card, known)
 
 
 def show_details(card: view.Card, known: list[str]) -> None:
@@ -484,7 +475,13 @@ def card_head(card: view.Card, today: date) -> str:
     if card.applied:
         badges += badge("지원함", "high")
     meta = " · ".join(part for part in (card.source, card.experience, f"마감 {card.deadline or '없음'}") if part)
-    text = f"**{escape(card.company)} · {escape(card.title)}**  \n{badges}<span class='jv-muted'>{escape(meta)}</span>"
+    name = f"**{escape(card.company)} · {escape(card.title)}**"
+    if card.url.startswith(("https://", "http://")):  # 회사·직무를 누르면 새 탭으로 원문 (v0.6.2 F16)
+        name = (
+            f'<a class="jv-head" href="{escape(card.url)}" target="_blank" rel="noopener noreferrer" '
+            f'title="원문 열기 (새 탭)">{name} <span class="jv-muted">↗</span></a>'
+        )
+    text = f"{name}  \n{badges}<span class='jv-muted'>{escape(meta)}</span>"
     if card.score is not None and card.strengths:  # 펼치지 않아도 보이는 강점 한 줄 (F12)
         text += f"  \n<span class='jv-strength'>💪 {escape(card.strengths[0])}</span>"
     # 카드 왼쪽 색 띠를 고르는 빈 표시 (v0.6.1 F26). 점수 막대와 같은 70·40 기준
@@ -662,13 +659,39 @@ def show_inbox_card() -> None:
             start_job(runner.start_inbox)
 
 
-def start_score(mode: str) -> None:
+def profile_problem() -> str:
+    """평가 전에 프로필을 확인한다. 개발자용 글(경로·명령) 대신 할 일만 (v0.6.2 F14)."""
+    path = Path(PROFILE)
+    if not path.is_file() or not path.read_text(encoding="utf-8").strip():
+        return "프로필 입력이 필요합니다. 👤 프로필 탭에서 * 표시한 칸을 채우고 💾 저장을 눌러 주세요."
     try:
-        profile = runner.load_profile(PROFILE)  # 없거나 틀리면 실행하지 않음 (F8)
-    except user_profile.ProfileError as e:
-        st.error(f"{e}\n\n프로필 탭에서 입력하고 저장해 주세요.")
+        runner.load_profile(PROFILE)
+    except user_profile.ProfileError:
+        return "프로필에 고칠 칸이 있습니다. 👤 프로필 탭에서 확인하고 💾 저장을 눌러 주세요."
+    return ""
+
+
+def ask_key() -> None:
+    st.session_state[KEY_ASKED] = True  # 다음 그리기에서 위 🔑 키 창을 연다
+
+
+def need_key(where: str) -> bool:
+    """키가 없으면 할 일만 보이고 키 창을 여는 버튼을 둔다 (v0.6.2 F14)."""
+    if settings.has_key():
+        return False
+    st.error(f"{settings.key_label()} 입력이 필요합니다. 위 🔑 키 넣기를 누르거나 아래 버튼을 눌러 주세요.")
+    st.button("🔑 키 넣기", key=f"key-ask-{where}", on_click=ask_key)
+    return True
+
+
+def start_score(mode: str) -> None:
+    problem = profile_problem()  # 없거나 틀리면 실행하지 않음 (F8)
+    if problem:
+        st.error(problem)
         return
-    start_job(runner.start_score, mode, profile)
+    if need_key("score"):
+        return
+    start_job(runner.start_score, mode, runner.load_profile(PROFILE))
 
 
 def show_score_bar(rows: list[dict]) -> None:
@@ -676,6 +699,14 @@ def show_score_bar(rows: list[dict]) -> None:
     busy = runner.running()
     checked, unscored = runner.score_targets(rows, "checked"), runner.score_targets(rows, "all")
     with st.container(border=True, key="box-score-bar"):
+        if not checked and not unscored:  # 누를 수 없는 버튼 두 개 대신 한 줄 (v0.6.2 F17)
+            st.markdown(
+                "**평가** <span class='jv-muted'>평가할 공고가 없습니다. "
+                "카드의 평가 칸을 체크하면 다시 평가합니다</span>",
+                unsafe_allow_html=True,
+            )
+            show_check_error()
+            return
         st.markdown("**평가** <span class='jv-muted'>카드의 평가 칸을 체크하고 누릅니다</span>", unsafe_allow_html=True)
         left, right = st.columns(2)  # 버튼 글자가 잘리지 않게 안내 줄 아래 두 칸 (v0.6.1 F4)
         if left.button(
@@ -688,9 +719,13 @@ def show_score_bar(rows: list[dict]) -> None:
             key="run-score-all", use_container_width=True,
         ):  # fmt: skip
             start_score("all")
-        error = st.session_state.pop(CHECK_ERROR, None)
-        if error:
-            st.error(error)
+        show_check_error()
+
+
+def show_check_error() -> None:
+    error = st.session_state.pop(CHECK_ERROR, None)
+    if error:
+        st.error(error)
 
 
 def show_run_panel() -> None:
@@ -739,6 +774,8 @@ def show_postings() -> None:
     reload_after_job()
     if done := st.session_state.pop(RESET_DONE, None):
         st.toast(done, icon="🗑")
+    if done := st.session_state.pop(UPLOAD_DONE, None):
+        st.toast(done, icon="🖼")
     try:
         rows, error = load_rows(), None
     except Exception as e:
@@ -1007,6 +1044,8 @@ def show_resume_fill(values: dict, fill: dict | None) -> None:
     overwrite = toggle.toggle("이미 적은 칸도 바꾸기", key="resume-overwrite")  # 기본은 빈 칸만 (F19)
     if not run.button("✨ 이력서로 채우기", disabled=not files, key="resume-fill"):
         return
+    if need_key("resume"):
+        return
     text, skipped = resume.read_files([(file.name, file.getvalue()) for file in files])
     for name, reason in skipped:  # 그 파일만 건너뜀 (F21)
         st.warning(f"{name}: {reason}")
@@ -1110,6 +1149,7 @@ KEY_SAVED = "key_saved"  # 방금 키를 저장했는지 (v0.6 F4)
 KEY_DELETED = "key_deleted"  # 방금 키를 지웠는지 (v0.6.1 F14)
 KEY_PROMPTED = "key_prompted"  # 키가 없어 창을 한 번 띄웠는지 (v0.6.1 F17)
 KEY_ERROR = "key_error"  # 저장하지 못한 이유 (v0.6.1 F17)
+KEY_ASKED = "key_asked"  # 키가 필요하다는 안내에서 키 넣기를 눌렀는지 (v0.6.2 F14)
 
 
 def delete_key() -> None:
@@ -1177,7 +1217,8 @@ def key_button(column) -> None:
     clicked = column.button(label, type="primary" if missing else "secondary", use_container_width=True, key="key-open")
     first = missing and not st.session_state.get(KEY_PROMPTED)
     pending = KEY_ERROR in st.session_state or KEY_DELETED in st.session_state  # 창 안 안내를 보여야 함
-    if clicked or first or pending:
+    asked = st.session_state.pop(KEY_ASKED, False)
+    if clicked or first or pending or asked:
         st.session_state[KEY_PROMPTED] = True
         show_key_dialog()
 
@@ -1185,7 +1226,7 @@ def key_button(column) -> None:
 def main() -> None:
     load_dotenv()
     settings.load()  # .env 다음, 비어 있는 값만 (v0.6 D6)
-    st.set_page_config(page_title="JOBVIS", layout="wide")
+    st.set_page_config(page_title="JOBVIS", page_icon=ICON, layout="wide")  # 브라우저 탭 아이콘 (v0.6.2 F18)
     st.markdown(css(), unsafe_allow_html=True)  # 테마는 브라우저가 고른다 (v0.6.1 F25)
     st.html(SCHEME_SYNC, unsafe_allow_javascript=True)  # 자세히·사용법 창도 같은 테마 (v0.6.1 F27)
     remember_visit()
