@@ -12,8 +12,9 @@ textColor = "#111111"
 borderColor = "#111111"
 
 [theme.dark]
-primaryColor = "#3d7181"
-backgroundColor = "#0e1013"
-secondaryBackgroundColor = "#1a1d23"
-textColor = "#f1f1f1"
-borderColor = "#e8e8e8"
+# 회청색 한 계열, 순백 글자·밝은 테두리를 피해 눈부심을 줄임 (v0.6.1 F22). app.py PALETTES["dark"]와 같게
+primaryColor = "#059669"
+backgroundColor = "#14161a"
+secondaryBackgroundColor = "#181b20"
+textColor = "#e5e7eb"
+borderColor = "#4b5563"
