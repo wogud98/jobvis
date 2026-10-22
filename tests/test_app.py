@@ -667,13 +667,13 @@ def test_apply_failure_shows_error_without_secret(app, monkeypatch):
 def test_css_follows_theme_and_guide_mentions_theme(app):
     import app as screen  # 저장소 app.py
 
-    dark = screen.css("dark")
-    assert "--jv-paper: #14161a" in dark and "--jv-card: #1f232a" in dark  # v0.6.1 F22 색 다시 맞춤
-    assert "--jv-paper: #fffdf5" in screen.css("light") and "--jv-paper: #fffdf5" in screen.css(None)
-    assert "/*VARS*/" not in screen.css("dark")
-    assert "--jv-tile0: #4a4024" in dark and "--jv-tile-text: #e5e7eb" in dark  # v0.5.4 F11, v0.6.1 F22
+    css = screen.css()  # 두 테마 색을 light-dark(밝은, 어두운)로 함께 넣음 (v0.6.1 F25)
+    assert "--jv-paper: light-dark(#fffdf5, #14161a);" in css and "--jv-card: light-dark(#ffffff, #1f232a);" in css
+    assert "/*VARS*/" not in css
+    assert "--jv-tile0: light-dark(#ffe066, #4a4024);" in css  # v0.5.4 F11, v0.6.1 F22
+    assert "--jv-tile-text: light-dark(#111111, #e5e7eb);" in css
     at = app([])
-    assert any("Theme" in m.value for m in at.markdown)
+    assert any("⋮ → Light·Dark" in m.value for m in at.markdown)
 
 
 # ---- v0.5.4 사이드바 필터·요약 칸·자세히 창·이미지 안내·사용법 창 ----
@@ -904,8 +904,7 @@ def test_key_is_a_top_button_not_a_card(app, no_key):
 def test_title_is_white_and_larger_in_dark_theme():
     import app as screen
 
-    assert "--jv-title: #ffffff" in screen.css("dark")  # v0.6.1 F1
-    assert "--jv-title: #111111" in screen.css("light")  # 밝은 바탕에서는 검정
+    assert "--jv-title: light-dark(#111111, #ffffff);" in screen.css()  # 어두운 테마 흰색, 밝은 테마 검정 (v0.6.1 F1)
     assert "font-size: 4rem; font-weight: 900; color: var(--jv-title)" in screen.CSS  # F1, F19
     assert "--jv-highlight) 58%" not in screen.CSS  # 제목 뒤 형광 줄 없음 (F19)
 
@@ -980,7 +979,8 @@ def test_selected_tile_inverts_colors():
 
     assert 'div[class*="st-key-box-summary"][class*="-on"] { background: var(--jv-sel) !important; }' in screen.CSS
     assert '[class*="-on"] * { color: var(--jv-sel-text) !important; }' in screen.CSS  # v0.6.1 F21
-    assert "--jv-sel: #111111" in screen.css("light") and "--jv-sel-text: #ffffff" in screen.css("light")
+    assert "--jv-sel: light-dark(#111111, #d1d5db);" in screen.css()
+    assert "--jv-sel-text: light-dark(#ffffff, #111318);" in screen.css()
     # 고른 칸 면 색은 요약 칸 4색과 겹치지 않는다
     for theme in ("light", "dark"):
         palette = screen.PALETTES[theme]
@@ -1010,3 +1010,55 @@ def test_top5_chart_is_static(app):
     assert not at.exception
     [chart] = at.get("vega_lite_chart")  # st.bar_chart(늘 확대·끌기 됨) 대신 명세 차트
     assert '"params"' not in chart.proto.spec and "#059669" in chart.proto.spec
+
+
+# ---- v0.6.1 보완 4차: 새로고침으로 프로필 되돌리기, 테마 바로 적용 ----
+
+
+def test_refresh_restores_saved_profile_after_clear_all(app, tmp_path):
+    (tmp_path / "profile.yaml").write_text(PROFILE_TEXT, encoding="utf-8")
+    at = app([])
+    at.button(key="profile-clear-all").click().run()
+    at.button(key="clear-all-yes").click().run()
+    assert skill(at, "주력 기술").value == []
+
+    next(b for b in at.button if b.label == "🔄 새로고침").click().run()
+
+    assert skill(at, "주력 기술").value == ["Python"]  # 저장된 값으로 (v0.6.1 F24)
+    assert text_field(at, "하고 싶은 일").value != ""
+    assert (tmp_path / "profile.yaml").read_text(encoding="utf-8") == PROFILE_TEXT
+
+
+def test_refresh_drops_unsaved_typing_and_resume_fill(app, tmp_path):
+    import app as screen
+
+    (tmp_path / "profile.yaml").write_text(PROFILE_TEXT, encoding="utf-8")
+    at = app([])
+    saved = text_field(at, "하고 싶은 일").value
+    text_field(at, "하고 싶은 일").input("저장 안 한 글").run()
+    at.session_state[screen.FILL] = {"values": screen.profile_form.to_form(None), "filled": []}
+    at.run()
+    assert text_field(at, "하고 싶은 일").value == ""
+
+    next(b for b in at.button if b.label == "🔄 새로고침").click().run()
+
+    assert text_field(at, "하고 싶은 일").value == saved  # 입력·이력서 값 모두 버림 (F24)
+    assert screen.FILL not in at.session_state
+
+
+def test_refresh_without_profile_file_keeps_empty_form(app):
+    at = app([])
+
+    next(b for b in at.button if b.label == "🔄 새로고침").click().run()
+
+    assert not at.exception
+    assert skill(at, "주력 기술").value == []
+
+
+def test_css_lets_browser_pick_theme():
+    import app as screen
+
+    css = screen.css()
+    names = screen.PALETTES["light"]
+    assert css.count("light-dark(") == len(names)  # 모든 색이 두 테마 값을 함께 가짐 (v0.6.1 F25)
+    assert all(f"--jv-{name}: light-dark(" in css for name in names)

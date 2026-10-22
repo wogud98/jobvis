@@ -61,7 +61,7 @@ GUIDE = """
 
 **그 밖에**
 - 시트를 직접 고쳤으면 오른쪽 위 **🔄 새로고침**을 누릅니다.
-- 다크 모드는 컴퓨터 설정을 따릅니다. 바꾸려면 오른쪽 위 **⋮ → Settings → Theme**.
+- 다크 모드는 컴퓨터 설정을 따릅니다. 바꾸려면 오른쪽 위 **⋮ → Light·Dark**. 바꾸면 바로 적용됩니다.
 - 터미널(`python main.py --keyword 백엔드`, `--score`, `--inbox`)로 해도 결과는 같습니다.
 """
 RESUME_HELP = (
@@ -120,10 +120,11 @@ def chart_spec(data: list[tuple[str, int]]) -> dict:
     }
 
 
-def css(theme: str | None) -> str:
-    """테마에 맞춘 CSS. 모르는 값(테스트 등)은 밝은 테마."""
-    palette = PALETTES.get(theme or "light", PALETTES["light"])
-    return CSS.replace("/*VARS*/", " ".join(f"--jv-{name}: {value};" for name, value in palette.items()))
+def css() -> str:
+    """두 테마 색을 모두 넣은 CSS. 브라우저가 Streamlit이 정한 color-scheme에 맞춰 light-dark()로 고르므로
+    테마를 바꾸면 다시 그리지 않아도 바로 바뀐다 (v0.6.1 F25)."""
+    light, dark = PALETTES["light"], PALETTES["dark"]
+    return CSS.replace("/*VARS*/", " ".join(f"--jv-{name}: light-dark({light[name]}, {dark[name]});" for name in light))
 
 
 # 네오 브루탈리즘 (v0.5.2 F28): 굵은 검정 테두리, 흐림 없는 딱딱한 그림자, 단색 면, 초록 포인트 하나.
@@ -788,13 +789,24 @@ def clear_field(keys: tuple) -> None:
 def confirm_clear_all() -> None:
     """모든 칸을 화면에서 비우기 전에 묻는다 (v0.5.5 F2)."""
     st.markdown("화면에 입력한 모든 칸과 이력서로 채운 값을 비웁니다.")
-    st.caption("profile.yaml은 💾 저장을 누르기 전까지 그대로입니다. 새로고침하면 저장된 값이 다시 나옵니다.")
+    st.caption(
+        "profile.yaml은 💾 저장을 누르기 전까지 그대로입니다. 위 🔄 새로고침을 누르면 저장된 값이 다시 나옵니다."
+    )
     clear, cancel = st.columns(2)
     # 콜백에서 비워야 창 안 버튼만 다시 그려질 때도 값이 바뀐다. 누르면 창을 닫는다
     if clear.button("비우기", type="primary", key="clear-all-yes", use_container_width=True, on_click=clear_all):
         st.rerun()
     if cancel.button("취소", key="clear-all-no", use_container_width=True):
         st.rerun()
+
+
+def reload_profile() -> None:
+    """🔄 새로고침: 비운 표시·이력서로 채운 값·저장 안 한 입력을 버리고 profile.yaml 값으로 다시 그린다 (v0.6.1 F24)."""
+    st.session_state.pop(CLEARED, None)
+    st.session_state.pop(FILL, None)
+    generations = st.session_state.setdefault(GENERATION, {})
+    for field in profile_form.FIELDS:  # 새 key라 입력란이 파일 값으로 다시 그려진다
+        generations[field.keys] = generations.get(field.keys, 0) + 1
 
 
 def clear_all() -> None:
@@ -1058,7 +1070,7 @@ def main() -> None:
     load_dotenv()
     settings.load()  # .env 다음, 비어 있는 값만 (v0.6 D6)
     st.set_page_config(page_title="JOBVIS", layout="wide")
-    st.markdown(css(st.context.theme.type), unsafe_allow_html=True)  # 테마를 바꾸면 다시 그린다 (F13)
+    st.markdown(css(), unsafe_allow_html=True)  # 테마는 브라우저가 고른다 (v0.6.1 F25)
     remember_visit()
     if settings.has_key():  # 키가 없으면 키 창이 먼저 뜬다. 창은 한 번에 하나 (v0.6.1 F17)
         open_guide_first_time()
@@ -1071,6 +1083,7 @@ def main() -> None:
         show_guide()
     if refresh.button("🔄 새로고침", use_container_width=True):
         reload_rows()
+        reload_profile()  # 프로필도 저장된 값으로 (v0.6.1 F24)
     key_button(key)
     postings_tab, profile_tab = st.tabs(["📋 공고", "👤 프로필"])  # v0.5 F1
     with postings_tab:
