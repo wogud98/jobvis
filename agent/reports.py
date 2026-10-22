@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from agent import inbox, postings, scoring
 from agent.graph import SOURCES, llm_model
+from agent.settings import redact
 
 # 예외 이름 일부 → 고칠 방법. LangChain 모델 오류 이름(ModelNotFoundError 등)과 제공자별 이름이 모두 걸린다 (F26)
 LLM_HINTS = (
@@ -55,7 +56,7 @@ def _failures(failed: list[dict]) -> list[str]:
         site = SOURCES[job["source"]].NAME if job.get("source") else ""
         # 목록 실패는 회사·제목이 빈칸이라 사이트 이름만 남는다.
         where = " | ".join(part for part in (site, job["company"], job["title"]) if part)
-        lines.append(f"  실패({job['step']}): {where} ({job['error']})")
+        lines.append(redact(f"  실패({job['step']}): {where} ({job['error']})"))  # v0.6.1 F12
     return lines
 
 
@@ -70,7 +71,7 @@ def collect(result: dict) -> list[str]:
         name = SOURCES[source].NAME
         lines.append(f"{name} 가져옴 {fetched} / 새로 저장 {mine[0]} / 건너뜀 {mine[1]} / 실패 {lost}")
     for stop in result.get("blocked", []):
-        lines.append(f"  {SOURCES[stop['source']].NAME} 수집 멈춤: {stop['reason']}")
+        lines.append(redact(f"  {SOURCES[stop['source']].NAME} 수집 멈춤: {stop['reason']}"))
     lines += _failures(failed)
     for job in result.get("filled", []):
         # 사이트별 "새로 저장"·"건너뜀"에는 넣지 않고 따로 알린다 (v0.5 F46)
@@ -131,7 +132,8 @@ def collect_summary(result: dict) -> Summary:
     if missing:  # 터미널 명령 대신 화면에서 할 일로 (F25)
         todo.append(f"본문 없는 공고 {len(missing)}건: 카드 '자세히'에서 공고 이미지를 넣으면 더 정확하게 평가됩니다.")
     problems = [
-        f"{SOURCES[stop['source']].NAME} 수집이 멈췄습니다: {stop['reason']}" for stop in result.get("blocked", [])
+        redact(f"{SOURCES[stop['source']].NAME} 수집이 멈췄습니다: {stop['reason']}")
+        for stop in result.get("blocked", [])
     ]
     problems += _failure_problem([job for job in result.get("failed", []) if job["step"] != "OCR"], "가져오지")
     return Summary(headline, todo, problems, collect(result))

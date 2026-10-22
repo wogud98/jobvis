@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from agent import codes, inbox, ocr, profile_form, reports, scoring, store, user_profile, view
+from agent import codes, inbox, ocr, profile_form, reports, scoring, settings, store, user_profile, view
 from agent.graph import MAX_COUNT, SOURCES, build_graph, build_score_graph, recursion_limit
 
 KINDS = {"collect": "수집", "score": "평가", "inbox": "받은함 읽기"}
@@ -51,7 +51,11 @@ def running() -> bool:
 
 
 def error_text(error: Exception) -> str:
-    """실행 중 오류를 화면 문구로. 키·경로는 보이지 않는다 (F13)."""
+    """실행 중 오류를 화면 문구로. 키·경로는 보이지 않는다 (F13, v0.6.1 F12)."""
+    return settings.redact(_error_text(error))
+
+
+def _error_text(error: Exception) -> str:
     if isinstance(error, (RunError, codes.CodeNotFoundError, user_profile.ProfileError)):
         return str(error)
     hint = reports.llm_hint([cls.__name__ for cls in type(error).__mro__])  # LLM 모델·키 오류 (F26)

@@ -31,6 +31,11 @@ Docker만 있으면 됩니다. 구글 시트·서비스 계정 설정은 필요 
 | OCR 끄기 (OCR이 안 도는 PC) | `JOBVIS_OCR=off docker compose up -d` (PowerShell: `$env:JOBVIS_OCR="off"; docker compose up -d`) |
 
 - 데이터가 남는 곳: Docker 볼륨 `jobvis-data`(키 `settings.env`, `profile.yaml`, 공고 원문, 받은함)와 `jobvis-db`(공고·점수). 모두 내 PC 안에만 있습니다. 평가와 이력서 채우기 때 공고·프로필 글이 Gemini로 전송됩니다.
+- **키 지키기** (v0.6.1)
+  - 키는 화면에서 넣어 볼륨 안 `settings.env`(권한 600)에만 둡니다. compose 환경변수로 넘기지 않습니다(`docker inspect`에 보이지 않게).
+  - 화면·결과 문구에 키와 같은 글자가 섞이면 `••••`로 가립니다. 예상 못 한 오류는 종류만 보입니다(`docker compose logs app`에서 자세히).
+  - **꼭 하세요:** [Google Cloud 콘솔 → API 및 서비스 → 사용자 인증 정보](https://console.cloud.google.com/apis/credentials)에서 키를 열어 *API 제한사항*을 **Generative Language API**만 허용으로 바꾸고, 결제를 연결했다면 [예산 알림](https://console.cloud.google.com/billing/budgets)을 걸어 둡니다. 키가 새도 피해가 이 안에서 멈춥니다.
+  - PC를 넘기거나 키가 샜다고 의심되면: 화면 키 칸 **🗑 이 PC에서 키 삭제**로 이 PC의 키를 지우고, [AI Studio](https://aistudio.google.com/apikey)에서 그 키를 삭제한 뒤 새로 발급합니다. 화면의 삭제 버튼은 Google의 키를 없애지 않습니다.
 - 화면은 이 PC에서만 열립니다(`127.0.0.1`). 같은 와이파이의 다른 PC는 들어올 수 없습니다.
 - Windows·Intel PC에서 쓰는 것을 기준으로 만들었습니다. **Mac(Apple Silicon)은 아직 확인하지 않았습니다.** 안 되면 OCR을 꺼 보세요.
 - 개인 사용만: 각자 자기 PC에서 자기 용도로 씁니다. 수집한 공고를 공유·공개하지 않습니다.

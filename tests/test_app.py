@@ -854,7 +854,7 @@ def test_key_card_is_folded_when_key_exists(app, monkeypatch):
     at = app()
 
     assert not any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)
-    assert any(e.label == "🔑 LLM 키 ••••4321 · 바꾸기" for e in at.expander)
+    assert any(e.label == "🔑 LLM 키 ••••4321 · 바꾸기·삭제" for e in at.expander)
 
 
 # ---- v0.6.1 화면 다듬기 ----
@@ -904,3 +904,22 @@ def test_css_wraps_many_keywords_and_keeps_card_text():
     assert "flex-wrap: wrap" in screen.CSS and "[data-tag]" in screen.CSS  # v0.6.1 F7
     assert 'st-key-check-"] label' in screen.CSS and "white-space: nowrap" in screen.CSS  # F4
     assert 'st-key-box-profile-"]) { flex: 1 1 auto; }' in screen.CSS  # F9
+
+
+def test_key_card_deletes_key_from_this_pc(app, no_key, tmp_path):
+    at = app()
+    next(t for t in at.text_input if t.label == "GOOGLE_API_KEY").input("AIzaSyFAKE-app-key-7777")
+    at.button[[b.label for b in at.button].index("저장")].click()
+    at.run()
+
+    at.button(key="key-delete").click().run()  # v0.6.1 F14
+
+    assert "AIzaSyFAKE" not in (tmp_path / "data" / "settings.env").read_text(encoding="utf-8")
+    assert any("LLM 키를 넣어 주세요" in m.value for m in at.markdown)  # 다시 입력 칸
+    assert "Google AI Studio" in at.info[0].value  # 키 자체는 Google에서 지워야 함을 안내
+
+
+def test_compose_does_not_pass_key_as_environment():
+    compose = (Path(__file__).parent.parent / "docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "GOOGLE_API_KEY" not in compose and "ANTHROPIC_API_KEY" not in compose  # v0.6.1 F13

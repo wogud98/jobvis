@@ -295,3 +295,14 @@ def test_start_inbox_reports_result(monkeypatch):
         "읽은 이미지 1장 / 본문을 채운 공고 0건 / 건너뜀 1",
         "  건너뜀: a.png (시트에 없는 공고)",
     ]
+
+
+def test_error_text_hides_key_in_unknown_error(monkeypatch):
+    monkeypatch.setenv("GOOGLE_API_KEY", "AIzaSyFAKE-runner-0000")
+
+    def boom(job):
+        raise codes.CodeNotFoundError("지역 이름 AIzaSyFAKE-runner-0000 없음")
+
+    job = runner.start("collect", boom, wait=True)
+
+    assert "AIzaSyFAKE-runner-0000" not in job.error and "••••" in job.error  # v0.6.1 F12

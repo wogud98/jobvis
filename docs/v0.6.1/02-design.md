@@ -1,6 +1,6 @@
 # v0.6.1 설계
 
-모듈 구조, 호출 순서, 저장 칸은 v0.6과 같다. 그래서 UML은 [v0.6 설계](../v0.6/02-design.md)를 그대로 쓴다. 바뀌는 곳은 `app.py`(화면·CSS)와 `agent/resume.py`(합치기) 두 파일이다.
+모듈 구조, 호출 순서, 저장 칸은 v0.6과 같다. 그래서 UML은 [v0.6 설계](../v0.6/02-design.md)를 그대로 쓴다. 바뀌는 곳은 `app.py`(화면·CSS·키 삭제), `agent/resume.py`(합치기), `agent/settings.py`(`delete_key`, `redact` 함수 추가), `runner.error_text`·`reports`(가리기 호출), `docker-compose.yml`·`Dockerfile`이다. 새 모듈과 State 필드는 없다.
 
 ## 결정
 
@@ -13,5 +13,8 @@
 | D5 | 고르기 칸은 키워드 목록 칸에 `flex-wrap: wrap`, 바깥 칸 `max-height` 해제 (F7) | Streamlit 1.66은 한 줄 + 가로 스크롤이라 마우스 휠로 못 움직임 |
 | D6 | `resume._same()`: 띄어쓰기를 하나로 줄이고 소문자로 바꾼 글자로 비교. 채울 때 목록 칸 모두 거침 (F8) | 글자가 아예 다른 중복("…네트워크" vs "…과정")은 프롬프트 규칙으로만 줄임 |
 | D7 | 프로필 칸 높이는 칸을 감싼 `stLayoutWrapper`가 늘어나게 하고 칸 `height: 100%` (F9) | 칸 자체가 아니라 감싼 칸이 내용 높이로 멈춰 있었음 |
+| D8 | `settings.redact(text)`: 지금 환경의 `GOOGLE_API_KEY`·`ANTHROPIC_API_KEY` 값(8자 이상)을 `••••`로 바꿈. `runner.error_text`(작업·버튼 오류 전부), `reports`의 실패·멈춤 줄에서 부름 (F12) | 오류 글이 화면으로 나가는 길목이 이 둘. 짧은 값은 흔한 글자까지 가려서 건너뜀 |
+| D9 | Docker CMD에 `--client.showErrorDetails=type` (F12) | 잡지 못한 예외의 메시지·경로가 화면에 안 나감. 로그에는 남음 |
+| D10 | `settings.delete_key()`: `dotenv.unset_key`로 `data/settings.env`에서 지우고 `os.environ`에서 뺌. 파일에서 지웠는지 돌려줘 화면 안내를 고름 (F14) | `.env`는 사용자 파일이라 고치지 않음 |
 
 CSS는 v0.5.1 N5처럼 key로 붙는 `st-key-*` 클래스와 `data-testid`에만 건다. Streamlit 판을 올리면 F4·F7·F9 모양을 다시 확인한다.
