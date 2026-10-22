@@ -43,6 +43,16 @@
 | D20 | `reload_profile()`: `CLEARED`·`FILL`을 버리고 모든 칸의 `GENERATION`을 올림. 🔄 새로고침에서 `reload_rows()` 다음에 부름 (F24) | 입력란 key가 바뀌어야 저장 안 한 입력도 버려지고 파일 값으로 다시 그려짐. ↺·전체 초기화와 같은 방식 |
 | D21 | `css()`는 인자 없이 모든 색을 `--jv-이름: light-dark(밝은, 어두운)`으로 넣음. `st.context.theme.type`은 쓰지 않음 (F25) | Streamlit이 테마에 따라 앱 칸에 `color-scheme`을 정하므로 브라우저가 바로 고름. 서버가 다시 그릴 때까지 기다리지 않음. Chrome·Edge 123, Firefox 120, Safari 17.5 이상 필요 |
 
+## 보완 결정 (F26)
+
+| ID | 결정 | 이유 |
+| --- | --- | --- |
+| D22 | 피그마 색은 팔레트 이름으로만 넣음(`lime`, `blue`, `accent`, `track`, `mint`, `dot`, `title-edge` 추가, `green`·`highlight` 뺌). `config.toml` 두 테마도 같은 값 | F25 `light-dark()` 구조를 그대로 써서 두 테마가 같이 바뀜 |
+| D23 | 글꼴은 CSS `@import`로 Google Fonts의 Black Han Sans를 제목·숫자·칸 제목에만 씀. 본문은 Streamlit 기본 글꼴 | 새 의존성 없음. 인터넷이 없으면 기본 글꼴로 보일 뿐 동작은 같음 |
+| D24 | 점수 도넛 원은 `.jv-score`에 `style="--p:점수"`를 주고 `conic-gradient`로 그림. 평가 전은 `--p` 없이 빈 원 | 이미지·라이브러리 없이 CSS만으로 |
+| D25 | 카드 색 띠는 카드 머리 글 끝의 빈 표시 `<span class='jv-tone-…'>`를 CSS `:has()`로 찾아 카드 왼쪽 테두리를 바꿈. 카드 key는 그대로 | key를 바꾸면 기존 테스트·상태 key가 흔들림 |
+| D26 | 주 버튼 색은 CSS로 라임·검정 글자. `primaryColor`는 토글·선택 표시용으로 코발트 | Streamlit 주 버튼 글자는 흰색이라 라임 면에서 안 읽힘 |
+
 v0.5.3 다크 모드 흐름은 아래로 바뀜.
 
 ```mermaid

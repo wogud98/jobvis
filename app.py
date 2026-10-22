@@ -19,7 +19,7 @@ from agent import inbox, ocr, profile_form, resume, runner, scoring, settings, s
 PROFILE = user_profile.DEFAULT
 LIST_FIELDS = ("요약", "주요업무", "우대사항")  # 글머리표로 보일 칸 (v0.5.3 F3)
 CHART_HEIGHT = 230  # TOP 5 막대가 보기 좋은 높이
-ACCENT = "#059669"  # .streamlit/config.toml의 primaryColor와 같게
+ACCENT = "#6b8afd"  # TOP 5 막대. 피그마 테마의 코발트 (v0.6.1 F26)
 FILL = "profile_fill"  # 이력서에서 채운 입력란 값 (session_state 키)
 CHECKS = "check_overrides"  # 화면에서 바꾼 평가 체크 {시트 줄: 체크} (v0.5.2 F39)
 HIDDEN = "hidden_overrides"  # 화면에서 바꾼 관심 없음 {시트 줄: 뺌} (v0.5.2 F44)
@@ -79,23 +79,28 @@ GUIDE_SHOWN = "guide_shown"  # 처음 연 화면에서 사용법 창을 띄웠�
 CLEARED = "profile_cleared"  # 화면에서 비운 프로필 칸 {칸 keys} (v0.5.5 F1)
 GENERATION = "profile_generation"  # 칸을 비울 때마다 올려 입력란을 새로 그린다 {칸 keys: 번호} (v0.5.5 F1)
 
-# 테마별 색 (v0.5.3 F13–F15). 테두리·그림자(ink), 글자(text), 바탕(paper), 카드 면(card), 흐린 글자(muted)
+# 테마별 색 (v0.5.3 F13–F15). 테두리·그림자(ink), 글자(text), 바탕(paper)·점 무늬(dot), 카드 면(card), 흐린 글자(muted).
+# 재리가 피그마로 만든 테마: 베이지 점 무늬 바탕, 크림 카드, 라임·코발트·코랄·노랑·민트 (v0.6.1 F26)
 PALETTES = {
     "light": {
-        "ink": "#111111", "text": "#111111", "paper": "#fffdf5", "card": "#ffffff", "field": "#ffffff",
-        "green": "#059669", "muted": "#444444", "sub": "#333333", "highlight": "#6ee7b7", "title": "#111111",
-        "tile0": "#ffe066", "tile1": "#a5d8ff", "tile2": "#8ce99a", "tile3": "#ffc9c9", "tile-text": "#111111",
+        "ink": "#141414", "text": "#141414", "paper": "#f3efe7", "dot": "#d6cfc1", "card": "#fffdf8",
+        "field": "#ffffff", "muted": "#5c5a55", "sub": "#2b2b2b", "title": "#c8f53a", "title-edge": "#141414",
+        "lime": "#c8f53a", "lime-text": "#141414", "blue": "#6b8afd", "accent": "#4a6cf7", "track": "#e6e0d4",
+        "tile0": "#ffd23f", "tile1": "#9fb3ff", "tile2": "#c8f53a", "tile3": "#ff8f75", "tile-text": "#141414",
         # 고른 요약 칸은 색을 뒤집어 다른 칸과 바로 구분한다 (v0.6.1 F21)
-        "sel": "#111111", "sel-text": "#ffffff",
-        "high": "#8ce99a", "mid": "#ffe066", "low": "#ffa8a8", "closed": "#ced4da", "badge-text": "#111111",
+        "sel": "#141414", "sel-text": "#fffdf8",
+        "high": "#c8f53a", "mid": "#ffd23f", "low": "#ffb3a1", "closed": "#d9d4ca", "mint": "#a7f0d0",
+        "badge-text": "#141414",
     },
     "dark": {
-        # 회청색 한 계열로 맞추고, 순백·순흑과 쨍한 색을 피해 눈부심을 줄인다 (v0.6.1 F22)
-        "ink": "#4b5563", "text": "#e5e7eb", "paper": "#14161a", "card": "#1f232a", "field": "#181b20",
-        "green": "#34d399", "muted": "#9ca3af", "sub": "#cbd0d6", "highlight": "#047857", "title": "#ffffff",
-        "tile0": "#4a4024", "tile1": "#24384d", "tile2": "#243f31", "tile3": "#4a2c30", "tile-text": "#e5e7eb",
-        "sel": "#d1d5db", "sel-text": "#111318",
-        "high": "#2f5a43", "mid": "#5a4d22", "low": "#5c3034", "closed": "#3a3f47", "badge-text": "#e5e7eb",
+        # 같은 색을 짙게 낮춘 판. 순백·순흑을 피해 눈부심을 줄인다 (v0.6.1 F22, F26)
+        "ink": "#5a5e66", "text": "#ece8df", "paper": "#17181c", "dot": "#2a2c32", "card": "#212329",
+        "field": "#1b1d22", "muted": "#a8a49b", "sub": "#d6d2c8", "title": "#c8f53a", "title-edge": "#0b0b0d",
+        "lime": "#b6e22e", "lime-text": "#141414", "blue": "#5d76d9", "accent": "#8ea2ff", "track": "#33363d",
+        "tile0": "#5a4a1c", "tile1": "#2b3a6e", "tile2": "#45561a", "tile3": "#5e2f26", "tile-text": "#ece8df",
+        "sel": "#ece8df", "sel-text": "#17181c",
+        "high": "#45561a", "mid": "#5a4a1c", "low": "#5e2f26", "closed": "#34363c", "mint": "#24493c",
+        "badge-text": "#ece8df",
     },
 }  # fmt: skip
 
@@ -104,7 +109,7 @@ def chart_spec(data: list[tuple[str, int]]) -> dict:
     """TOP 5 가로 막대 명세. 선택·확대 params가 없어 움직이지 않는다 (v0.6.1 F23)."""
     return {
         "data": {"values": [{"공고": name, "종합점수": score} for name, score in data]},
-        "mark": {"type": "bar", "color": ACCENT},
+        "mark": {"type": "bar", "color": ACCENT, "stroke": "#141414", "strokeWidth": 2},
         "encoding": {
             "y": {
                 "field": "공고",
@@ -117,6 +122,7 @@ def chart_spec(data: list[tuple[str, int]]) -> dict:
             "tooltip": [{"field": "공고"}, {"field": "종합점수"}],
         },
         "height": CHART_HEIGHT,
+        "background": "transparent",  # 카드 면이 비치게 (F26)
     }
 
 
@@ -132,8 +138,16 @@ def css() -> str:
 # data-testid에만 건다 (v0.5.1 N5)
 CSS = """
 <style>
+/* 제목·숫자 글꼴. 인터넷이 없으면 기본 글꼴로 보인다 (v0.6.1 F26) */
+@import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap');
 :root { /*VARS*/ }
-.stApp { background: var(--jv-paper); }
+/* 베이지 바탕에 점 무늬 (F26) */
+.stApp { background-color: var(--jv-paper);
+  background-image: radial-gradient(var(--jv-dot) 1.2px, transparent 1.4px); background-size: 20px 20px; }
+.jv-hero h1, div[data-testid="stMetricValue"], .jv-score, div[data-testid="stMarkdownContainer"] h4,
+div[data-testid="stMarkdownContainer"] h3 { font-family: "Black Han Sans", sans-serif; font-weight: 400 !important; }
+div[data-testid="stMarkdownContainer"] h4 .jv-muted, div[data-testid="stMarkdownContainer"] h3 .jv-muted {
+  font-family: "Source Sans", "Source Sans Pro", sans-serif; font-weight: 600; }
 [data-testid="stHeader"] { background: transparent; }
 .block-container { max-width: 1200px; padding-top: 2rem; }
 /* 카드: 흰 면 + 3px 검정 테두리 + 오른쪽 아래 딱 떨어지는 그림자 */
@@ -160,7 +174,7 @@ div[class*="st-key-box-profile"] div[class*="st-key-clear-"] button {
   padding: 0 4px !important; min-height: 0; border: none !important; box-shadow: none !important;
   background: transparent !important; font-size: 1.1rem; color: var(--jv-muted) !important; }
 div[class*="st-key-box-profile"] div[class*="st-key-clear-"] button:hover {
-  color: var(--jv-green) !important; transform: none !important; box-shadow: none !important; }
+  color: var(--jv-accent) !important; transform: none !important; box-shadow: none !important; }
 /* 지금 적용 중인 칸은 굵은 테두리 + 제목 앞 ✓. 초록은 다른 곳에도 써서 모양으로 구분 (v0.5.4 F12, v0.6.1 F15).
    면 색도 뒤집어 한눈에 보이게 (v0.6.1 F21) */
 div[class*="st-key-box-summary"][class*="-on"] { border-width: 5px !important; transform: translate(-2px, -2px);
@@ -182,6 +196,16 @@ div[data-testid="stButton"] button:hover:not(:disabled), div[data-testid="stLink
 }
 div[data-testid="stButton"] button:active:not(:disabled) { transform: translate(4px, 4px); box-shadow: none; }
 div[data-testid="stButton"] button:disabled { box-shadow: none; border-style: dashed !important; }
+/* 주 버튼은 라임 면 + 검정 글자 (F26) */
+button[data-testid="stBaseButton-primary"], button[data-testid="stBaseButton-primaryFormSubmit"] {
+  background: var(--jv-lime) !important; color: var(--jv-lime-text) !important; }
+button[data-testid="stBaseButton-primary"] *, button[data-testid="stBaseButton-primaryFormSubmit"] * {
+  color: var(--jv-lime-text) !important; }
+/* 공고 카드 왼쪽 판정 색 띠 (F26). 카드 머리에 넣은 표시(jv-tone-*)로 고른다 */
+div[class*="st-key-box"][class*="card-"]:has(.jv-tone-high) { border-left: 10px solid var(--jv-lime) !important; }
+div[class*="st-key-box"][class*="card-"]:has(.jv-tone-mid) { border-left: 10px solid var(--jv-tile0) !important; }
+div[class*="st-key-box"][class*="card-"]:has(.jv-tone-low) { border-left: 10px solid var(--jv-tile3) !important; }
+div[class*="st-key-box"][class*="card-"]:has(.jv-tone-none) { border-left: 10px solid var(--jv-blue) !important; }
 /* 입력란 */
 div[data-baseweb="select"] > div, div[data-baseweb="input"], div[data-baseweb="textarea"],
 div[data-testid="stFileUploaderDropzone"] {
@@ -194,10 +218,13 @@ div[data-testid="stAlert"] > div {
 section[data-testid="stSidebar"] { border-right: 3px solid var(--jv-ink); background: var(--jv-paper); }
 section[data-testid="stSidebar"] div[class*="st-key-box-filter"] { padding: 16px; }
 div[data-testid="stPopoverBody"] { border: 3px solid var(--jv-ink) !important; box-shadow: 6px 6px 0 var(--jv-ink);
-  max-height: 75vh; overflow-y: auto; }
+  max-height: 75vh; overflow-y: auto;
+  /* 자세히 창 위 사선 띠 (F26) */
+  background: repeating-linear-gradient(135deg, var(--jv-lime) 0 10px, var(--jv-ink) 10px 13px) top / 100% 12px
+    no-repeat, var(--jv-card) !important; }
 /* 고르기 칸의 키워드 아무 데나 눌러도 지워지게, 삭제 버튼이 키워드 전체를 덮는다 (v0.5.1 F22) */
 div[data-testid="stMultiSelect"] [data-tag] {
-  position: relative; cursor: pointer; padding-right: 22px; border: 2px solid var(--jv-ink); border-radius: 4px;
+  position: relative; cursor: pointer; padding-right: 22px; border: 2px solid var(--jv-ink); border-radius: 999px;
 }
 div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
   position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0 7px;
@@ -207,11 +234,19 @@ div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] {
 div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg { width: 0.7em; height: 0.7em; }
 div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
 div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: var(--jv-text); }
-/* 제목은 크게, 어두운 테마에서는 흰색 (v0.6.1 F1). 뒤 형광 줄은 뺐다 (v0.6.1 F19) */
+/* 제목은 라임 글자 + 검정 테두리·그림자 (v0.6.1 F26, F1·F19를 바꿈) */
 .jv-hero h1 { margin: 0; padding: 0; font-size: 4rem; font-weight: 900; color: var(--jv-title);
-  letter-spacing: -0.03em; line-height: 1.05; }
+  letter-spacing: 0.01em; line-height: 1.05; -webkit-text-stroke: 2px var(--jv-title-edge);
+  text-shadow: 4px 4px 0 var(--jv-title-edge); }
+.jv-kicker { display: inline-block; margin-bottom: 8px; padding: 2px 10px; border: 2px solid var(--jv-ink);
+  background: var(--jv-card); box-shadow: 3px 3px 0 var(--jv-ink); font-size: 0.75rem; font-weight: 800;
+  letter-spacing: 0.08em; }
 .jv-hero p { margin: 4px 0 0; color: var(--jv-sub); font-weight: 600; }
-.jv-score { font-size: 2.2rem; font-weight: 900; line-height: 1; color: var(--jv-green); }
+/* 점수는 도넛 원 (F26). --p가 채울 비율, 없으면 빈 원 */
+.jv-score { width: 3.6rem; height: 3.6rem; border-radius: 50%; border: 2px solid var(--jv-ink);
+  display: grid; place-items: center; font-size: 1.3rem; line-height: 1; color: var(--jv-text);
+  background: radial-gradient(closest-side, var(--jv-card) 68%, transparent 70%),
+    conic-gradient(var(--jv-accent) calc(var(--p, 0) * 1%), var(--jv-track) 0); }
 .jv-muted { color: var(--jv-muted); font-size: 0.9rem; }
 .jv-badge { display: inline-block; margin-right: 6px; padding: 1px 9px; border: 2px solid var(--jv-ink);
   border-radius: 4px; font-size: 0.8rem; font-weight: 800; }
@@ -221,7 +256,7 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
 .jv-low { background: var(--jv-low); color: var(--jv-badge-text); }
 .jv-closed { background: var(--jv-closed); color: var(--jv-badge-text); }
 .jv-plain { background: var(--jv-card); color: var(--jv-text); }
-.jv-new { background: var(--jv-green); color: var(--jv-card); }
+.jv-new { background: var(--jv-accent); color: #ffffff; }
 /* 자세히 (v0.5.3 F1–F5) */
 .jv-bar-row { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
 .jv-bar-name { width: 3em; font-weight: 700; }
@@ -231,7 +266,7 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
 .jv-bar-num { width: 2.2em; text-align: right; font-weight: 900; }
 .jv-chip { display: inline-block; margin: 0 6px 6px 0; padding: 2px 10px; border: 2px solid var(--jv-ink);
   border-radius: 4px; font-size: 0.85rem; font-weight: 700; background: var(--jv-card); color: var(--jv-text); }
-.jv-chip.jv-mine { background: var(--jv-high); color: var(--jv-badge-text); }
+.jv-chip.jv-mine { background: var(--jv-mint); color: var(--jv-badge-text); }
 .jv-strength { color: var(--jv-sub); font-size: 0.9rem; }
 /* 카드 체크·점수·버튼 칸은 창이 좁아져도 글자가 잘리지 않게 (v0.6.1 F4) */
 div[data-testid="stHorizontalBlock"]:has(> div[data-testid="stColumn"] div[class*="st-key-check-"]) {
@@ -371,8 +406,9 @@ def show_card(card: view.Card, known: list[str]) -> None:
             disabled=runner.running(),
         )  # fmt: skip
         number = "-" if card.score is None else str(card.score)  # F6
+        fill = "" if card.score is None else f' style="--p:{card.score}"'  # 도넛 원 채움 (v0.6.1 F26)
         score.markdown(
-            f'<div class="jv-score">{number}</div><div class="jv-muted">{escape(card.stars)}</div>',
+            f'<div class="jv-score"{fill}>{number}</div><div class="jv-muted">{escape(card.stars)}</div>',
             unsafe_allow_html=True,
         )
         head.markdown(card_head(card, today), unsafe_allow_html=True)
@@ -428,6 +464,9 @@ def card_head(card: view.Card, today: date) -> str:
     text = f"**{escape(card.company)} · {escape(card.title)}**  \n{badges}<span class='jv-muted'>{escape(meta)}</span>"
     if card.score is not None and card.strengths:  # 펼치지 않아도 보이는 강점 한 줄 (F12)
         text += f"  \n<span class='jv-strength'>💪 {escape(card.strengths[0])}</span>"
+    # 카드 왼쪽 색 띠를 고르는 빈 표시 (v0.6.1 F26). 점수 막대와 같은 70·40 기준
+    tone = "none" if card.score is None else "high" if card.score >= 70 else "mid" if card.score >= 40 else "low"
+    text += f"<span class='jv-tone-{tone}'></span>"
     return text
 
 
@@ -974,7 +1013,7 @@ def show_profile() -> None:
     with fill_box:
         show_resume_fill(values, fill)
 
-    save, clear_all, _ = st.columns([1, 1, 6], vertical_alignment="center")
+    save, clear_all, _ = st.columns([1, 1.4, 5.6], vertical_alignment="center")  # 글자 안 잘리게 (F26)
     # 전체 초기화는 확인 창을 거친다 (v0.5.5 F2)
     if clear_all.button("전체 초기화", key="profile-clear-all", help="화면 입력만 비움. 저장 전까지 파일은 그대로"):
         confirm_clear_all()
@@ -1076,7 +1115,7 @@ def main() -> None:
         open_guide_first_time()
     title, key, guide, refresh = st.columns([4, 1.2, 1, 1], vertical_alignment="center")
     title.markdown(
-        f'<div class="jv-hero"><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',
+        f'<div class="jv-hero"><span class="jv-kicker">✦ AI 취업 비서</span><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',
         unsafe_allow_html=True,
     )  # F20
     if guide.button("📖 사용법", use_container_width=True, key="guide"):  # 새 창 (v0.5.4 F9)
