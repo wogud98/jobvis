@@ -79,7 +79,7 @@ PALETTES = {
     },
     "dark": {
         # 바탕은 더 어둡게, 칸은 한 단계 밝게, 입력란은 칸보다 어둡게 (v0.5.4 F13)
-        "ink": "#e8e8e8", "paper": "#0e1013", "card": "#2a2f38", "field": "#1a1d23", "green": "#34d399",
+        "ink": "#999090", "paper": "#0e1013", "card": "#323B4B", "field": "#1a1d23", "green": "#34d399",
         "muted": "#b0b4ba", "sub": "#d0d3d8", "highlight": "#047857",
         # 요약 칸은 같은 색 계열의 짙은 톤 + 밝은 글자 (v0.5.4 F11)
         "tile0": "#5c4a12", "tile1": "#1d3f5e", "tile2": "#1f4d33", "tile3": "#5c2626", "tile-text": "#f1f1f1",
