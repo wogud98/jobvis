@@ -656,7 +656,8 @@ def test_apply_failure_shows_error_without_secret(app, monkeypatch):
 def test_css_follows_theme_and_guide_mentions_theme(app):
     import app as screen  # 저장소 app.py
 
-    assert "--jv-paper: #0e1013" in screen.css("dark") and "--jv-card: #2a2f38" in screen.css("dark")  # v0.5.4 F13
+    dark = screen.css("dark")
+    assert "--jv-paper: #0e1013" in dark and "--jv-card: #323B4B" in dark  # v0.5.4 F13, PR #37 색 조정
     assert "--jv-paper: #fffdf5" in screen.css("light") and "--jv-paper: #fffdf5" in screen.css(None)
     assert "/*VARS*/" not in screen.css("dark")
     assert "--jv-tile0: #5c4a12" in screen.css("dark") and "--jv-tile-text: #f1f1f1" in screen.css("dark")  # v0.5.4 F11
@@ -735,3 +736,71 @@ def test_guide_dialog_opens_on_first_visit_and_by_button(app, tmp_path):
     at.button(key="guide").click().run()
 
     assert len(at.get("dialog")) == 1 and any("① 프로필 저장" in m.value for m in at.markdown)
+
+
+# ---- v0.5.5 프로필 칸 비우기·전체 초기화 ----
+
+PROFILE_TEXT = (
+    "skills: {main: [Python], certificates: [SQLD]}\n"
+    "experience: {years: 2, training: [SSAFY 수료]}\n"
+    "direction: {jobs: [백엔드 개발], goals: 에이전트 개발}\n"
+)
+
+
+def text_field(at, label):
+    return next(t for t in at.text_input if t.label.startswith(label))
+
+
+def test_clear_one_field_empties_only_that_field_and_keeps_file(app, tmp_path):
+    (tmp_path / "profile.yaml").write_text(PROFILE_TEXT, encoding="utf-8")
+    at = app([])
+    assert skill(at, "주력 기술").value == ["Python"]
+
+    at.button(key="clear-skills.main").click().run()
+
+    assert skill(at, "주력 기술").value == []  # F1
+    assert skill(at, "자격증").value == ["SQLD"] and text_field(at, "하고 싶은 일").value == "에이전트 개발"
+    assert (tmp_path / "profile.yaml").read_text(encoding="utf-8") == PROFILE_TEXT  # 파일은 그대로
+
+
+def test_clear_again_after_typing_empties_text(app, tmp_path):
+    (tmp_path / "profile.yaml").write_text(PROFILE_TEXT, encoding="utf-8")
+    at = app([])
+    at.button(key="clear-direction.goals").click().run()
+    text_field(at, "하고 싶은 일").set_value("새로 적은 글").run()
+
+    at.button(key="clear-direction.goals").click().run()
+
+    assert text_field(at, "하고 싶은 일").value == ""  # 빈 칸을 다시 비워도 새로 그린다 (F1)
+    assert next(s for s in at.slider if s.label.startswith("경력 연수")).value == 2
+
+
+def test_clear_all_asks_first_then_empties_every_field(app, tmp_path):
+    (tmp_path / "profile.yaml").write_text(PROFILE_TEXT, encoding="utf-8")
+    at = app([])
+
+    at.button(key="profile-clear-all").click().run()
+    assert len(at.get("dialog")) == 1  # 바로 비우지 않고 묻는다 (F2)
+    at.button(key="clear-all-no").click().run()
+    assert skill(at, "주력 기술").value == ["Python"]  # 취소하면 그대로
+
+    at.button(key="profile-clear-all").click().run()
+    at.button(key="clear-all-yes").click().run()
+
+    assert skill(at, "주력 기술").value == [] and skill(at, "자격증").value == []
+    assert next(s for s in at.slider if s.label.startswith("경력 연수")).value == 0
+    assert text_field(at, "하고 싶은 일").value == ""
+    assert badges(at).count("✗") == 2  # 필수 칸 배지도 바뀜
+    assert (tmp_path / "profile.yaml").read_text(encoding="utf-8") == PROFILE_TEXT
+
+
+def test_saving_after_clear_writes_cleared_value(app, tmp_path):
+    (tmp_path / "profile.yaml").write_text(PROFILE_TEXT, encoding="utf-8")
+    at = app([])
+    at.button(key="clear-skills.certificates").click().run()
+
+    at.button(key="profile-save").click().run()
+
+    saved = yaml.safe_load((tmp_path / "profile.yaml").read_text(encoding="utf-8"))
+    assert not saved["skills"]["certificates"] and saved["skills"]["main"] == ["Python"]  # 저장해야 파일에 반영
+    assert skill(at, "자격증").value == [] and skill(at, "주력 기술").value == ["Python"]

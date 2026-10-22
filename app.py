@@ -69,6 +69,8 @@ TRUST_HELP = (
 IMAGE_HELP = "사이트가 본문을 이미지로 올려 자동으로 읽지 못했습니다. 자세히에서 공고 이미지를 넣으세요."
 PINNED = "pinned"  # 카드 안에 펼쳐 둔 공고 {시트 줄} (v0.5.4 F6)
 GUIDE_SHOWN = "guide_shown"  # 처음 연 화면에서 사용법 창을 띄웠는지 (v0.5.4 F9)
+CLEARED = "profile_cleared"  # 화면에서 비운 프로필 칸 {칸 keys} (v0.5.5 F1)
+GENERATION = "profile_generation"  # 칸을 비울 때마다 올려 입력란을 새로 그린다 {칸 keys: 번호} (v0.5.5 F1)
 
 # 테마별 색 (v0.5.3 F13–F15). 테두리·그림자·글자(ink), 바탕(paper), 카드 면(card), 흐린 글자(muted)
 PALETTES = {
@@ -121,6 +123,12 @@ div[class*="st-key-box-summary"] div[class*="st-key-tile-"] button {
   background: transparent !important; font-size: 0.9rem; }
 div[class*="st-key-box-summary"] div[class*="st-key-tile-"] button:hover {
   text-decoration: underline; transform: none !important; box-shadow: none !important; }
+/* 프로필 칸 ↺는 작은 글자 버튼 (v0.5.5 F1) */
+div[class*="st-key-box-profile"] div[class*="st-key-clear-"] button {
+  padding: 0 4px !important; min-height: 0; border: none !important; box-shadow: none !important;
+  background: transparent !important; font-size: 1.1rem; color: var(--jv-muted) !important; }
+div[class*="st-key-box-profile"] div[class*="st-key-clear-"] button:hover {
+  color: var(--jv-green) !important; transform: none !important; box-shadow: none !important; }
 /* 지금 적용 중인 칸은 초록 테두리 (v0.5.4 F12) */
 div[class*="st-key-box-summary"][class*="-on"] { border-color: var(--jv-green) !important;
   box-shadow: 6px 6px 0 var(--jv-green); }
@@ -704,17 +712,44 @@ def show_pager(number: int, pages: int) -> None:
                    use_container_width=True)  # fmt: skip
 
 
-def pick_key(field: profile_form.Field, default: list[str]) -> str:
-    # 기본값(파일·이력서 값)이 바뀌면 새 key라 입력란이 새 값으로 그려진다 (v0.5 F21)
+def field_key(field: profile_form.Field, default) -> str:
+    """입력란 key. 기본값(파일·이력서 값)이 바뀌거나 칸을 비우면 새 key라 새 값으로 그려진다 (v0.5 F21, v0.5.5 F1)."""
     digest = hashlib.sha1(repr(default).encode()).hexdigest()[:8]
-    return f"pick-{'.'.join(field.keys)}-{digest}"
+    generation = st.session_state.get(GENERATION, {}).get(field.keys, 0)
+    return f"field-{'.'.join(field.keys)}-{generation}-{digest}"
+
+
+def clear_field(keys: tuple) -> None:
+    """↺: 이 칸만 화면에서 비운다. 파일은 저장을 누르기 전까지 그대로 (v0.5.5 F1)."""
+    st.session_state.setdefault(CLEARED, set()).add(keys)
+    generations = st.session_state.setdefault(GENERATION, {})
+    generations[keys] = generations.get(keys, 0) + 1
+
+
+@st.dialog("전체 초기화")
+def confirm_clear_all() -> None:
+    """모든 칸을 화면에서 비우기 전에 묻는다 (v0.5.5 F2)."""
+    st.markdown("화면에 입력한 모든 칸과 이력서로 채운 값을 비웁니다.")
+    st.caption("profile.yaml은 💾 저장을 누르기 전까지 그대로입니다. 새로고침하면 저장된 값이 다시 나옵니다.")
+    clear, cancel = st.columns(2)
+    # 콜백에서 비워야 창 안 버튼만 다시 그려질 때도 값이 바뀐다. 누르면 창을 닫는다
+    if clear.button("비우기", type="primary", key="clear-all-yes", use_container_width=True, on_click=clear_all):
+        st.rerun()
+    if cancel.button("취소", key="clear-all-no", use_container_width=True):
+        st.rerun()
+
+
+def clear_all() -> None:
+    for field in profile_form.FIELDS:
+        clear_field(field.keys)
+    st.session_state.pop(FILL, None)  # 이력서로 채운 값도 버린다 (F2)
 
 
 def show_field(field: profile_form.Field, default, taken: list[str] = ()):
     label = field.label + (" *" if field.required else "")
+    key = field_key(field, default)
     if field.kind == "pick":  # 추천 목록에서 고르고, 없으면 입력해 추가 (F10, F11)
         # 앞 칸에 고른 기술은 보기와 고른 값에서 뺀다 (v0.5.2 F37). key가 있어 다른 칸을 바꿔도 고른 값은 남는다
-        key = pick_key(field, default)
         current = st.session_state.get(key, default)
         st.session_state[key] = [item for item in current if item not in taken]
         choices = [item for item in profile_form.options(field.suggestions, current) if item not in taken]
@@ -722,24 +757,41 @@ def show_field(field: profile_form.Field, default, taken: list[str] = ()):
             label, choices, key=key, accept_new_options=True, help=field.help, placeholder=field.placeholder
         )
     if field.kind == "years":  # 가로 슬라이더 (v0.5 F18)
-        return st.slider(label, 0, max(profile_form.SLIDER_MAX, default), default, step=1, help=field.help)
+        return st.slider(label, 0, max(profile_form.SLIDER_MAX, default), default, step=1, help=field.help, key=key)
     if field.kind == "degree":  # 최종 학력 고르기 + 전공 (F13)
         degree, major = default
         choices = ["", *profile_form.DEGREES]
         left, right = st.columns(2)
         picked = left.selectbox(
-            label, choices, index=choices.index(degree), format_func=lambda d: d or "선택 안 함", help=field.help
-        )
-        return picked, right.text_input("전공", major, placeholder=field.placeholder)
+            label, choices, index=choices.index(degree), format_func=lambda d: d or "선택 안 함", help=field.help,
+            key=f"{key}-degree",
+        )  # fmt: skip
+        return picked, right.text_input("전공", major, placeholder=field.placeholder, key=f"{key}-major")
     if field.kind == "culture":  # 눌러 고르기 + 직접 적기 (F12)
         picked, others = default
-        chosen = st.pills(label, list(field.suggestions), selection_mode="multi", default=picked, help=field.help)
-        return chosen, st.text_area("직접 적기 · 한 줄에 하나", others, placeholder=field.placeholder, height=80)
+        chosen = st.pills(
+            label, list(field.suggestions), selection_mode="multi", default=picked, help=field.help, key=f"{key}-pick"
+        )
+        text = st.text_area(
+            "직접 적기 · 한 줄에 하나", others, placeholder=field.placeholder, height=80, key=f"{key}-text"
+        )
+        return chosen, text
     if field.kind == "lines":
         return st.text_area(
-            f"{label} · 한 줄에 하나", default, placeholder=field.placeholder, height=90, help=field.help
+            f"{label} · 한 줄에 하나", default, placeholder=field.placeholder, height=90, help=field.help, key=key
         )
-    return st.text_input(label, default, placeholder=field.placeholder, help=field.help)
+    return st.text_input(label, default, placeholder=field.placeholder, help=field.help, key=key)
+
+
+def show_field_with_clear(field: profile_form.Field, default, taken: list[str]):
+    """입력란 오른쪽 위에 ↺ (v0.5.5 F1)."""
+    box, reset = st.columns([14, 1], vertical_alignment="top")
+    reset.button(
+        "↺", key=f"clear-{'.'.join(field.keys)}", on_click=clear_field, args=(field.keys,), type="tertiary",
+        help="이 칸 비우기 (저장 전까지 파일은 그대로)",
+    )  # fmt: skip
+    with box:
+        return show_field(field, default, taken)
 
 
 def show_resume_fill(values: dict, fill: dict | None) -> None:
@@ -794,6 +846,7 @@ def show_resume_fill(values: dict, fill: dict | None) -> None:
         st.info("새로 채울 칸이 없습니다.")
         show_missing(resume.missing(values, found))
         return
+    st.session_state.pop(CLEARED, None)  # 이력서로 채우면 비운 표시는 버린다 (v0.5.5 F1)
     st.session_state[FILL] = {"values": merged, "filled": filled, "missing": resume.missing(merged, found)}
     st.rerun()
 
@@ -826,9 +879,14 @@ def show_profile() -> None:
     badges = st.empty()  # 입력란을 그린 뒤 채운다 (F8)
     fill = st.session_state.get(FILL)  # 이력서에서 채운 값. 저장 전까지 파일 대신 입력란 기본값 (v0.5.2 F18)
     defaults = fill["values"] if fill else profile_form.to_form(raw)
-    keys = {pick_key(field, defaults[field.keys]) for field in profile_form.FIELDS if field.kind == "pick"}
-    for old in [key for key in st.session_state if str(key).startswith("pick-") and key not in keys]:
-        del st.session_state[old]  # 예전 기본값의 고른 값은 버린다
+    empty = profile_form.to_form(None)
+    for keys in st.session_state.get(CLEARED, set()):  # 비운 칸은 빈 값으로 (v0.5.5 F1, F2)
+        defaults[keys] = empty[keys]
+    picks = [field for field in profile_form.FIELDS if field.kind == "pick"]
+    current = {field_key(field, defaults[field.keys]) for field in picks}
+    prefixes = tuple(f"field-{'.'.join(field.keys)}-" for field in picks)
+    for old in [key for key in st.session_state if str(key).startswith(prefixes) and key not in current]:
+        del st.session_state[old]  # 고르기 칸은 값을 직접 넣으므로 예전 기본값의 고른 값은 버린다
     values = {}
     # 입력하는 동안 필수 칸 배지가 바뀌도록 st.form을 쓰지 않는다 (F8).
     # key를 주지 않아 파일이 바뀌면 입력란이 새 값으로 그려진다 (v0.5 F21)
@@ -837,7 +895,8 @@ def show_profile() -> None:
             with column.container(border=True, key=f"box-profile-{group}"):
                 st.markdown(f"#### {title} <span class='jv-muted'>{note}</span>", unsafe_allow_html=True)
                 for field in profile_form.group_fields(group):
-                    values[field.keys] = show_field(field, defaults[field.keys], profile_form.taken(values, field.keys))
+                    taken = profile_form.taken(values, field.keys)
+                    values[field.keys] = show_field_with_clear(field, defaults[field.keys], taken)
     badges.markdown(
         "".join(
             badge(f"{'✓' if done else '✗'} {name}", "high" if done else "low")
@@ -848,7 +907,11 @@ def show_profile() -> None:
     with fill_box:
         show_resume_fill(values, fill)
 
-    if st.button("💾 저장", type="primary", key="profile-save"):
+    save, clear_all, _ = st.columns([1, 1, 6], vertical_alignment="center")
+    # 전체 초기화는 확인 창을 거친다 (v0.5.5 F2)
+    if clear_all.button("전체 초기화", key="profile-clear-all", help="화면 입력만 비움. 저장 전까지 파일은 그대로"):
+        confirm_clear_all()
+    if save.button("💾 저장", type="primary", key="profile-save"):
         try:
             profile, _ = user_profile.validate(profile_form.from_form(values))
         except user_profile.ProfileError as e:
@@ -856,6 +919,7 @@ def show_profile() -> None:
             return
         user_profile.save(profile, PROFILE)
         st.session_state.pop(FILL, None)  # 저장한 뒤에는 파일 값을 기본값으로
+        st.session_state.pop(CLEARED, None)
         st.success(f"저장함 ({datetime.now():%Y-%m-%d %H:%M:%S})")
 
 
