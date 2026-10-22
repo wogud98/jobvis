@@ -18,7 +18,7 @@ from agent import inbox, ocr, profile_form, resume, runner, scoring, sheets, use
 
 PROFILE = user_profile.DEFAULT
 LIST_FIELDS = ("요약", "주요업무", "우대사항")  # 글머리표로 보일 칸 (v0.5.3 F3)
-CHART_HEIGHT = 230  # 필터 카드 높이와 비슷하게 차트가 카드를 채우도록 (F21)
+CHART_HEIGHT = 230  # TOP 5 막대가 보기 좋은 높이
 ACCENT = "#059669"  # .streamlit/config.toml의 primaryColor와 같게
 FILL = "profile_fill"  # 이력서에서 채운 입력란 값 (session_state 키)
 CHECKS = "check_overrides"  # 화면에서 바꾼 평가 체크 {시트 줄: 체크} (v0.5.2 F39)
@@ -31,34 +31,58 @@ TAGLINE = "채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 �
 SORTS = {"점수 높은 순": "score_desc", "점수 낮은 순": "score_asc", "마감 임박 순": "deadline"}  # F40, v0.5.3 F8
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
-POSTINGS_GUIDE = """
-1. **수집** 카드에 키워드를 넣고 수집을 누릅니다. 30건 수집은 몇 분 걸립니다.
-   공고 카드의 **평가** 칸을 체크하고 목록 위 **🧮 체크한 공고 평가**를 누릅니다(평가 전 전부도 가능).
-   터미널(`python main.py --keyword 백엔드`, `--score`)로 해도 결과는 같습니다.
-2. 카드는 종합점수 높은 순입니다. 필터에서 검색하거나 마감 임박 순으로 바꿀 수 있습니다.
-   **자세히**를 누르면 항목 점수, 강점·부족한 점, 요약, 기술(내 기술은 초록), 점수 기준이 나옵니다.
-   **D-n**은 마감까지 남은 날, **NEW**는 지난번에 연 뒤 새로 들어온 공고입니다.
-3. **신뢰 낮음**은 본문 없이 제목만 보고 매긴 점수라 흐리게 보입니다.
-   카드에 공고 이미지를 넣고 **받은함 읽기**를 누르면 본문이 채워집니다.
-4. 시트가 바뀌었으면 오른쪽 위 **새로고침**을 누릅니다.
-5. 다크 모드: 컴퓨터 설정을 따릅니다. 바꾸려면 오른쪽 위 **⋮ → Settings → Theme**.
-"""
-PROFILE_GUIDE = """
+GUIDE = """
+**① 프로필 저장** · 👤 프로필 탭
 - `*` 표시한 필수 칸 3개만 채우면 평가할 수 있습니다. 나머지는 채울수록 점수 근거가 정확해집니다.
 - 목록 칸은 눌러서 고르고, 목록에 없으면 직접 입력한 뒤 Enter로 추가합니다.
-- 이력서·포트폴리오 파일을 올리면 빈 칸을 채워 줍니다. 확인하고 고친 뒤 저장하세요.
-- **저장**을 누르면 `profile.yaml`에 씁니다. 파일을 직접 고쳐도 됩니다(주석은 화면에서 저장하면 사라짐).
+- 이력서·포트폴리오 파일을 올리면 빈 칸을 채워 줍니다. 확인하고 고친 뒤 **💾 저장**을 누르세요.
+
+**② 수집** · 📋 공고 탭
+- 수집 카드에 키워드를 넣고 **🔎 수집**을 누릅니다. 30건 수집은 몇 분 걸립니다.
+
+**③ 평가**
+- 공고 카드의 **평가** 칸을 체크하고 목록 위 **🧮 체크한 공고 평가**를 누릅니다.
+  평가 전 공고를 한 번에 평가할 수도 있습니다.
+
+**④ 공고 보기**
+- 카드는 종합점수 높은 순입니다. 왼쪽 **필터**에서 검색·정렬하고, 필터는 « 로 접을 수 있습니다.
+- 위 요약 칸의 숫자 아래 글(예: **점수가 있는 공고 →**)을 누르면 그 칸의 공고만 보입니다.
+- **자세히**를 누르면 항목 점수, 강점·부족한 점, 요약, 기술(내 기술은 초록)이 뜹니다. 바깥을 누르면 닫히고,
+  **📌 펼쳐 두기**를 누르면 카드 안에 열어 둡니다.
+- **D-n**은 마감까지 남은 날(7일 이하는 빨강), **NEW**는 지난번에 연 뒤 들어온 공고입니다.
+- 지원한 공고는 **지원함**, 보고 싶지 않은 공고는 **관심 없음**을 누릅니다.
+
+**⑤ 이미지 넣기**
+- **📷 이미지 필요** 배지가 붙은 공고는 사이트가 본문을 이미지로 올려 자동으로 읽지 못한 공고입니다.
+- 자세히 → 원문 열기 → 공고 이미지 저장 → 끌어다 놓기 → **🖼 받은함 읽기** → 다시 평가하면 점수가 정확해집니다.
+
+**그 밖에**
+- 시트를 직접 고쳤으면 오른쪽 위 **🔄 새로고침**을 누릅니다.
+- 다크 모드는 컴퓨터 설정을 따릅니다. 바꾸려면 오른쪽 위 **⋮ → Settings → Theme**.
+- 터미널(`python main.py --keyword 백엔드`, `--score`, `--inbox`)로 해도 결과는 같습니다.
 """
+TRUST_HELP = (
+    "점수를 매길 때 공고 원문을 얼마나 읽었는지입니다. "
+    "높음: 원문을 다 읽음 · 보통: 이미지 일부를 못 읽음 · "
+    f"낮음: 원문 없이 제목 등만 보고 매김(종합 최대 {scoring.CAP_LOW_TRUST}점)"
+)  # 신뢰 배지 도움말 (v0.5.4 F10)
+IMAGE_HELP = "사이트가 본문을 이미지로 올려 자동으로 읽지 못했습니다. 자세히에서 공고 이미지를 넣으세요."
+PINNED = "pinned"  # 카드 안에 펼쳐 둔 공고 {시트 줄} (v0.5.4 F6)
+GUIDE_SHOWN = "guide_shown"  # 처음 연 화면에서 사용법 창을 띄웠는지 (v0.5.4 F9)
 
 # 테마별 색 (v0.5.3 F13–F15). 테두리·그림자·글자(ink), 바탕(paper), 카드 면(card), 흐린 글자(muted)
 PALETTES = {
     "light": {
-        "ink": "#111111", "paper": "#fffdf5", "card": "#ffffff", "green": "#059669",
+        "ink": "#111111", "paper": "#fffdf5", "card": "#ffffff", "field": "#ffffff", "green": "#059669",
         "muted": "#444444", "sub": "#333333", "highlight": "#6ee7b7",
+        "tile0": "#ffe066", "tile1": "#a5d8ff", "tile2": "#8ce99a", "tile3": "#ffc9c9", "tile-text": "#111111",
     },
     "dark": {
-        "ink": "#e8e8e8", "paper": "#16181d", "card": "#22262e", "green": "#34d399",
+        # 바탕은 더 어둡게, 칸은 한 단계 밝게, 입력란은 칸보다 어둡게 (v0.5.4 F13)
+        "ink": "#e8e8e8", "paper": "#0e1013", "card": "#2a2f38", "field": "#1a1d23", "green": "#34d399",
         "muted": "#b0b4ba", "sub": "#d0d3d8", "highlight": "#047857",
+        # 요약 칸은 같은 색 계열의 짙은 톤 + 밝은 글자 (v0.5.4 F11)
+        "tile0": "#5c4a12", "tile1": "#1d3f5e", "tile2": "#1f4d33", "tile3": "#5c2626", "tile-text": "#f1f1f1",
     },
 }  # fmt: skip
 
@@ -85,13 +109,21 @@ div[class*="st-key-box"] {
 }
 div[class*="st-key-box"] div[class*="st-key-box"] { box-shadow: 3px 3px 0 var(--jv-ink); }
 div[class*="st-key-box-dim"] { opacity: 0.55; }
-/* 요약 칸 4개는 단색 면으로 구분한다 */
-div[class*="st-key-box-summary-0"] { background: #ffe066 !important; }
-div[class*="st-key-box-summary-1"] { background: #a5d8ff !important; }
-div[class*="st-key-box-summary-2"] { background: #8ce99a !important; }
-div[class*="st-key-box-summary-3"] { background: #ffc9c9 !important; }
-/* 색 면 위 글자는 두 테마 모두 검정 (v0.5.3 F15) */
-div[class*="st-key-box-summary"] * { color: #111111 !important; }
+/* 요약 칸 4개는 단색 면으로 구분한다. 어두운 테마는 짙은 톤 (v0.5.4 F11) */
+div[class*="st-key-box-summary-0"] { background: var(--jv-tile0) !important; }
+div[class*="st-key-box-summary-1"] { background: var(--jv-tile1) !important; }
+div[class*="st-key-box-summary-2"] { background: var(--jv-tile2) !important; }
+div[class*="st-key-box-summary-3"] { background: var(--jv-tile3) !important; }
+div[class*="st-key-box-summary"] * { color: var(--jv-tile-text) !important; }
+/* 숫자 아래 글은 누르는 버튼. 마우스를 올리면 밑줄 (v0.5.4 F12) */
+div[class*="st-key-box-summary"] div[class*="st-key-tile-"] button {
+  padding: 0 !important; min-height: 0; border: none !important; box-shadow: none !important;
+  background: transparent !important; font-size: 0.9rem; }
+div[class*="st-key-box-summary"] div[class*="st-key-tile-"] button:hover {
+  text-decoration: underline; transform: none !important; box-shadow: none !important; }
+/* 지금 적용 중인 칸은 초록 테두리 (v0.5.4 F12) */
+div[class*="st-key-box-summary"][class*="-on"] { border-color: var(--jv-green) !important;
+  box-shadow: 6px 6px 0 var(--jv-green); }
 div[data-testid="stExpander"] details {
   background: var(--jv-card); border: 2px solid var(--jv-ink) !important; border-radius: 6px !important;
   box-shadow: 3px 3px 0 var(--jv-ink);
@@ -110,15 +142,15 @@ div[data-testid="stButton"] button:disabled { box-shadow: none; border-style: da
 /* 입력란 */
 div[data-baseweb="select"] > div, div[data-baseweb="input"], div[data-baseweb="textarea"],
 div[data-testid="stFileUploaderDropzone"] {
-  border: 2px solid var(--jv-ink) !important; border-radius: 6px !important; background: var(--jv-card) !important;
+  border: 2px solid var(--jv-ink) !important; border-radius: 6px !important; background: var(--jv-field) !important;
 }
 div[data-testid="stAlert"] > div {
   border: 2px solid var(--jv-ink); border-radius: 6px; box-shadow: 3px 3px 0 var(--jv-ink);
 }
-/* 종합점수·필터 카드 높이를 맞춘다 (v0.5.1 F21). 열은 이미 같은 높이라 카드가 열을 채우게 한다 */
-div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-chart"]),
-div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-filters"]) { flex: 1 1 auto; }
-div[class*="st-key-box-chart"], div[class*="st-key-box-filters"] { height: 100%; }
+/* 필터 사이드바와 자세히 창도 굵은 테두리 (v0.5.4 F1, F5) */
+section[data-testid="stSidebar"] { border-right: 3px solid var(--jv-ink); }
+div[data-testid="stPopoverBody"] { border: 3px solid var(--jv-ink) !important; box-shadow: 6px 6px 0 var(--jv-ink);
+  max-height: 75vh; overflow-y: auto; }
 /* 고르기 칸의 키워드 아무 데나 눌러도 지워지게, 삭제 버튼이 키워드 전체를 덮는다 (v0.5.1 F22) */
 div[data-testid="stMultiSelect"] [data-tag] {
   position: relative; cursor: pointer; padding-right: 22px; border: 2px solid var(--jv-ink); border-radius: 4px;
@@ -144,6 +176,7 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
 .jv-mid { background: #ffe066; color: #111111; }
 .jv-low { background: #ffa8a8; color: #111111; }
 .jv-closed { background: #ced4da; color: #111111; }
+.jv-plain { background: var(--jv-card); color: var(--jv-ink); }
 .jv-new { background: var(--jv-green); color: var(--jv-card); }
 /* 자세히 (v0.5.3 F1–F5) */
 .jv-bar-row { display: flex; align-items: center; gap: 10px; margin: 4px 0; }
@@ -210,8 +243,15 @@ def toggle_applied(row: int, applied: bool) -> None:
 
 
 def show_upload(card: view.Card) -> None:
+    """공고 이미지 넣기. 이유와 순서를 먼저 보인다 (v0.5.4 F8)."""
+    st.markdown("**📷 공고 이미지 넣기**")
+    st.caption(
+        f"{IMAGE_HELP}  \n"
+        "① 원문 열기 → ② 공고 이미지 저장 → ③ 여기에 끌어다 놓고 받은함에 저장 → "
+        "④ 위 받은함 카드의 🖼 받은함 읽기 → ⑤ 다시 평가"
+    )
     files = st.file_uploader(
-        "공고 이미지 넣기 (끌어다 놓거나 파일 고르기)",
+        "끌어다 놓거나 파일 고르기",
         type=list(inbox.EXTENSIONS),
         accept_multiple_files=True,
         key=f"upload-{card.row}",
@@ -226,17 +266,31 @@ def show_upload(card: view.Card) -> None:
         except inbox.UploadError as e:
             st.error(str(e))  # 확장자가 아니거나 10MB 초과 (F49)
     if saved:
-        # 화면은 OCR을 돌리지 않는다 (F48)
-        st.success(f"저장함: {', '.join(saved)}. 터미널에서 `python main.py --inbox`를 실행하세요.")
+        # 화면은 저장만 하고 OCR은 받은함 읽기에서 (F48)
+        st.success(f"저장함: {', '.join(saved)}. 위 받은함 카드에서 🖼 받은함 읽기를 누르세요.")
 
 
-def show_guide(text: str) -> None:
-    with st.expander("📖 사용법"):  # 기본 접힘 (F1, F7)
-        st.markdown(text)
+@st.dialog("📖 사용법", width="large")
+def show_guide() -> None:
+    """사용 순서를 번호로 보이는 새 창 (v0.5.4 F9). 바깥을 누르거나 X로 닫는다."""
+    st.markdown(GUIDE)
 
 
-def badge(text: str, kind: str) -> str:
-    return f'<span class="jv-badge jv-{kind}">{escape(text)}</span>'
+def open_guide_first_time() -> None:
+    """처음 연 화면(지난번 연 기록 없음)에서 한 번만 띄운다 (F9)."""
+    if st.session_state.get(LAST_SEEN) is None and not st.session_state.get(GUIDE_SHOWN):
+        st.session_state[GUIDE_SHOWN] = True
+        show_guide()
+
+
+def badge(text: str, kind: str, tip: str = "") -> str:
+    title = f' title="{escape(tip)}"' if tip else ""  # 마우스를 올리면 뜨는 도움말 (v0.5.4 F10)
+    return f'<span class="jv-badge jv-{kind}"{title}>{escape(text)}</span>'
+
+
+def pin(row: int, pinned: bool) -> None:
+    rows = st.session_state.setdefault(PINNED, set())
+    rows.add(row) if pinned else rows.discard(row)
 
 
 def show_card(card: view.Card, known: list[str]) -> None:
@@ -269,22 +323,36 @@ def show_card(card: view.Card, known: list[str]) -> None:
             "되돌리기" if card.hidden else "관심 없음", key=f"hide-{card.row}", on_click=toggle_hidden,
             args=(card.row, not card.hidden), disabled=runner.running(), use_container_width=True,
         )  # fmt: skip
-        with st.expander("자세히"):
-            if card.score is None:  # 평가 전·제외: 수집 칸과 원문 앞부분 (v0.5.2 F31)
-                show_unscored_details(card)
-            else:
-                show_scored_details(card, known)
-            if card.url:
-                st.link_button("원문 열기", card.url)  # 새 탭 (v0.5 F4)
-            if card.can_upload:
-                show_upload(card)
+        # 자세히는 떠오르는 창이라 바깥을 누르면 닫힌다. 펼쳐 두면 카드 안에 남는다 (v0.5.4 F5, F6)
+        if card.row in st.session_state.get(PINNED, set()):
+            with st.container(border=True, key=f"box-pinned-{card.row}"):
+                st.button("접기", key=f"unpin-{card.row}", on_click=pin, args=(card.row, False))
+                show_details(card, known)
+        else:
+            with st.popover("자세히", width="stretch", key=f"more-{card.row}"):
+                st.button("📌 펼쳐 두기", key=f"pin-{card.row}", on_click=pin, args=(card.row, True),
+                          help="카드 안에 열어 둡니다. 접기를 누를 때까지 닫히지 않습니다")  # fmt: skip
+                show_details(card, known)
+
+
+def show_details(card: view.Card, known: list[str]) -> None:
+    if card.score is None:  # 평가 전·제외: 수집 칸과 원문 앞부분 (v0.5.2 F31)
+        show_unscored_details(card)
+    else:
+        show_scored_details(card, known)
+    if card.url:
+        st.link_button("원문 열기", card.url)  # 새 탭 (v0.5 F4)
+    if card.can_upload:
+        show_upload(card)
 
 
 def card_head(card: view.Card, today: date) -> str:
-    """카드 머리: 회사·직무, 배지(판정, 신뢰, 마감, NEW, 지원함), 출처·경력·마감, 첫 강점 (v0.5.3 F7, F9, F11, F12)."""
+    """카드 머리: 회사·직무, 배지(판정·신뢰·이미지 필요·마감·NEW·지원함), 출처·경력·마감, 첫 강점 (v0.5.4 F7)."""
     badges = badge(card.verdict, "verdict")
     if card.trust:
-        badges += badge(f"신뢰 {card.trust}", TRUST_CLASS.get(card.trust, "mid"))
+        badges += badge(f"신뢰 {card.trust}", TRUST_CLASS.get(card.trust, "mid"), TRUST_HELP)
+    if card.can_upload:  # v0.5.4 F7
+        badges += badge("📷 이미지 필요", "mid", IMAGE_HELP)
     deadline = view.deadline_badge(card.deadline, today)
     if deadline:
         badges += badge(*deadline)
@@ -505,8 +573,28 @@ def show_run_panel() -> None:
     show_job_result()
 
 
+FILTER_KEYS = {"search": "", "sources": [], "experiences": [], "scored-only": False, "recommended-only": False,
+               "applied-only": False, "image-only": False, "hidden-only": False}  # fmt: skip
+TILE_FILTERS = (None, "scored-only", "recommended-only", "image-only")  # 요약 칸 순서대로 켤 필터 (v0.5.4 F12)
+
+
+def pick_tile(index: int) -> None:
+    """요약 칸의 보기를 누르면 필터를 모두 풀고 그 칸의 필터만 켠다. 전체 공고는 모두 풀기만 (v0.5.4 F12)."""
+    st.session_state.update(FILTER_KEYS)
+    if TILE_FILTERS[index]:
+        st.session_state[TILE_FILTERS[index]] = True
+
+
+def tile_on(index: int) -> bool:
+    """지금 필터가 그 칸을 누른 상태와 같은지. 초록 테두리로 보인다."""
+    state = {key: st.session_state.get(key, empty) for key, empty in FILTER_KEYS.items()}
+    wanted = dict(FILTER_KEYS)
+    if TILE_FILTERS[index]:
+        wanted[TILE_FILTERS[index]] = True
+    return state == wanted
+
+
 def show_postings() -> None:
-    show_guide(POSTINGS_GUIDE)
     try:
         rows, error = load_rows(), None
     except Exception as e:
@@ -514,9 +602,11 @@ def show_postings() -> None:
     show_run_panel()
     if error is not None:
         st.error(view.error_message(error))  # v0.5 F9
+        st.sidebar.caption("시트를 읽으면 필터가 보입니다.")
         return
     if not rows:
         st.info("공고 없음, 위 수집 카드에서 키워드를 넣고 수집하세요.")  # v0.5 F10
+        st.sidebar.caption("공고가 생기면 필터가 보입니다.")
         return
 
     # 화면에서 바꾼 체크·관심 없음·지원 (F39, F44, v0.5.3 F11)
@@ -525,27 +615,36 @@ def show_postings() -> None:
     )
     items = view.cards(rows)
     for index, (column, (label, value, note)) in enumerate(zip(st.columns(4), view.summary(items), strict=True)):
-        with column.container(border=True, key=f"box-summary-{index}"):  # 칸마다 색 (F28)
+        on = "-on" if tile_on(index) else ""
+        with column.container(border=True, key=f"box-summary-{index}{on}"):  # 칸마다 색 (F28)
             st.metric(label, value)
-            st.caption(note)
+            # 숫자 아래 설명 글을 누르면 그 필터로 목록을 보인다 (v0.5.4 F3, F12)
+            st.button(f"{note} →", key=f"tile-{index}", on_click=pick_tile, args=(index,), type="tertiary")
 
-    chart_box, filter_box = st.columns([2, 1])  # F3, F19
     sources, experiences = view.options(items)
-    with filter_box.container(border=True, key="box-filters"):
-        st.markdown("**필터**")
+    # 필터는 왼쪽 사이드바에 고정한다. 목록을 내려도 보이고 « 로 접는다 (v0.5.4 F1)
+    with st.sidebar:
+        st.markdown("### 필터")
+        st.caption("📋 공고 탭 목록에 적용됩니다.")
         filters = view.Filters(
             query=st.text_input("검색", placeholder="회사명·직무", key="search"),  # v0.5.3 F10
             # 처음엔 비워 두고 "전체"로 보인다. 고른 것이 있을 때만 거른다 (v0.5.2 F29)
-            sources=st.multiselect("출처", sources, placeholder="전체"),
-            experiences=st.multiselect("경력", experiences, placeholder="전체", help="신입·경력·무관으로 묶음"),
-            scored_only=st.toggle("평가된 공고만 보기"),  # 기본은 전체 (v0.5.2 F32)
-            applied_only=st.toggle("지원한 공고만 보기"),  # v0.5.3 F11
-            hidden_only=st.toggle("관심 없는 공고만 보기", help="관심 없음으로 뺀 공고. 되돌리기로 목록에 다시 넣음"),
+            sources=st.multiselect("출처", sources, placeholder="전체", key="sources"),
+            experiences=st.multiselect(
+                "경력", experiences, placeholder="전체", help="신입·경력·무관으로 묶음", key="experiences"
+            ),
             # 점수 정렬에서 평가 전은 늘 아래 (F40). 마감 임박 순은 점수와 상관없이 (v0.5.3 F8)
             sort=SORTS[st.selectbox("정렬", list(SORTS))],
+            scored_only=st.toggle("평가된 공고만 보기", key="scored-only"),  # 기본은 전체 (v0.5.2 F32)
+            recommended_only=st.toggle("추천 이상만 보기", key="recommended-only"),  # 강력 추천 + 추천 (v0.5.4 F12)
+            applied_only=st.toggle("지원한 공고만 보기", key="applied-only"),  # v0.5.3 F11
+            image_only=st.toggle("이미지 필요한 공고만 보기", key="image-only", help=IMAGE_HELP),  # v0.5.4 F2
+            hidden_only=st.toggle(
+                "관심 없는 공고만 보기", key="hidden-only", help="관심 없음으로 뺀 공고. 되돌리기로 목록에 다시 넣음"
+            ),
         )
     shown = view.apply(items, filters)
-    with chart_box.container(border=True, key="box-chart"):
+    with st.container(border=True, key="box-chart"):  # 필터가 사이드바로 가서 가로 전체 (v0.5.4 F1)
         st.markdown(f"**종합점수 TOP {view.TOP}**")
         data = view.chart(shown)  # 필터를 지난 공고 중 높은 5개 (F42)
         if data:  # 필터를 지난 공고만 (v0.5 F5)
@@ -710,7 +809,6 @@ def show_missing(labels: list[str]) -> None:
 
 
 def show_profile() -> None:
-    show_guide(PROFILE_GUIDE)
     try:
         raw = user_profile.read_raw(PROFILE)  # 탭을 그릴 때마다 파일을 다시 읽는다 (v0.5 F21)
     except user_profile.ProfileError as e:
@@ -766,11 +864,14 @@ def main() -> None:
     st.set_page_config(page_title="JOBVIS", layout="wide")
     st.markdown(css(st.context.theme.type), unsafe_allow_html=True)  # 테마를 바꾸면 다시 그린다 (F13)
     remember_visit()
-    title, refresh = st.columns([6, 1], vertical_alignment="center")
+    open_guide_first_time()
+    title, guide, refresh = st.columns([5, 1, 1], vertical_alignment="center")
     title.markdown(
         f'<div class="jv-hero"><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',
         unsafe_allow_html=True,
     )  # F20
+    if guide.button("📖 사용법", use_container_width=True, key="guide"):  # 새 창 (v0.5.4 F9)
+        show_guide()
     if refresh.button("🔄 새로고침", use_container_width=True):
         reload_rows()
     postings_tab, profile_tab = st.tabs(["📋 공고", "👤 프로필"])  # v0.5 F1
@@ -780,4 +881,5 @@ def main() -> None:
         show_profile()
 
 
-main()
+if __name__ == "__main__":  # 테스트에서 import할 때는 화면을 그리지 않는다
+    main()

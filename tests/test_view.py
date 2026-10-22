@@ -158,7 +158,7 @@ def test_summary_counts_whole_sheet():
         ("전체 공고", 5),
         ("평가 완료", 3),
         ("추천 이상", 2),
-        ("본문 미확보", 2),
+        ("이미지 필요", 2),
     ]  # v0.5.1 F2
 
 
@@ -294,7 +294,7 @@ def test_stack_chips_mark_my_skills_ignoring_case_and_spaces():
         ("2026-10-22", ("D-day", "low")),
         ("2026-10-25", ("D-3", "low")),
         ("2026-10-29", ("D-7", "low")),
-        ("2026-10-30", None),  # 8일 남음
+        ("2026-10-30", ("D-8", "plain")),  # 8일 남음
         ("2026-10-21", ("마감", "closed")),
         ("상시", None),
         ("", None),
@@ -368,3 +368,27 @@ def test_last_seen_broken_or_unwritable_is_ignored(tmp_path):
 
     assert view.read_last_seen(broken) is None
     view.write_last_seen(blocked / "last_seen.txt", datetime(2026, 10, 22))  # 폴더 자리에 파일: 오류 없이 넘어감 (N3)
+
+
+# ---- v0.5.4 이미지 필요·추천 이상 필터 ----
+
+
+def test_image_only_keeps_missing_and_partly_unread_with_id():
+    rows = [
+        scored(2, 80),
+        scored(3, 60, body="본문 미확보", trust="낮음"),
+        make_row(4, body="이미지 일부 못 읽음"),
+        make_row(5, body="본문 미확보", id=""),  # 공고 번호가 없으면 이미지를 넣을 수 없다
+    ]
+    items = view.cards(rows)
+
+    assert [c.row for c in view.apply(items, view.Filters([], [], image_only=True))] == [3, 4]  # F2
+    assert view.summary(items)[3][:2] == ("이미지 필요", 2)  # 요약 칸과 같은 기준 (F3)
+
+
+def test_recommended_only_keeps_strong_and_recommended():
+    rows = [scored(2, 85, verdict="강력 추천"), scored(3, 65), scored(4, 45, verdict="보통"), make_row(5)]
+
+    shown = view.apply(view.cards(rows), view.Filters([], [], recommended_only=True))
+
+    assert [c.row for c in shown] == [2, 3]  # F12

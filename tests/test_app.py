@@ -57,21 +57,21 @@ def test_postings_tab_shows_guide_summary_and_scored_cards(app):
 
     assert not at.exception
     assert [tab.label for tab in at.tabs] == ["📋 공고", "👤 프로필"]
-    assert at.expander[0].label == "📖 사용법"  # F1
+    assert len(at.get("dialog")) == 1  # 처음 연 화면은 사용법 창 (v0.5.4 F9)
     assert [(m.label, m.value) for m in at.metric] == [
         ("전체 공고", "3"),
         ("평가 완료", "2"),
         ("추천 이상", "2"),
-        ("본문 미확보", "1"),
+        ("이미지 필요", "1"),
     ]  # 필터와 상관없이 전체 (F2)
     heads = [m.value for m in at.markdown if "회사" in m.value]
     assert len(heads) == 3
     assert heads[0].startswith("**회사2 · 백엔드**") and "신뢰 높음" in heads[0]
     assert "jv-low" in heads[1]  # 신뢰 낮음 배지 색 (F5)
     assert "평가 전" in heads[2]  # 점수 순, 평가 전은 뒤
-    assert [e.label for e in at.expander].count("자세히") == 3  # F4
+    assert len(at.get("popover")) == 3  # 자세히 (F4, v0.5.4 F5)
 
-    at.toggle[0].set_value(True).run()  # 평가된 공고만 보기 (F32)
+    at.toggle(key="scored-only").set_value(True).run()  # 평가된 공고만 보기 (F32)
     assert sum("회사" in m.value for m in at.markdown) == 2
 
 
@@ -179,7 +179,7 @@ def test_run_panel_shows_collect_and_score_cards(app):
     assert not [r for r in at.radio if r.label == "대상"]  # 수집 옆 평가 카드 없음 (v0.5.2 F38)
     keyword = next(s for s in at.selectbox if s.label == "키워드 *")
     assert set(runner.JOB_NAMES) <= set(keyword.options)  # 직무 이름이 추천 검색어 (F3)
-    assert any("**수집** 카드에 키워드를 넣고" in m.value for m in at.markdown)  # 사용법 (F15)
+    assert any("수집 카드에 키워드를 넣고" in m.value for m in at.markdown)  # 사용법 창 (F15, v0.5.4 F9)
 
 
 def test_score_button_is_disabled_without_targets(app):
@@ -587,7 +587,7 @@ def test_deadline_badges_and_closed_card_is_dimmed(app):
     heads = {v.split("**")[1].split(" · ")[0]: v for v in (m.value for m in at.markdown) if v.startswith("**회사")}
     assert 'jv-low">D-3<' in heads["회사2"]  # F7
     assert 'jv-closed">마감<' in heads["회사3"]
-    assert "D-" not in heads["회사4"].split("jv-muted")[0]
+    assert 'jv-plain">D-30<' in heads["회사4"]  # 7일 넘으면 흰 배지 (v0.5.4 F4)
     keys = [c.key for c in at.get("flex_container") if getattr(c, "key", None)]
     assert any(k == "box-dim-card-3" for k in keys) and not any(k == "box-dim-card-2" for k in keys)
 
@@ -605,7 +605,7 @@ def test_new_badge_uses_last_visit_and_updates_it(app, tmp_path):
     assert (tmp_path / "data" / "last_seen.txt").read_text(encoding="utf-8") != "2026-10-21 12:00"
 
 
-def test_first_visit_has_no_new_badge(app):
+def test_first_visit_has_no_new_badge(app):  # 처음 열면 사용법 창도 뜬다 (v0.5.4 F9)
     at = app([scored(2, saved_at="2026-10-21 13:00")])
 
     assert not any("NEW" in m.value for m in at.markdown if m.value.startswith("**회사"))
@@ -656,8 +656,82 @@ def test_apply_failure_shows_error_without_secret(app, monkeypatch):
 def test_css_follows_theme_and_guide_mentions_theme(app):
     import app as screen  # 저장소 app.py
 
-    assert "--jv-paper: #16181d" in screen.css("dark")  # F13, F14
+    assert "--jv-paper: #0e1013" in screen.css("dark") and "--jv-card: #2a2f38" in screen.css("dark")  # v0.5.4 F13
     assert "--jv-paper: #fffdf5" in screen.css("light") and "--jv-paper: #fffdf5" in screen.css(None)
     assert "/*VARS*/" not in screen.css("dark")
+    assert "--jv-tile0: #5c4a12" in screen.css("dark") and "--jv-tile-text: #f1f1f1" in screen.css("dark")  # v0.5.4 F11
     at = app([])
     assert any("Theme" in m.value for m in at.markdown)
+
+
+# ---- v0.5.4 사이드바 필터·요약 칸·자세히 창·이미지 안내·사용법 창 ----
+
+
+def test_filters_live_in_sidebar(app):
+    at = app([scored(2)])
+
+    labels = [w.label for w in at.sidebar.toggle]
+    assert labels == ["평가된 공고만 보기", "추천 이상만 보기", "지원한 공고만 보기",
+                      "이미지 필요한 공고만 보기", "관심 없는 공고만 보기"]  # F1, F2  # fmt: skip
+    assert [w.label for w in at.sidebar.text_input] == ["검색"]
+    assert [w.label for w in at.sidebar.selectbox] == ["정렬"]
+
+
+def test_summary_text_applies_its_filter_and_marks_tile(app):
+    rows = [scored(2, score="85", verdict="강력 추천"), scored(3, score="50", verdict="보통"),
+            scorable(4, body="본문 미확보")]  # fmt: skip
+    at = app(rows)
+    assert at.button(key="tile-1").label == "점수가 있는 공고 →"
+    assert "box-summary-0-on" in [c.key for c in at.get("flex_container") if getattr(c, "key", None)]
+
+    at.button(key="tile-2").click().run()  # 추천 이상 (F12)
+    assert names(at) == ["회사2"] and at.toggle(key="recommended-only").value
+    assert "box-summary-2-on" in [c.key for c in at.get("flex_container") if getattr(c, "key", None)]
+
+    at.button(key="tile-3").click().run()  # 이미지 필요만, 앞 필터는 풀림 (F3)
+    assert names(at) == ["회사4"] and not at.toggle(key="recommended-only").value
+
+    at.text_input(key="search").set_value("회사").run()
+    at.button(key="tile-0").click().run()  # 전체 공고: 모두 풂
+    assert names(at) == ["회사2", "회사3", "회사4"] and at.text_input(key="search").value == ""
+
+
+def test_image_badge_and_upload_steps(app):
+    at = app([scorable(2, body="본문 미확보"), scorable(3)])
+
+    heads = {v.split("**")[1].split(" · ")[0]: v for v in (m.value for m in at.markdown) if v.startswith("**회사")}
+    assert "📷 이미지 필요" in heads["회사2"] and 'title="사이트가 본문을' in heads["회사2"]  # F7
+    assert "📷 이미지 필요" not in heads["회사3"]
+    assert any("④ 위 받은함 카드의 🖼 받은함 읽기" in c.value for c in at.caption)  # F8
+
+
+def test_trust_badge_has_criteria_tooltip(app):
+    at = app([scored(2, trust="높음")])
+
+    head = next(m.value for m in at.markdown if m.value.startswith("**회사2"))
+    assert "신뢰 높음" in head and "낮음: 원문 없이 제목 등만 보고 매김(종합 최대 69점)" in head  # F10
+
+
+def test_pin_keeps_details_open_in_card(app):
+    at = app([scored(2), scored(3)])
+    assert [p.key for p in at.get("popover")] == ["more-2", "more-3"]  # 자세히는 떠오르는 창 (F5)
+
+    at.button(key="pin-2").click().run()
+
+    assert [p.key for p in at.get("popover")] == ["more-3"]  # F6
+    assert at.button(key="unpin-2").label == "접기"
+    assert any(v.startswith("<div class='jv-bar-row'>") for v in (m.value for m in at.markdown))
+    at.button(key="unpin-2").click().run()
+    assert [p.key for p in at.get("popover")] == ["more-2", "more-3"]
+
+
+def test_guide_dialog_opens_on_first_visit_and_by_button(app, tmp_path):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "last_seen.txt").write_text("2026-10-21 12:00", encoding="utf-8")
+    at = app([])
+    assert not at.get("dialog")  # 전에 연 적 있으면 자동으로 띄우지 않음 (F9)
+    assert not any("① 프로필 저장" in m.value for m in at.markdown)  # 화면에 사용법 접기 칸도 없음
+
+    at.button(key="guide").click().run()
+
+    assert len(at.get("dialog")) == 1 and any("① 프로필 저장" in m.value for m in at.markdown)
