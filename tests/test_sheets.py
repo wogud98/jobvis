@@ -100,7 +100,7 @@ def test_existing_keys_reads_ids_and_names_and_treats_blank_source_as_saramin(wo
     # 공백·기호를 지우고 소문자로 비교 (F9). 회사명의 "(주)"는 통째로 지운다.
     assert names == {("회사", "직무"), ("가나다", "백엔드개발자신입"), ("라마바", "aiengineer"), ("마바사", "fde")}
     # 본문 미확보 줄은 다른 사이트 본문으로 채울 수 있게 줄 번호와 함께 (v0.5 F46)
-    assert missing == {("마바사", "fde"): {"row": 5, "source": "saramin", "id": "88"}}
+    assert missing == {("마바사", "fde"): {"row": 5, "source": "saramin", "id": "88", "scored": False}}
 
 
 def test_normalize_drops_spaces_symbols_and_case():
@@ -346,3 +346,18 @@ def test_set_applied_writes_applied_column_only(worksheet):
     sheets.set_applied(4, True)
 
     assert sheet.updates == [{"range": "AE4", "values": [[True]]}]
+
+
+def test_collect_keys_marks_scored_missing_rows():
+    """본문 미확보 줄에 점수가 있으면 채운 뒤 다시 평가하게 표시한다 (v0.6.2 F12)."""
+    row = dict.fromkeys(sheets.KEYS, "") | {
+        "row": 3,
+        "company": "회사",
+        "title": "직무",
+        "id": "9",
+        "body": "본문 미확보",
+    }
+
+    assert sheets.collect_keys([row | {"score": "72"}])[2][("회사", "직무")]["scored"] is True
+    assert sheets.collect_keys([row | {"score": " "}])[2][("회사", "직무")]["scored"] is False
+    assert sheets.collect_keys([{k: v for k, v in row.items() if k != "score"}])[2][("회사", "직무")]["scored"] is False

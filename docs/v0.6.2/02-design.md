@@ -9,7 +9,7 @@
 | 질문 | 확인 | 결정 |
 | --- | --- | --- |
 | 저장소가 private이어도 GHCR 이미지만 공개할 수 있나 | GitHub 문서: 저장소와 연결된 패키지는 "접근 권한은 저장소를 따르지만 공개 범위는 따르지 않음". 패키지 설정 Danger Zone에서 따로 공개로 바꿈. 공개 컨테이너 패키지는 로그인 없이 받음. **한 번 공개하면 다시 비공개로 못 바꿈** ([문서](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)) | 됨. 처음 올린 뒤 재리가 패키지 설정에서 공개로 바꿈(한 번만) |
-| 기본 이미지가 실제로 줄어드나 | v0.6.1 때 작업 환경 시험 빌드: OCR 없음 받는 크기 229MB·풀린 크기 1.02GB, OCR 포함 564MB·2.53GB | 받는 크기 약 2.5배 차이라 나눔(F5–F8 유지). 구현 때 최종 이미지로 다시 잼(N2) |
+| 기본 이미지가 실제로 줄어드나 | CI 실측: OCR 없음 받는 크기 약 257MB·풀린 크기 730MB, OCR 포함 약 819MB·2.23GB | 받는 크기 약 3배 차이라 나눔(F5–F8 유지). OCR은 약 560MB 더 받음 |
 | 시작 파일 묶음 받는 방법 | 저장소가 private이라 Releases는 반 사람이 못 받음 | 지금은 저장소 `start/` 폴더를 zip으로 반 채팅방에 나눔. 저장소를 public으로 바꾼 뒤 Releases로 옮김(다음 버전 후보) |
 
 ## 결정
@@ -28,6 +28,12 @@
 | D10 | 시작 순서: `chcp 65001` → `docker info`로 Docker 확인 → 처음이면 OCR 물음 → 8501 포트를 다른 프로그램이 쓰는지 확인(`netstat`) → `docker compose pull` → `up -d --wait`(앱 HEALTHCHECK) → `start http://localhost:8501`. 실패하면 원인·할 일을 보이고 `pause` (F1, F2, F4) | `--wait`가 앱이 준비될 때까지 기다려 줌. 키는 어디에도 출력하지 않음(키는 볼륨 안 파일에만 있음) |
 | D11 | `.gitattributes`에 `*.bat text eol=crlf` (F1) | 줄 끝이 LF면 cmd가 줄을 잘못 읽음 |
 | D12 | README 맨 위 "반 사람용 시작하기"를 묶음 기준으로 고치고, `git clone` 빌드는 "직접 빌드하기"로 아래에 둠 (F11) | |
+
+## 보완 결정 (F12)
+
+| 번호 | 결정 | 이유 |
+| --- | --- | --- |
+| D13 | `sheets.collect_keys`가 본문 미확보 줄 정보에 `scored`(종합점수 칸이 비었는지)를 더함. 같은 실행에서 방금 저장한 줄은 `scored: False`. `graph._fill`은 `scored`일 때만 `"평가": True`를 씀 | 다시 평가할 이유가 있는 줄(이전 점수가 옛 본문 기준)만 표시. 평가 전 줄은 "평가 전 전부 평가"에 이미 들어감 |
 
 ## 구성
 

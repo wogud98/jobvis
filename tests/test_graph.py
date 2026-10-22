@@ -564,9 +564,9 @@ def test_posting_status_constants_match_sheet_values():
 # ---- 다른 사이트 본문으로 채우기 (v0.5 F46) ----
 
 
-def _missing_row(company="회사1", title="백엔드 개발자", row=5, source="saramin", job_id="1"):
+def _missing_row(company="회사1", title="백엔드 개발자", row=5, source="saramin", job_id="1", scored=True):
     name = (graph.sheets.normalize_company(company), graph.sheets.normalize(title))
-    return {name: {"row": row, "source": source, "id": job_id}}
+    return {name: {"row": row, "source": source, "id": job_id, "scored": scored}}
 
 
 def test_missing_row_in_sheet_is_replaced_by_other_site_posting(monkeypatch, tmp_path):
@@ -602,6 +602,24 @@ def test_missing_row_in_sheet_is_replaced_by_other_site_posting(monkeypatch, tmp
     assert_counts_add_up(result)
 
 
+def test_unscored_missing_row_is_filled_without_check(monkeypatch, tmp_path):
+    """평가 전 줄은 채워도 평가 체크를 켜지 않는다. 첫 수집에 한 줄만 체크돼 보이던 문제 (v0.6.2 F12)."""
+    missing = _missing_row(scored=False)
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"jobkorea": [make_job("jobkorea", "2", company="회사1")]},
+        existing=({("saramin", "1")}, set(missing), missing),
+    )
+
+    result = run(sources=("jobkorea",))
+
+    assert len(result["filled"]) == 1
+    row_number, changes = fakes.updated[0]
+    assert row_number == 5 and changes["본문"] == "글자" and "평가" not in changes
+    assert_counts_add_up(result)
+
+
 def test_missing_row_stays_when_new_body_is_also_missing(monkeypatch, tmp_path):
     fakes = Fakes(
         monkeypatch,
@@ -633,6 +651,7 @@ def test_same_run_second_site_fills_first_missing_posting(monkeypatch, tmp_path)
     assert len(fakes.rows) == 1
     assert fakes.updated[0][0] == 2  # 방금 붙인 줄 번호
     assert fakes.updated[0][1]["출처"] == "잡코리아"
+    assert "평가" not in fakes.updated[0][1]  # 방금 저장한 줄은 평가 전 (v0.6.2 F12)
     assert len(result["filled"]) == 1
     assert not (tmp_path / "postings" / "saramin_1.txt").exists()
     assert (tmp_path / "postings" / "jobkorea_2.txt").exists()

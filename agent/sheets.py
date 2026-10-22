@@ -163,7 +163,10 @@ def collect_keys(
             name = (normalize_company(row["company"]), normalize(row["title"]))
             names.add(name)
             if row["body"] == postings.MISSING and row["id"]:
-                missing.setdefault(name, {"row": row["row"], "source": source_code(row["source"]), "id": row["id"]})
+                # 점수가 있던 줄만 채운 뒤 다시 평가하게 표시한다 (v0.6.2 F12)
+                scored = bool(str(row.get("score", "")).strip())
+                found = {"row": row["row"], "source": source_code(row["source"]), "id": row["id"], "scored": scored}
+                missing.setdefault(name, found)
     return ids, names, missing
 
 

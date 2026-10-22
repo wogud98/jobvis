@@ -7,7 +7,7 @@
 ```bash
 ruff check .            # All checks passed!
 ruff format --check .   # 98 files already formatted
-python -m pytest        # 621 passed (612개 → 621개)
+python -m pytest        # 623 passed (612개 → 623개, F12 포함)
 docker compose config   # 저장소 compose: build target ocr, name jobvis
 docker compose -f start/compose.yml config -q   # 통과
 JOBVIS_TAG=ocr docker compose -f start/compose.yml config   # image ghcr.io/wogud98/jobvis:ocr
@@ -32,18 +32,25 @@ sh scripts/check_image.sh jobvis:bad            # .env, service_account.json을 
 | N3 | 기본 이미지에 `paddleocr` 없음 | 작업 환경 `docker run jobvis:base2`, Docker CI | 통과 |
 | N4 | 이미지 `/app`에 비밀 파일 없음, 있으면 실패 | `scripts/check_image.sh` 정상·나쁜 이미지 | 통과 |
 
+### 보완 (F12)
+
+| ID | 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- | --- |
+| F12 | 점수 있던 줄은 채우면서 평가 체크, 평가 전 줄·같은 실행에서 방금 저장한 줄은 체크 안 함, 점수 칸으로 `scored` 판단 | `test_missing_row_in_sheet_is_replaced_by_other_site_posting`, `test_unscored_missing_row_is_filled_without_check`, `test_same_run_second_site_fills_first_missing_posting`, `test_collect_keys_marks_scored_missing_rows` | 통과 |
+
 ## 크기 (N2)
 
-| 이미지 | 풀린 크기 | 받는 크기(압축) | 출처 |
-| --- | --- | --- | --- |
-| 기본(base) | 1.02GB | 229MB | 작업 환경 빌드(이번 Dockerfile) |
-| OCR 포함 | 2.53GB | 564MB | v0.6.1 작업 환경 빌드. 시스템 라이브러리·한국어 모델이 빠진 값(작업 환경에서 막힘) |
+PR #52 Docker CI(GitHub Actions)에서 잰 값. 받는 크기는 `docker save | gzip -1` 크기로 어림함(레지스트리 층 압축과 비슷함).
 
-OCR 이미지는 기본보다 약 335MB를 더 받음 → 질문 문구는 "약 350MB". 정확한 값은 Docker CI 로그의 압축 크기로 맞춘다.
+| 이미지 | 풀린 크기 | 받는 크기(압축 어림) |
+| --- | --- | --- |
+| 기본(base) | 730MB | 257MB |
+| OCR 포함 | 2.23GB | 819MB |
+
+OCR을 고르면 약 560MB를 더 받음 → 질문 문구·화면 안내 "약 560MB". 처음 넣은 "약 350MB"는 작업 환경 근사값(시스템 라이브러리·모델 빠짐)이라 CI 값으로 고침. 기본 이미지는 받는 크기가 OCR 포함의 약 3분의 1.
 
 ## 미확인
 
 - **Windows에서 `.bat` 실행**: 더블클릭, 한국어 출력, `choice` 5초, 포트 확인, `--wait`, 브라우저 열기. 재리 PC 확인 필요.
 - **GHCR 올리기·받기**: `publish.yml`은 main 머지 뒤 처음 돈다. 그 뒤 재리가 패키지를 공개로 바꿔야 로그인 없이 받음(한 번 공개하면 되돌릴 수 없음).
-- **OCR 이미지 정확한 크기**: 작업 환경에서는 apt·모델 받기가 막혀 근사값. CI 로그로 확인.
 - **기존 사용자 볼륨 이어짐**: `name: jobvis`를 넣음. 저장소 폴더 이름이 `jobvis`면 전과 같은 볼륨(`jobvis_jobvis-data`). 폴더 이름이 다른 PC는 새 볼륨이 생김(재리 PC 두 대 모두 폴더 이름 `jobvis`).

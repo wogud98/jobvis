@@ -96,7 +96,7 @@ def test_existing_keys_uses_same_rules_as_sheet(memory):
 
     assert ids == {("saramin", "123"), ("jobkorea", "88")}
     assert names == {("가나다", "백엔드"), ("마바사", "fde")}
-    assert missing == {("마바사", "fde"): {"row": 2, "source": "jobkorea", "id": "88"}}
+    assert missing == {("마바사", "fde"): {"row": 2, "source": "jobkorea", "id": "88", "scored": False}}
 
 
 def test_store_routes_to_db_when_storage_is_db(memory, monkeypatch):

@@ -61,7 +61,7 @@ exit /b 0
 
 :ask_ocr
 echo.
-echo 공고 본문이 이미지인 경우 글자를 읽는 OCR을 같이 받을 수 있습니다(약 350MB 더).
+echo 공고 본문이 이미지인 경우 글자를 읽는 OCR을 같이 받을 수 있습니다(약 560MB 더).
 echo 나중에 이 파일을 다시 열어 바꿀 수 있습니다.
 choice /c YN /m "OCR도 받을까요"
 if errorlevel 2 (
