@@ -421,3 +421,61 @@ def test_summary_says_saved_postings_for_db(monkeypatch):
     monkeypatch.setenv("JOBVIS_STORAGE", "db")
 
     assert view.summary([])[0][2] == "저장된 공고"  # v0.6 D12
+
+
+# ---- 모아 보기 집계 (v0.7 F11, F12, N5) ----
+
+
+def test_stack_rank_counts_postings_once_and_merges_case_and_spaces():
+    items = view.cards(
+        [
+            scored(2, 80, stack="Python, Spring Boot, python"),  # 같은 공고 안 중복은 한 번
+            scored(3, 70, stack="springboot, AWS"),
+            make_row(4, stack="AWS, Docker"),
+            make_row(5),  # 기술스택 칸 없음
+        ]
+    )
+
+    ranked = view.stack_rank(items, ["Python"])
+
+    # 같은 수면 이름 순, 이름은 처음 나온 모양 (D8)
+    assert ranked == [
+        ("AWS", 2, False), ("Spring Boot", 2, False), ("Docker", 1, False), ("Python", 1, True),
+    ]  # fmt: skip
+    assert view.stack_rank(items, [], top=1) == [("AWS", 2, False)]
+
+
+def test_stack_rank_empty():
+    assert view.stack_rank([], ["Python"]) == []
+    assert view.stack_rank(view.cards([make_row(2)]), []) == []
+
+
+def test_gap_rank_weights_like_gaps_command_and_counts_excluded():
+    items = view.cards(
+        [
+            scored(2, 40, gaps="AWS, Docker"),  # 가중 0.6
+            scored(3, 90, gaps="aws"),  # 0.1
+            make_row(4, gaps="Kubernetes"),  # 점수 없음 → 뺌
+        ]
+    )
+
+    ranked, excluded = view.gap_rank(items)
+
+    # 이름은 목록(점수 높은 순)에서 처음 나온 모양
+    assert [(name, round(weight, 2), count) for name, weight, count in ranked] == [("aws", 0.7, 2), ("Docker", 0.6, 1)]
+    assert excluded == 1  # F12
+
+
+def test_gap_rank_empty():
+    assert view.gap_rank([]) == ([], 0)
+
+
+def test_filter_labels_lists_only_what_is_on():
+    assert view.filter_labels(view.Filters(sources=[], experiences=[])) == []
+    filters = view.Filters(
+        sources=["사람인"], experiences=["신입", "무관"], query=" 백엔드 ", scored_only=True, applied_only=True
+    )
+
+    assert view.filter_labels(filters) == [
+        "검색 '백엔드'", "출처 사람인", "경력 신입·무관", "평가된 공고만", "지원한 공고만",
+    ]  # F10  # fmt: skip
