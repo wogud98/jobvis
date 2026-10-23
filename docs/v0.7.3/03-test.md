@@ -35,3 +35,20 @@ python main.py --help   # 명령줄 옵션 그대로
 
 - 재리 PC(Windows)·Docker 이미지에서 화면 확인
 - 실제 수집 공고에서 사전이 얼마나 합치는지(가짜 데이터로만 확인). 사전에 없는 새 이름은 따로 보임
+
+## 보완: 사전 84묶음 (D7)
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 119 files already formatted
+python -m pytest        # 709 passed (706개 → 709개)
+```
+
+| 확인 내용 | 테스트 | 결과 |
+| --- | --- | --- |
+| MSSQL·Microsoft SQL Server → SQL Server, 오라클·Oracle DB → Oracle, sklearn, HTML5, Apache Kafka, 젠킨스, C언어 | `test_common_abbreviations_and_korean_names_join_main_name` | 통과 |
+| Spring·Spring Boot, SQL Server·SQL, GitHub·GitHub Actions, EC2·AWS 따로 | `test_close_but_different_skills_stay_apart` | 통과 |
+| 빈 묶음, 대표 이름 다시 적기, 띄어쓰기·대소문자만 다른 이름 없음 | `test_every_alias_adds_something` (기존 `C Sharp`가 `CSharp`와 같아 `C샤프`로 바꿈) | 통과 |
+
+- 기존 테스트 3개의 시험 이름을 바꿈: Kotlin·Jenkins가 사전에 들어가 "사전에 없는 이름은 처음 나온 모양" 규칙을 검사할 수 없게 됨. 사전에 없는 Gradle·Rust로 같은 규칙을 그대로 검사함. 검사를 약하게 한 것이 아님.
+- 미확인: 실제 수집 공고에서 새 묶음이 얼마나 합치는지(가짜 데이터로만 확인)

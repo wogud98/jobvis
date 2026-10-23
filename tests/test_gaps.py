@@ -16,12 +16,12 @@ def test_weights_low_scores_more():
 
 
 def test_same_skill_ignores_case_and_spaces():
-    rows = [row("50", "kotlin, Jenkins"), row("50", " Kotlin ,jenkins ")]
+    rows = [row("50", "rust, Gradle"), row("50", " Rust ,gradle ")]
 
     top, _, _ = gaps.analyze(rows)
 
     # 사전에 없는 이름은 처음 나온 모양 그대로
-    assert [(name, count) for name, _, count in top] == [("Jenkins", 2), ("kotlin", 2)]
+    assert [(name, count) for name, _, count in top] == [("Gradle", 2), ("rust", 2)]
 
 
 def test_same_words_in_dictionary_merge_under_main_name():
@@ -41,11 +41,11 @@ def test_top_none_keeps_all():
 
 
 def test_rows_without_score_are_excluded():
-    rows = [row("", "Docker"), row("높음", "Git"), row("60", "Kotlin")]
+    rows = [row("", "Docker"), row("높음", "Git"), row("60", "Rust")]
 
     top, used, excluded = gaps.analyze(rows)
 
-    assert [name for name, _, _ in top] == ["Kotlin"]
+    assert [name for name, _, _ in top] == ["Rust"]
     assert (used, excluded) == (1, 2)
 
 
