@@ -6,7 +6,7 @@
 
 사람인·잡코리아 채용공고를 모아 내 프로필과 비교해 점수를 매기는 개인용 도구입니다.
 
-![version](https://img.shields.io/badge/version-v0.7.2-c8f03c?style=flat)
+![version](https://img.shields.io/badge/version-v0.7.3-c8f03c?style=flat)
 ![period](https://img.shields.io/badge/기간-2026.10.19–2026.10.23-6b8afd?style=flat)
 ![python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)
 ![type](https://img.shields.io/badge/개인_프로젝트-555?style=flat)
@@ -28,7 +28,7 @@
 
 공고 수집은 LLM 없이 하고, 평가할 때만 LLM(기본 Gemini)을 불러 항목별 점수와 강점·부족한 점을 받습니다. 모든 데이터는 내 PC에 둡니다.
 
-- 기간: 2026.10.19–2026.10.23 (v0.1–v0.7.2)
+- 기간: 2026.10.19–2026.10.23 (v0.1–v0.7.3)
 - 형태: 개인 프로젝트. AI 코딩 에이전트(Claude Code)와 함께 요구사항 → 설계 → 구현 → 테스트 순서로 개발
 - 문서: 버전마다 요구사항·설계(UML)·테스트 결과를 [docs/](docs/README.md)에 남김
 
