@@ -30,6 +30,7 @@
 | D7 | `runner.image_score(source, job_id, profile)`: `read_inbox()`(OCR 없으면 `RunError`, 아무 파일도 안 건드림) → `filled`에 그 공고가 없으면 `(read, None)` → 있으면 그 공고 줄만 `check=TRUE`로 보고 `scoring.select_targets(.., "checked")` → `_score_rows`(기존 `score()`에서 그래프 부르는 부분을 떼어 냄). `start_image_score`가 작업 종류 `"image"`(이름 "이미지로 다시 평가")로 스레드 실행 (F7, F8) | 받은함에 전에 남은 다른 공고 이미지도 함께 읽히지만(본문 채움·"평가" 체크) 평가는 이 공고만 |
 | D8 | `reports.image_score_summary(read, scored)`: 본문을 못 채웠으면 "이미지에서 글자를 읽지 못해 다시 평가하지 않았습니다…", 채웠으면 "이미지 N장을 읽어 본문을 채우고 공고 1건을 평가했습니다." 자세히는 읽기 줄(터미널 안내 "다음:" 줄 뺌) + 평가 줄 (F7, F8) | |
 | D9 | `app.show_upload`: OCR 없으면 안내만. 있으면 넣는 칸 + `🖼 이미지로 다시 평가`(primary, 파일 없거나 실행 중이면 누를 수 없음). 누르면 프로필·키 확인 → 저장 → `start_job(runner.start_image_score, ...)`. `show_inbox_card`, `UPLOAD_DONE` 알림, `runner.start_inbox`·`inbox_count`, `reports.inbox_summary` 삭제(화면에서 쓰는 곳이 없어짐). 사용법·초기화 확인 문구의 "받은함"을 바꿈 (F6) | 명령줄 `--inbox`는 `inbox.run`·`reports.inbox_result`를 그대로 씀(N4) |
+| D10 | 보완(2026-10-23 재리 "진행"): 기술 모아보기 탭 이름에 개수(`많이 찾는 기술 N`, `내가 부족한 것 N`). CSS로 창 안 탭(`stDialog` 안 `[data-testid=stTab]`)만 버튼처럼: 같은 너비 둘, 글자 1rem 굵게, 테두리, 고른 탭 라임 + 그림자, 밑줄 표시 숨김. 첫 화면 공고·프로필 탭은 그대로 | 작고 글자만 보여 탭이 나뉜 느낌이 없었음 |
 
 ## 구성
 

@@ -1591,7 +1591,7 @@ def test_stats_dialog_has_summary_and_two_tabs(app, tmp_path):
 
     html = " ".join(m.value for m in at.markdown)
     assert "많이 찾는 기술 3개 중 <span class='jv-chip jv-mine'" in html and "**1개**" in html  # F3
-    assert [t.label for t in at.tabs][-2:] == ["많이 찾는 기술", "내가 부족한 것"]
+    assert [t.label for t in at.tabs][-2:] == ["많이 찾는 기술 3", "내가 부족한 것 1"]  # 개수 붙임 (v0.7.4 보완)
 
 
 def test_stats_dialog_lists_every_skill_in_scroll_box(app):

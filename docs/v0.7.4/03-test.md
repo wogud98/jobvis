@@ -37,6 +37,17 @@ python -m pytest        # 706 passed (695개 → 706개)
 - 테스트를 지운 것: `test_inbox_without_ocr_shows_install_hint`, `test_inbox_button_when_ocr_is_ready`(받은함 카드 삭제, F6), `test_inbox_count_*` 2개·`test_start_inbox_reports_result`(`runner.inbox_count`·`start_inbox` 삭제), `test_inbox_summary`(`reports.inbox_summary` 삭제). 기능 자체를 뺀 것이고, 같은 경우(OCR 없음, 결과 글)는 새 테스트가 검사함.
 - `test_image_upload_saves_to_inbox_and_shows_toast`는 저장 뒤 알림 대신 다시 평가 시작을 검사하는 `test_image_upload_saves_and_rescores_that_posting`으로 바꿈.
 
+## 보완: 탭 모양 (D10)
+
+```bash
+ruff check .            # All checks passed!
+ruff format --check .   # 119 files already formatted
+python -m pytest        # 709 passed
+```
+
+- `test_stats_dialog_has_summary_and_two_tabs`: 탭 이름 `많이 찾는 기술 3`, `내가 부족한 것 1` 확인으로 바꿈. 통과
+- Chromium(1280×860, 가짜 공고 5건): 두 탭 너비 596px로 같고 높이 44px, 글자 16px. 고른 탭 라임(밝게 rgb(200,245,58), 어둡게 rgb(182,226,46)), 다른 탭 카드색. 두 번째 탭을 누르면 색이 바뀜. 밑줄 없음
+
 ## 미확인
 
 - 실제 OCR(PaddleOCR)·Gemini로 이미지로 다시 평가 전체 흐름(작업 환경에 OCR 없음, 가짜 OCR·가짜 그래프로만 확인)
