@@ -4,7 +4,7 @@
 
 수집·평가·받은함 버튼은 agent/runner.py를 별도 스레드로 돌린다 (v0.5.2). 이력서 채우기는 agent/resume.py.
 정렬·필터·카드·요약 칸은 agent/view.py, 프로필 입력란은 agent/profile_form.py, 검사는 agent/user_profile.py,
-이미지 저장은 agent/inbox.py에 있다.
+이미지 저장은 agent/inbox.py, 메일 만들기·보내기는 agent/mail.py에 있다 (v0.7).
 """
 
 import hashlib
@@ -15,7 +15,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent import inbox, ocr, profile_form, resume, runner, scoring, settings, store, user_profile, view
+from agent import inbox, mail, ocr, profile_form, resume, runner, scoring, settings, store, user_profile, view
 
 PROFILE = user_profile.DEFAULT
 ICON = str(Path(__file__).parent / "assets" / "icon.png")
@@ -47,6 +47,7 @@ GUIDE = """
 **추가**
 - **공고 보기**: 회사·직무를 누르면 원문, **자세히**는 점수·강점·부족한 점. 왼쪽 **필터**로 검색·정렬
 - **이미지 넣기**: **📷 이미지 필요** 공고는 자세히에서 공고 이미지를 끌어다 놓고 **🖼 받은함 읽기** → 다시 평가
+- **모아 보기·메일**: 📊 지금 목록의 기술·부족한 점 순위, ✉ 고른 공고를 Gmail로 (앱 비밀번호 필요)
 - **그 밖에**: 지원함·관심 없음, 🔄 새로고침, 사이드바 🗑 공고 초기화(DB), 다크 모드는 ⋮ → Light·Dark
 """
 RESUME_HELP = (
@@ -269,6 +270,15 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
 .jv-chip { display: inline-block; margin: 0 6px 6px 0; padding: 2px 10px; border: 2px solid var(--jv-ink);
   border-radius: 4px; font-size: 0.85rem; font-weight: 700; background: var(--jv-card); color: var(--jv-text); }
 .jv-chip.jv-mine { background: var(--jv-mint); color: var(--jv-badge-text); }
+/* 모아 보기 순위 (v0.7 F11, F12). 내 기술은 초록(자세히 칩과 같음), 없는 기술은 빨강 */
+.jv-chip.jv-lack { background: var(--jv-low); color: var(--jv-badge-text); }
+.jv-rank-row { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+.jv-rank-no { width: 1.6em; text-align: right; font-weight: 900; }
+.jv-rank-row .jv-chip { margin: 0; flex: 0 0 auto; max-width: 11em; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.jv-rank-row .jv-bar { min-width: 3em; }
+.jv-rank-row .jv-bar > div { background: var(--jv-blue); }
+.jv-rank-num { width: 3em; text-align: right; font-weight: 800; white-space: nowrap; }
 .jv-strength { color: var(--jv-sub); font-size: 0.9rem; }
 a.jv-head, a.jv-head:visited { color: inherit; text-decoration: none; }
 a.jv-head:hover { text-decoration: underline; }
@@ -780,6 +790,8 @@ def show_postings() -> None:
         st.toast(done, icon="🗑")
     if done := st.session_state.pop(UPLOAD_DONE, None):
         st.toast(done, icon="🖼")
+    if done := st.session_state.pop(MAIL_DONE, None):
+        st.toast(done, icon="✉")
     try:
         rows, error = load_rows(), None
     except Exception as e:
@@ -788,10 +800,12 @@ def show_postings() -> None:
     if error is not None:
         st.error(view.error_message(error))  # v0.5 F9
         st.sidebar.caption("공고를 읽으면 필터가 보입니다.")
+        open_asked([], None)  # 공고를 못 읽어도 창은 열고 안내 한 줄 (v0.7 D3)
         return
     if not rows:
         st.info("공고 없음, 위 수집 카드에서 키워드를 넣고 수집하세요.")  # v0.5 F10
         st.sidebar.caption("공고가 생기면 필터가 보입니다.")
+        open_asked([], None)
         return
 
     # 화면에서 바꾼 체크·관심 없음·지원 (F39, F44, v0.5.3 F11)
@@ -829,6 +843,8 @@ def show_postings() -> None:
         )
     show_reset(rows)
     shown = view.apply(items, filters)
+    known = my_skills()
+    open_asked(shown, filters, known)
     data = view.chart(shown)  # 필터를 지난 공고 중 높은 5개 (F42)
     if data:  # 점수 있는 공고가 있을 때만 칸을 보인다 (v0.6.1 F6)
         with st.container(border=True, key="box-chart"):  # 필터가 사이드바로 가서 가로 전체 (v0.5.4 F1)
@@ -843,11 +859,204 @@ def show_postings() -> None:
     first = (number - 1) * view.PAGE_SIZE
     where = f" · {first + 1}–{first + len(cards)}번째" if pages > 1 else ""
     st.caption(f"{len(shown)}건 / 전체 {len(items)}건{where}")
-    known = my_skills()
     for card in cards:
         show_card(card, known)
     if pages > 1:
         show_pager(number, pages)
+
+
+MAIL_ASKED = "mail_asked"  # 위 ✉ 메일을 눌렀는지 (v0.7 D3)
+STATS_ASKED = "stats_asked"  # 위 📊 모아 보기를 눌렀는지
+MAIL_DONE = "mail_done"  # 방금 보낸 결과 문구 (알림)
+MAIL_ERROR = "mail_error"  # 보내지·저장하지 못한 이유 (창에 다시 보임)
+MAIL_NOTE = "mail_note"  # 창 안 안내 (저장함, 시험 메일 보냄, 지움)
+MAIL_SETTINGS = "mail_settings"  # 메일 창에서 설정 칸을 보일지
+EMPTY_STATS = "모을 공고가 없습니다. 필터를 바꾸거나 평가를 먼저 해 주세요"  # v0.7 F13
+
+
+def ask_mail() -> None:
+    st.session_state[MAIL_ASKED] = True
+    st.session_state.pop(MAIL_SETTINGS, None)  # 설정이 있으면 고르기부터
+
+
+def ask_stats() -> None:
+    st.session_state[STATS_ASKED] = True
+
+
+def open_asked(shown: list[view.Card], filters: view.Filters | None, known: list[str] = ()) -> None:
+    """위 버튼으로 부른 창을 지금 목록으로 연다 (v0.7 D3). 창 안 안내·오류가 남아 있으면 다시 연다."""
+    if st.session_state.pop(MAIL_ASKED, False) or MAIL_ERROR in st.session_state or MAIL_NOTE in st.session_state:
+        mail_dialog(shown)
+    elif st.session_state.pop(STATS_ASKED, False):
+        stats_dialog(shown, filters, list(known))
+
+
+def pick_label(card: view.Card) -> str:
+    score = f"{card.score}점" if card.score is not None else card.verdict
+    return f"{card.company} · {card.title} · {score}"
+
+
+def pick_all(rows: list[int]) -> None:
+    for row in rows:
+        st.session_state[f"mail-pick-{row}"] = True
+
+
+def picked(shown: list[view.Card]) -> list[view.Card]:
+    return [card for card in shown if st.session_state.get(f"mail-pick-{card.row}")]
+
+
+def send_mail(shown: list[view.Card]) -> None:
+    """보내기 콜백. 창 안 버튼만 다시 그려질 때도 보내게 콜백에서 한다 (v0.7 D6)."""
+    config = settings.mail_config()
+    cards = picked(shown)
+    try:
+        if config is None:
+            raise mail.MailError("메일 설정이 없습니다. 설정을 먼저 저장해 주세요.")
+        mail.send(mail.build(cards, config.sender, config.to, date.today()), config.sender, config.password)
+    except mail.MailError as e:  # 문구에 비밀번호는 없다 (D5)
+        st.session_state[MAIL_ERROR] = settings.redact(str(e))
+        return
+    for card in cards:
+        st.session_state.pop(f"mail-pick-{card.row}", None)
+    st.session_state[MAIL_DONE] = f"{len(cards)}건을 보냄 ({config.to})"  # F4
+
+
+def save_mail_settings() -> None:
+    try:
+        settings.save_mail(
+            st.session_state.get("mail-from", ""),
+            st.session_state.get("mail-password", ""),
+            st.session_state.get("mail-to", ""),
+        )
+    except ValueError as e:  # 문구에 비밀번호는 들어 있지 않다 (N2)
+        st.session_state[MAIL_ERROR] = str(e)
+        return
+    st.session_state[MAIL_SETTINGS] = True  # 저장한 뒤 시험 메일을 보낼 수 있게 설정 칸에 머문다
+    st.session_state[MAIL_NOTE] = "저장함. 시험 메일 보내기로 받는지 확인해 보세요."
+
+
+def send_test_mail() -> None:
+    config = settings.mail_config()
+    if config is None:
+        return
+    st.session_state[MAIL_SETTINGS] = True
+    try:
+        mail.send(mail.test_message(config.sender, config.to), config.sender, config.password)
+    except mail.MailError as e:
+        st.session_state[MAIL_ERROR] = settings.redact(str(e))
+        return
+    st.session_state[MAIL_NOTE] = f"시험 메일을 보냄 ({config.to}). 메일함을 확인해 주세요."
+
+
+def delete_mail_settings() -> None:
+    settings.delete_mail()
+    st.session_state[MAIL_SETTINGS] = True
+    st.session_state[MAIL_NOTE] = (
+        "이 PC에서 메일 설정을 지웠습니다. 앱 비밀번호 자체를 없애려면 "
+        f"[Google 앱 비밀번호]({settings.MAIL_PAGE})에서 삭제하세요."
+    )
+
+
+def show_mail_settings(config: settings.MailConfig | None) -> None:
+    """메일 설정 칸 (v0.7 F8). 앱 비밀번호는 가려서 받고, 저장한 뒤에는 끝 4자리만 보인다."""
+    st.markdown("**메일 설정** <span class='jv-muted'>Gmail로 보냅니다</span>", unsafe_allow_html=True)
+    st.caption(
+        f"Google 2단계 인증을 켠 뒤 [앱 비밀번호]({settings.MAIL_PAGE})를 만들어 16자를 붙여넣으세요. "
+        "이 PC에만 저장되고 화면에는 끝 4자리만 보입니다."
+    )
+    with st.form("mail_form", border=False):
+        st.text_input("보내는 Gmail 주소", value=config.sender if config else "", key="mail-from",
+                      placeholder="name@gmail.com")  # fmt: skip
+        st.text_input(
+            "앱 비밀번호", type="password", key="mail-password",
+            placeholder=f"그대로 두면 지금 비밀번호 ({settings.mail_masked()})" if config else "abcd efgh ijkl mnop",
+        )  # fmt: skip
+        st.text_input("받는 주소", value=config.to if config else "", key="mail-to",
+                      placeholder="비우면 보내는 주소로")  # fmt: skip
+        st.form_submit_button("저장", type="primary", on_click=save_mail_settings)
+    if config is None:
+        return
+    test, back = st.columns(2)
+    test.button("✉ 시험 메일 보내기", key="mail-test", on_click=send_test_mail, use_container_width=True)
+    back.button("공고 고르기 →", key="mail-pick-view", use_container_width=True,
+                on_click=lambda: st.session_state.pop(MAIL_SETTINGS, None))  # fmt: skip
+    st.button("🗑 이 PC에서 메일 설정 삭제", key="mail-delete", on_click=delete_mail_settings, type="tertiary",
+              help="이 PC에 저장한 주소·앱 비밀번호만 지웁니다. Google의 앱 비밀번호는 그대로")  # fmt: skip
+
+
+@st.dialog("✉ 메일")
+def mail_dialog(shown: list[view.Card]) -> None:
+    """설정이 없으면 설정 칸, 있으면 지금 목록에서 골라 보내기 (v0.7 F1–F4, F8, F9, D6)."""
+    if MAIL_DONE in st.session_state:  # 보냈으면 창을 닫고 알림을 띄운다
+        st.rerun()
+    if note := st.session_state.pop(MAIL_NOTE, None):
+        st.success(note)
+    if error := st.session_state.pop(MAIL_ERROR, None):
+        st.error(error)
+    config = settings.mail_config()
+    if config is None or st.session_state.get(MAIL_SETTINGS):
+        show_mail_settings(config)
+        return
+    head, change = st.columns([3, 1], vertical_alignment="center")
+    head.markdown(f"받는 주소 **{escape(config.to)}**", unsafe_allow_html=True)
+    change.button("설정", key="mail-settings", use_container_width=True,
+                  on_click=lambda: st.session_state.update({MAIL_SETTINGS: True}))  # fmt: skip
+    if not shown:
+        st.info("보낼 공고가 없습니다. 필터를 바꾸거나 공고를 먼저 수집해 주세요.")
+        return
+    st.button(f"보이는 공고 모두 고르기 ({len(shown)}건)", key="mail-all", type="tertiary",
+              on_click=pick_all, args=([card.row for card in shown],))  # fmt: skip
+    with st.container(height=min(60 + 36 * len(shown), 360), border=True):
+        for card in shown:
+            st.checkbox(pick_label(card), key=f"mail-pick-{card.row}")  # 처음엔 아무것도 고르지 않음 (F2)
+    count = len(picked(shown))
+    if count > mail.MAX:  # F3
+        st.warning(f"한 번에 {mail.MAX}건까지 보낼 수 있습니다. 지금 {count}건을 골랐습니다.")
+    elif not count:
+        st.caption("보낼 공고를 골라 주세요.")
+    st.button(f"✉ {count}건 보내기", type="primary", key="mail-send", disabled=not 0 < count <= mail.MAX,
+              on_click=send_mail, args=(shown,), use_container_width=True)  # fmt: skip
+
+
+def rank_rows(items: list[tuple[str, float, str, str]]) -> str:
+    """순위 줄 HTML [(이름, 막대 값, 오른쪽 글자, 칩 class)]. 막대는 1등을 100%로."""
+    top = max((value for _, value, _, _ in items), default=0) or 1
+    return "".join(
+        f"<div class='jv-rank-row'><span class='jv-rank-no'>{number}</span>"
+        f"<span class='jv-chip {kind}' title='{escape(name)}'>{escape(name)}</span>"
+        f"<div class='jv-bar'><div style='width:{value / top * 100:.0f}%'></div></div>"
+        f"<span class='jv-rank-num'>{escape(note)}</span></div>"
+        for number, (name, value, note, kind) in enumerate(items, 1)
+    )
+
+
+@st.dialog("📊 모아 보기", width="large")
+def stats_dialog(shown: list[view.Card], filters: view.Filters | None, known: list[str]) -> None:
+    """지금 목록의 기술 스택·부족한 점 순위 (v0.7 F10–F13). LLM을 부르지 않는다 (N5)."""
+    labels = view.filter_labels(filters) if filters else []
+    where = f"필터 {escape(', '.join(labels))}" if labels else "필터 없음"
+    st.markdown(f"공고 **{len(shown)}건** 기준 · {where}", unsafe_allow_html=True)
+    left, right = st.columns(2)
+    with left:
+        st.markdown(f"**기술 스택 순위** <span class='jv-muted'>위 {view.STACK_TOP}개 · 초록은 내 기술</span>",
+                    unsafe_allow_html=True)  # fmt: skip
+        stack = view.stack_rank(shown, known)
+        if stack:
+            items = [(name, count, f"{count}건", "jv-mine" if mine else "jv-lack") for name, count, mine in stack]
+            st.markdown(rank_rows(items), unsafe_allow_html=True)
+        else:
+            st.caption(EMPTY_STATS)
+    with right:
+        st.markdown(f"**부족한 점 순위** <span class='jv-muted'>위 {view.GAP_TOP}개</span>", unsafe_allow_html=True)
+        ranked, excluded = view.gap_rank(shown)
+        if ranked:
+            items = [(name, weight, f"{count}건", "") for name, weight, count in ranked]
+            st.markdown(rank_rows(items), unsafe_allow_html=True)
+            st.caption("점수가 낮은 공고에서 나온 것일수록 위 (100 − 종합점수로 가중)")
+        else:
+            st.caption(EMPTY_STATS)
+        if excluded:
+            st.caption(f"평가 전 공고 {excluded}건은 뺌")
 
 
 def show_reset(rows: list[dict]) -> None:
@@ -1236,7 +1445,10 @@ def main() -> None:
     remember_visit()
     if settings.has_key():  # 키가 없으면 키 창이 먼저 뜬다. 창은 한 번에 하나 (v0.6.1 F17)
         open_guide_first_time()
-    title, key, guide, refresh = st.columns([4, 1.2, 1, 1], vertical_alignment="center")
+    title, actions = st.columns([2.4, 3], vertical_alignment="center")
+    with actions:  # 버튼이 다섯 개라 두 줄로. 한 줄이면 창이 좁을 때 글자가 잘린다 (v0.7 D3)
+        key, guide, refresh = st.columns([1.2, 1, 1.2])
+        mail_column, stats = st.columns(2)
     title.markdown(
         f'<div class="jv-hero"><span class="jv-kicker">✦ AI 취업 비서</span><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',
         unsafe_allow_html=True,
@@ -1247,6 +1459,9 @@ def main() -> None:
         reload_rows()
         reload_profile()  # 프로필도 저장된 값으로 (v0.6.1 F24)
     key_button(key)
+    # 창은 show_postings가 지금 목록(shown)을 만든 뒤 연다 (v0.7 D3)
+    mail_column.button("✉ 메일", use_container_width=True, key="mail-open", on_click=ask_mail)
+    stats.button("📊 모아 보기", use_container_width=True, key="stats-open", on_click=ask_stats)
     postings_tab, profile_tab = st.tabs(["📋 공고", "👤 프로필"])  # v0.5 F1
     with postings_tab:
         show_postings()

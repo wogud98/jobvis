@@ -12,7 +12,7 @@ import gspread
 import requests
 import sqlalchemy.exc
 
-from agent import postings, scoring, sheets, store
+from agent import gaps, postings, scoring, sheets, store
 
 UNKNOWN_SOURCE = "미상"  # 출처 칸이 빈 예전 줄 (F6)
 BLANK_EXPERIENCE = "(없음)"  # 경력 칸이 빈 줄의 필터 값
@@ -345,6 +345,60 @@ def summary(items: list[Card]) -> list[tuple[str, int, str]]:
         # 본문 미확보 + 이미지 일부 못 읽음. "이미지 필요한 공고만 보기"와 같은 기준 (v0.5.4 F3)
         ("이미지 필요", sum(card.can_upload for card in items), "넣으면 점수가 정확해짐"),
     ]
+
+
+STACK_TOP, GAP_TOP = 15, 10  # 모아 보기 순위 개수 (v0.7 F11, F12)
+
+
+def stack_rank(items: list[Card], known: list[str], top: int = STACK_TOP) -> list[tuple[str, int, bool]]:
+    """기술 스택 순위 [(기술, 나온 공고 수, 내 프로필에 있는지)] (v0.7 F11, D8, N5).
+
+    띄어쓰기·대소문자만 다른 이름은 같은 기술로 묶고, 한 공고 안에서는 한 번만 센다. 이름은 처음 나온 모양.
+    같은 수면 이름 순. 내 기술 판단은 자세히의 기술 칩(stack_chips)과 같다.
+    """
+    mine = {_skill_key(name) for name in known}
+    names: dict[str, str] = {}
+    counts: dict[str, int] = {}
+    for card in items:
+        stack = card.details.get("기술스택", "")
+        seen = set()
+        for item in split_items("" if stack == NONE else stack):
+            key = _skill_key(item)
+            names.setdefault(key, item)
+            if key not in seen:
+                seen.add(key)
+                counts[key] = counts.get(key, 0) + 1
+    ranked = sorted(counts, key=lambda key: (-counts[key], names[key].casefold()))
+    return [(names[key], counts[key], key in mine) for key in ranked[:top]]
+
+
+def gap_rank(items: list[Card], top: int = GAP_TOP) -> tuple[list[tuple[str, float, int]], int]:
+    """부족한 점 순위 ([(이름, 가중 합, 공고 수)], 점수 없어 뺀 공고 수) (v0.7 F12, D7).
+
+    v0.3 --gaps와 같은 함수(gaps.analyze)를 써서 (100 − 종합점수)로 가중한다.
+    """
+    rows = [{"score": "" if card.score is None else str(card.score), "gaps": ",".join(card.gaps)} for card in items]
+    ranked, _, excluded = gaps.analyze(rows, top)
+    return ranked, excluded
+
+
+def filter_labels(filters: Filters) -> list[str]:
+    """모아 보기 창 위에 보일 켜진 필터 이름 (v0.7 F10). 아무것도 없으면 빈 목록."""
+    labels = []
+    if filters.query.strip():
+        labels.append(f"검색 '{filters.query.strip()}'")
+    if filters.sources:
+        labels.append("출처 " + "·".join(filters.sources))
+    if filters.experiences:
+        labels.append("경력 " + "·".join(filters.experiences))
+    toggles = (
+        (filters.scored_only, "평가된 공고만"),
+        (filters.recommended_only, "추천 이상만"),
+        (filters.applied_only, "지원한 공고만"),
+        (filters.image_only, "이미지 필요한 공고만"),
+        (filters.hidden_only, "관심 없는 공고만"),
+    )
+    return labels + [name for on, name in toggles if on]
 
 
 def error_message(error: Exception) -> str:

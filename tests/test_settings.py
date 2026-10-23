@@ -115,3 +115,77 @@ def test_redact_leaves_text_without_key_and_ignores_short_values(clean, monkeypa
     monkeypatch.setenv("GOOGLE_API_KEY", "abc")  # 너무 짧은 값은 흔한 글자까지 가릴 수 있어 건너뜀
 
     assert settings.redact("abc 연결 실패") == "abc 연결 실패"
+
+
+# ---- 메일 설정 (v0.7 F8, F9, N2, D4, D5) ----
+
+PASSWORD = "abcdefghijklmnop"
+
+
+@pytest.fixture
+def mail_clean(clean, monkeypatch):
+    for name in settings.MAIL_NAMES:
+        monkeypatch.setenv(name, "")  # 테스트가 끝나면 원래대로 되돌리게 기록해 둔다
+        monkeypatch.delenv(name)
+    return clean
+
+
+def test_save_mail_strips_spaces_and_defaults_to_sender(mail_clean):
+    config = settings.save_mail(" me@gmail.com ", "abcd efgh ijkl mnop", "", mail_clean)
+
+    assert config == settings.MailConfig("me@gmail.com", PASSWORD, "me@gmail.com")  # 받는 주소 비우면 보내는 주소
+    saved = mail_clean.read_text(encoding="utf-8")
+    assert f"JOBVIS_MAIL_PASSWORD={PASSWORD}" in saved and "JOBVIS_MAIL_TO=me@gmail.com" in saved
+    assert settings.mail_config() == config
+    assert settings.mail_masked() == "••••mnop"
+
+
+def test_mail_config_is_none_without_password(mail_clean, monkeypatch):
+    monkeypatch.setenv(settings.MAIL_FROM, "me@gmail.com")
+
+    assert settings.mail_config() is None and settings.mail_masked() == ""
+
+
+def test_save_mail_keeps_password_when_left_blank(mail_clean):
+    settings.save_mail("me@gmail.com", PASSWORD, "", mail_clean)
+    config = settings.save_mail("me@gmail.com", "", "phone@naver.com", mail_clean)
+
+    assert config.password == PASSWORD and config.to == "phone@naver.com"
+
+
+@pytest.mark.parametrize(
+    ("sender", "password", "to", "word"),
+    [
+        ("me", PASSWORD, "", "보내는"),
+        ("me@gmail.com", PASSWORD, "you@", "받는"),
+        ("me@gmail.com", "", "", "넣어"),
+        ("me@gmail.com", "abcd efgh ijkl", "", "16자"),
+        ("me@gmail.com", "abcdefghijklmno1", "", "16자"),
+    ],
+)
+def test_save_mail_rejects_bad_values_without_echoing_password(mail_clean, sender, password, to, word):
+    with pytest.raises(ValueError) as error:
+        settings.save_mail(sender, password, to, mail_clean)
+
+    assert word in str(error.value)  # F9
+    assert not mail_clean.exists()
+    assert not password.strip() or "".join(password.split()) not in str(error.value)
+
+
+def test_delete_mail_removes_only_mail_settings(mail_clean):
+    settings.save_key(KEY, mail_clean)
+    settings.save_mail("me@gmail.com", PASSWORD, "", mail_clean)
+
+    settings.delete_mail(mail_clean)
+
+    saved = mail_clean.read_text(encoding="utf-8")
+    assert "JOBVIS_MAIL" not in saved and KEY in saved
+    assert settings.mail_config() is None and os.environ.get("JOBVIS_MAIL_PASSWORD") is None
+
+
+def test_redact_hides_mail_password_in_both_shapes(mail_clean):
+    settings.save_mail("me@gmail.com", PASSWORD, "", mail_clean)
+
+    text = settings.redact(f"login failed {PASSWORD} / abcd efgh ijkl mnop")
+
+    assert PASSWORD not in text and "abcd efgh" not in text  # D5

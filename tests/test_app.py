@@ -1332,3 +1332,195 @@ def test_app_has_no_bare_expressions_that_magic_would_draw():
         if isinstance(node, ast.Expr) and not isinstance(node.value, (ast.Call, ast.Constant))
     ]
     assert bare == []
+
+
+# ---- v0.7 메일 (F1–F9) ----
+
+MAIL_PASSWORD = "abcdefghijklmnop"
+
+
+@pytest.fixture
+def mail_env(monkeypatch):
+    """메일 설정 환경 변수. 화면에서 저장해도 테스트가 끝나면 되돌린다."""
+    from agent import settings
+
+    for name in settings.MAIL_NAMES:
+        monkeypatch.setenv(name, "")
+
+
+@pytest.fixture
+def sent(monkeypatch, mail_env):
+    """mail.send를 가짜로 바꿔 보낸 메일을 모은다. 실제 메일 서버에 연결하지 않는다 (N3)."""
+    from agent import mail
+
+    messages = []
+    monkeypatch.setattr(mail, "send", lambda message, sender, password: messages.append((message, sender, password)))
+    return messages
+
+
+def with_mail(monkeypatch):
+    monkeypatch.setenv("JOBVIS_MAIL_FROM", "me@gmail.com")
+    monkeypatch.setenv("JOBVIS_MAIL_PASSWORD", MAIL_PASSWORD)
+    monkeypatch.setenv("JOBVIS_MAIL_TO", "phone@example.com")
+
+
+def open_mail(at):
+    at.button(key="mail-open").click().run()
+    assert len(at.get("dialog")) == 1
+    return at
+
+
+def screen_text(at) -> str:
+    parts = [m.value for m in at.markdown] + [e.value for e in at.error] + [t.value for t in at.toast]
+    parts += [s.value for s in at.success] + [c.value for c in at.caption] + [b.label for b in at.button]
+    return " ".join(parts) + " ".join(str(t.value) for t in at.text_input)
+
+
+def test_mail_without_settings_shows_form_and_saves(app, sent, tmp_path):
+    at = open_mail(app([scorable(2)]))
+
+    assert any("앱 비밀번호" in c.value and "apppasswords" in c.value for c in at.caption)  # F8 안내
+    assert not [b for b in at.button if b.key == "mail-send"]  # 설정 전에는 보내기 없음
+    at.text_input(key="mail-from").input("me@gmail.com")
+    at.text_input(key="mail-password").input("abcd efgh ijkl mnop")
+    at.button[[b.label for b in at.button].index("저장")].click().run()
+
+    saved = (tmp_path / "data" / "settings.env").read_text(encoding="utf-8")
+    assert f"JOBVIS_MAIL_PASSWORD={MAIL_PASSWORD}" in saved and "JOBVIS_MAIL_TO=me@gmail.com" in saved
+    assert any("시험 메일" in s.value for s in at.success)  # 저장한 뒤 시험 메일 안내
+    assert MAIL_PASSWORD not in screen_text(at)  # 화면에 비밀번호 없음 (N2)
+
+    at.button(key="mail-test").click().run()
+
+    assert [(m["Subject"], s, p) for m, s, p in sent] == [("[JOBVIS] 시험 메일", "me@gmail.com", MAIL_PASSWORD)]
+    assert any("시험 메일을 보냄 (me@gmail.com)" in s.value for s in at.success)
+
+
+def test_mail_settings_reject_bad_address_without_saving(app, mail_env, tmp_path):
+    at = open_mail(app([scorable(2)]))
+    at.text_input(key="mail-from").input("me")
+    at.text_input(key="mail-password").input(MAIL_PASSWORD)
+    at.button[[b.label for b in at.button].index("저장")].click().run()
+
+    assert any("주소 형식" in e.value for e in at.error)  # F9, 창이 다시 떠서 이유를 보인다
+    assert not (tmp_path / "data" / "settings.env").exists()
+
+
+def test_mail_picks_from_shown_cards_and_sends(app, sent, monkeypatch):
+    with_mail(monkeypatch)
+    at = open_mail(app([scorable(2, score="80", verdict="추천"), scorable(3), scorable(4, hidden="TRUE")]))
+
+    labels = [c.label for c in at.checkbox if c.key.startswith("mail-pick-")]
+    assert labels == ["회사2 · 백엔드 · 80점", "회사3 · 백엔드 · 평가 전"]  # 관심 없음은 빠진 지금 목록 (F2)
+    assert not any(c.value for c in at.checkbox if c.key.startswith("mail-pick-"))  # 처음엔 아무것도 안 고름
+    assert at.button(key="mail-send").disabled  # 0건 (F3)
+    assert any("phone@example.com" in m.value for m in at.markdown)
+
+    # 창 안 체크는 실제로는 창만 다시 그린다. AppTest는 전체를 다시 그려 창이 닫혀서 고른 상태를 넣고 다시 연다
+    at.session_state["mail-pick-3"] = True
+    open_mail(at)
+    assert not at.button(key="mail-send").disabled and at.button(key="mail-send").label == "✉ 1건 보내기"
+    at.button(key="mail-send").click().run()
+
+    assert len(sent) == 1
+    message, sender, password = sent[0]
+    assert message["To"] == "phone@example.com" and sender == "me@gmail.com" and password == MAIL_PASSWORD
+    assert message["Subject"].startswith("[JOBVIS] 공고 1건")
+    assert "회사3" in message.get_body(("plain",)).get_content()
+    assert "회사2" not in message.get_body(("plain",)).get_content()
+    assert any("1건을 보냄 (phone@example.com)" in t.value for t in at.toast)  # F4
+    assert not at.get("dialog")
+
+
+def test_mail_pick_all_and_more_than_max_cannot_send(app, sent, monkeypatch):
+    from agent import mail
+
+    with_mail(monkeypatch)
+    at = open_mail(app([scorable(n) for n in range(2, 2 + mail.MAX + 1)]))
+
+    at.button(key="mail-all").click().run()
+    open_mail(at)  # 창 안 버튼은 창만 다시 그린다. 시험에서는 창을 다시 연다
+
+    assert all(c.value for c in at.checkbox if c.key.startswith("mail-pick-"))
+    assert any(f"{mail.MAX}건까지" in w.value for w in at.warning)  # F3
+    assert at.button(key="mail-send").disabled and not sent
+
+
+def test_mail_pick_all_callback_checks_every_shown_card(app, sent, monkeypatch):
+    with_mail(monkeypatch)
+    at = open_mail(app([scorable(2), scorable(3)]))
+
+    at.button(key="mail-all").click().run()
+
+    assert at.session_state["mail-pick-2"] and at.session_state["mail-pick-3"]
+
+
+def test_mail_failure_stays_in_dialog_without_secret(app, mail_env, monkeypatch):
+    from agent import mail
+
+    def fail(message, sender, password):
+        raise mail.MailError(mail.AUTH_ERROR)
+
+    monkeypatch.setattr(mail, "send", fail)
+    with_mail(monkeypatch)
+    at = app([scorable(2)])
+    at.session_state["mail-pick-2"] = True
+    open_mail(at)
+    at.button(key="mail-send").click().run()
+
+    assert any("앱 비밀번호가 맞지 않습니다" in e.value for e in at.error)  # F9
+    assert len(at.get("dialog")) == 1 and not at.toast
+    assert MAIL_PASSWORD not in screen_text(at)
+
+
+def test_mail_dialog_without_postings_says_so(app, sent, monkeypatch):
+    with_mail(monkeypatch)
+    at = open_mail(app([]))
+
+    assert any("보낼 공고가 없습니다" in i.value for i in at.info)
+
+
+def test_mail_settings_can_be_deleted(app, mail_env, tmp_path):
+    at = open_mail(app([scorable(2)]))
+    at.text_input(key="mail-from").input("me@gmail.com")
+    at.text_input(key="mail-password").input(MAIL_PASSWORD)
+    at.button[[b.label for b in at.button].index("저장")].click().run()
+    at.button(key="mail-delete").click().run()
+
+    assert "JOBVIS_MAIL" not in (tmp_path / "data" / "settings.env").read_text(encoding="utf-8")
+    assert any("지웠습니다" in s.value for s in at.success)
+
+
+# ---- v0.7 모아 보기 (F10–F13) ----
+
+
+def test_stats_dialog_ranks_stack_and_gaps_of_shown_cards(app, tmp_path):
+    text = "skills: {main: [Python]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
+    rows = [
+        scorable(2, score="40", verdict="보통", stack="Python, AWS", gaps="AWS 경험"),
+        scorable(3, score="80", verdict="추천", stack="python, Docker", gaps="AWS 경험, Kafka"),
+        scorable(4, stack="<b>Go</b>"),
+    ]
+    at = app(rows)
+    at.button(key="stats-open").click().run()
+
+    assert len(at.get("dialog")) == 1
+    html = " ".join(m.value for m in at.markdown)
+    assert "공고 **3건** 기준 · 필터 없음" in html  # F10
+    # 이름은 목록(점수 높은 순)에서 처음 나온 모양. 대소문자 달라도 내 기술은 초록 (F11)
+    assert "<span class='jv-chip jv-mine' title='python'>python</span>" in html
+    assert "<span class='jv-rank-num'>2건</span>" in html
+    assert "jv-chip jv-lack' title='AWS'" in html
+    assert "&lt;b&gt;Go&lt;/b&gt;" in html and "<b>Go</b>" not in html  # 시트 글자 escape
+    assert html.index("AWS 경험") < html.index("Kafka")  # 가중치 순 (F12)
+    assert any("평가 전 공고 1건은 뺌" in c.value for c in at.caption)
+
+
+def test_stats_dialog_shows_filters_and_empty_message(app):
+    at = app([scorable(2)])
+    at.text_input(key="search").input("없는회사").run()
+    at.button(key="stats-open").click().run()
+
+    assert any("공고 **0건** 기준 · 필터 검색 &#x27;없는회사&#x27;" in m.value for m in at.markdown)
+    assert sum("모을 공고가 없습니다" in c.value for c in at.caption) == 2  # F13
