@@ -11,7 +11,7 @@
 | 지금 같은 기술 판단 | `view._skill_key`는 띄어쓰기 삭제 + casefold, `gaps.analyze`는 앞뒤 공백 + casefold로 서로 조금 다름 | 둘 다 `skills.key` 하나로(D2). 그래서 `--gaps`에서 "Spring Boot"와 "SpringBoot"도 같게 됨 |
 | 사전을 어디에 | 코드 안 dict는 고치려면 코드를 알아야 함. 프로필이 이미 YAML(PyYAML) | `agent/skill_aliases.yaml`(D1). Docker 이미지는 `COPY . .`로 들어가고 `.dockerignore`에 걸리지 않음 |
 | 전부 보이면 칸 | 칸은 v0.7.2부터 `st.container(height=400)`라 넘치면 칸 안 스크롤 | 칸 그대로, 자르기만 없앰(D3). 시험 데이터 16줄에서 scrollHeight 510 > clientHeight 400 확인 |
-| 크기 | 사전 한 줄 50–60바이트, 34묶음 약 1.6KB | 걱정 없음. 찾기는 dict라 개수와 상관없음 |
+| 크기 | 사전 한 줄 50–60바이트, 34묶음 약 1.6KB(보완 후 84묶음 약 3.2KB) | 걱정 없음. 찾기는 dict라 개수와 상관없음 |
 
 ## 결정
 
@@ -22,6 +22,7 @@
 | D3 | `view.stack_rank(items, known, top=None)`, `view.gap_rank(items, top=None)`. 기본은 전부. `STACK_TOP`·`GAP_TOP` 삭제. `gaps.analyze(rows, top=10)`은 `top=None`을 받으면 전부, `main.py --gaps`는 지금처럼 10 (F1, F4) | |
 | D4 | 순위에 보이는 이름: 사전에 있으면 대표 이름, 없으면 처음 나온 모양(v0.7 D8 그대로). 자세히의 칩 글자는 공고에 적힌 그대로 두고 색만 같은 기준 (F2, F3) | 칩은 원문을 보여 주는 곳 |
 | D5 | 첫 사전 34묶음: AI·데이터(AI 에이전트, LLM, RAG, 머신러닝, 딥러닝, NLP, LangChain, LangGraph, PyTorch, TensorFlow), 언어(Python, Java, JavaScript, TypeScript, C++, C#, Go), 프레임워크(Spring Boot, Node.js, React, Vue.js, Next.js), 인프라(PostgreSQL, Kubernetes, Docker, AWS, GCP, Azure, Linux, Git, GitHub Actions, CI/CD), 방식(REST API, MSA). 영어 줄임말·한글 표기만 | SQL·MySQL, Java·JavaScript는 넣지 않음(N2) |
+| D7 | 보완(2026-10-23 재리 "진행"): 50묶음 더해 84묶음. 널리 쓰는 줄임말(MSSQL, EC2, S3, sklearn, GenAI, EF Core), 한글 표기(스프링, 판다스, 젠킨스, 오라클), 버전 표기(HTML5, CSS3, SQLite3, JUnit5), Apache 접두어(Kafka, Spark, Airflow, Hadoop). 빈 묶음·대표 이름 다시 적기·띄어쓰기/대소문자만 다른 이름은 두지 않고 테스트로 막음. Spring·Spring Boot, SQL Server·SQL, GitHub·GitHub Actions, EC2·AWS는 따로. 실제 공고로 빈도는 확인하지 않음(재리에게 데이터 요구하지 않음), 확실히 같은 말만 넣음 | 잘못 묶기가 유일한 손해라 확실한 것만 |
 | D6 | `app.VERSION = "v0.7.3"`, README 배지도 같이 | |
 
 ## 구성

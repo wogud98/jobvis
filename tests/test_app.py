@@ -1521,11 +1521,11 @@ def test_mail_settings_can_be_deleted(app, mail_env, tmp_path):
 
 
 def test_stats_dialog_ranks_stack_and_gaps_of_shown_cards(app, tmp_path):
-    text = "skills: {main: [Kotlin]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+    text = "skills: {main: [Gradle]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
     (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
-    rows = [  # Kotlin은 같은 말 사전에 없는 이름 (사전 이름은 대표 이름으로 보임, v0.7.3 F2)
-        scorable(2, score="40", verdict="보통", stack="Kotlin, AWS", gaps="AWS 경험"),
-        scorable(3, score="80", verdict="추천", stack="kotlin, Docker", gaps="AWS 경험, Kafka"),
+    rows = [  # Gradle은 같은 말 사전에 없는 이름 (사전 이름은 대표 이름으로 보임, v0.7.3 F2)
+        scorable(2, score="40", verdict="보통", stack="Gradle, AWS", gaps="AWS 경험"),
+        scorable(3, score="80", verdict="추천", stack="gradle, Docker", gaps="AWS 경험, Kafka"),
         scorable(4, stack="<b>Go</b>"),
     ]
     at = app(rows)
@@ -1535,7 +1535,7 @@ def test_stats_dialog_ranks_stack_and_gaps_of_shown_cards(app, tmp_path):
     html = " ".join(m.value for m in at.markdown)
     assert "공고 **3건** 기준 · 필터 없음" in html  # F10
     # 이름은 목록(점수 높은 순)에서 처음 나온 모양. 대소문자 달라도 내 기술은 초록 (F11)
-    assert "<span class='jv-chip jv-mine' title='kotlin · 내 프로필에 있는 기술'>kotlin</span>" in html
+    assert "<span class='jv-chip jv-mine' title='gradle · 내 프로필에 있는 기술'>gradle</span>" in html
     assert "<span class='jv-rank-num'>2건</span>" in html
     assert "jv-chip jv-lack' title='AWS'" in html
     assert "&lt;b&gt;Go&lt;/b&gt;" in html and "<b>Go</b>" not in html  # 시트 글자 escape

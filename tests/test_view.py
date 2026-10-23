@@ -477,8 +477,8 @@ def test_stack_rank_empty():
 def test_gap_rank_weights_like_gaps_command_and_counts_excluded():
     items = view.cards(
         [
-            scored(2, 40, gaps="Jenkins, Docker"),  # 가중 0.6
-            scored(3, 90, gaps="jenkins"),  # 0.1
+            scored(2, 40, gaps="Gradle, Docker"),  # 가중 0.6
+            scored(3, 90, gaps="gradle"),  # 0.1
             make_row(4, gaps="Kubernetes"),  # 점수 없음 → 뺌
         ]
     )
@@ -487,7 +487,7 @@ def test_gap_rank_weights_like_gaps_command_and_counts_excluded():
 
     # 사전에 없는 이름은 목록(점수 높은 순)에서 처음 나온 모양
     ranked_rows = [(name, round(weight, 2), count) for name, weight, count in ranked]
-    assert ranked_rows == [("jenkins", 0.7, 2), ("Docker", 0.6, 1)]
+    assert ranked_rows == [("gradle", 0.7, 2), ("Docker", 0.6, 1)]
     assert excluded == 1  # F12
 
 
