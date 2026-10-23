@@ -347,7 +347,7 @@ def summary(items: list[Card]) -> list[tuple[str, int, str]]:
     ]
 
 
-STACK_TOP, GAP_TOP = 15, 10  # 모아 보기 순위 개수 (v0.7 F11, F12)
+STACK_TOP, GAP_TOP = 10, 10  # 기술 모아보기 순위 개수 (v0.7 F11, F12, v0.7.1 F3)
 
 
 def stack_rank(items: list[Card], known: list[str], top: int = STACK_TOP) -> list[tuple[str, int, bool]]:
