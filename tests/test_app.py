@@ -180,8 +180,9 @@ def test_run_panel_shows_collect_and_score_cards(app):
     assert at.button(key="run-score").label == "🧮 체크한 공고 평가 (1건)"  # 체크한 공고 (F7)
     assert at.button(key="run-score-all").label == "평가 전 전부 평가 (2건)"  # --score all (F7)
     assert not [r for r in at.radio if r.label == "대상"]  # 수집 옆 평가 카드 없음 (v0.5.2 F38)
-    keyword = next(s for s in at.selectbox if s.label == "키워드 *")
-    assert set(runner.JOB_NAMES) <= set(keyword.options)  # 직무 이름이 추천 검색어 (F3)
+    assert at.text_input(key="collect-keyword").label == "키워드 *"  # Enter 없이 남는 글자 칸 (v0.7.1 F1)
+    picks = at.button_group(key="keyword-pick").options
+    assert picks == runner.JOB_NAMES[:8]  # 프로필이 없으면 직무 이름 앞 8개 (F3, v0.7.1 F1)
     assert any("수집 카드에 키워드를 넣고" in m.value for m in at.markdown)  # 사용법 창 (F15, v0.5.4 F9)
 
 
@@ -213,7 +214,7 @@ def test_collect_button_starts_collect_with_inputs(app, monkeypatch):
     started = []
     monkeypatch.setattr(runner, "start_collect", lambda state: started.append(state))
     at = app([])
-    next(s for s in at.selectbox if s.label == "키워드 *").set_value(runner.JOB_NAMES[0])
+    at.text_input(key="collect-keyword").input(runner.JOB_NAMES[0])
     next(m for m in at.multiselect if m.label == "지역").set_value(["서울", "경기"])
     next(r for r in at.radio if r.label == "경력").set_value("신입")
     next(m for m in at.multiselect if m.label == "사이트").set_value(["잡코리아"])
@@ -465,14 +466,15 @@ def test_score_bar_buttons_start_score(app, monkeypatch, tmp_path, key, mode):
     assert started == [mode]  # F38
 
 
-def test_score_bar_sits_right_above_card_list(app):
+def test_score_bar_sits_at_top_of_sidebar(app):
     at = app([scorable(2), make_row(3, score="70", verdict="추천", trust="높음", body="글자")])
 
-    texts = [m.value for m in at.markdown]
+    texts = [m.value for m in at.sidebar.markdown]
     bar = next(i for i, v in enumerate(texts) if v.startswith("**평가**"))
-    first_card = next(i for i, v in enumerate(texts) if "회사2" in v)
-    chart = next(i for i, v in enumerate(texts) if v == "**종합점수 TOP 5**")  # v0.5.2 F42
-    assert chart < bar < first_card  # 차트·필터 아래, 카드 바로 위 (F38)
+    filters = next(i for i, v in enumerate(texts) if v.startswith("#### 필터"))
+    assert bar < filters  # 사이드바 맨 위, 필터 위 (v0.7.1 F4)
+    assert not any(v.startswith("**평가**") for v in (m.value for m in at.main.markdown))
+    assert at.sidebar.button(key="run-score-all").label == "평가 전 전부 평가 (1건)"
 
 
 # ---- v0.5.2 정렬·페이지·TOP 5·소개 문장 ----
@@ -585,7 +587,8 @@ def test_scored_details_show_bars_columns_bullets_chips_and_guide(app, tmp_path)
     assert "**요약**\n\n- 백엔드 API 개발\n- 사내 서비스 운영" in texts  # 글머리표 (F3)
     assert not any(v.startswith("**주요업무**") for v in texts)  # 빈 칸은 숨김
     chips = next(v for v in texts if v.startswith("**기술스택**"))
-    assert "jv-chip jv-mine'>Python<" in chips and "jv-chip'>Django<" in chips  # 대소문자 무시 (F4)
+    assert "jv-chip jv-mine' title='내 프로필에 있는 기술'>Python<" in chips  # 대소문자 무시 (F4, v0.7.1 F7)
+    assert "jv-chip'>Django<" in chips and "초록은" not in chips  # 설명 글 대신 도움말 (v0.7.1 F7)
     assert "점수 기준" in [e.label for e in at.expander]  # F5
     assert any("0–100점" in v and "가중 평균" in v for v in texts)
 
@@ -1509,7 +1512,7 @@ def test_stats_dialog_ranks_stack_and_gaps_of_shown_cards(app, tmp_path):
     html = " ".join(m.value for m in at.markdown)
     assert "공고 **3건** 기준 · 필터 없음" in html  # F10
     # 이름은 목록(점수 높은 순)에서 처음 나온 모양. 대소문자 달라도 내 기술은 초록 (F11)
-    assert "<span class='jv-chip jv-mine' title='python'>python</span>" in html
+    assert "<span class='jv-chip jv-mine' title='python · 내 프로필에 있는 기술'>python</span>" in html
     assert "<span class='jv-rank-num'>2건</span>" in html
     assert "jv-chip jv-lack' title='AWS'" in html
     assert "&lt;b&gt;Go&lt;/b&gt;" in html and "<b>Go</b>" not in html  # 시트 글자 escape
@@ -1524,3 +1527,98 @@ def test_stats_dialog_shows_filters_and_empty_message(app):
 
     assert any("공고 **0건** 기준 · 필터 검색 &#x27;없는회사&#x27;" in m.value for m in at.markdown)
     assert sum("모을 공고가 없습니다" in c.value for c in at.caption) == 2  # F13
+
+
+# ---- v0.7.1 화면 보완 (F1–F12) ----
+
+
+def test_keyword_pick_fills_text_box_and_typed_keyword_stays(app, monkeypatch):
+    started = []
+    monkeypatch.setattr(runner, "start_collect", lambda state: started.append(state))
+    at = app([])
+    at.text_input(key="collect-keyword").input("데이터 엔지니어").run()  # Enter 없이 다른 곳을 눌러도 남음 (F1)
+    assert at.text_input(key="collect-keyword").value == "데이터 엔지니어"
+    at.button_group(key="keyword-pick").set_value(runner.JOB_NAMES[1]).run()
+
+    assert at.text_input(key="collect-keyword").value == runner.JOB_NAMES[1]  # 추천을 누르면 칸에 들어감
+    assert at.button_group(key="keyword-pick").value is None  # 같은 말을 다시 누를 수 있게 비움 (D1)
+    at.button(key="run-collect").click().run()
+    assert started[0]["keyword"] == runner.JOB_NAMES[1]
+
+
+def test_keyword_picks_put_profile_jobs_and_main_skills_first(app, tmp_path):
+    text = "skills: {main: [Python, Kotlin]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
+    at = app([])
+
+    picks = at.button_group(key="keyword-pick").options
+    assert picks[:3] == ["백엔드 개발", "Python", "Kotlin"] and len(picks) == 8  # 최대 8개 (F1)
+
+
+def test_top_buttons_have_clear_names_and_dialog_titles(app):
+    at = app([scorable(2)])
+
+    assert at.button(key="mail-open").label == "✉ 공고 메일 보내기"  # F2
+    assert at.button(key="stats-open").label == "📊 기술 모아보기"
+    at.button(key="stats-open").click().run()
+    assert at.get("dialog")[0].proto.dialog.title == "📊 기술 모아보기"
+
+
+def test_mail_dialog_title_matches_button(app, mail_env):
+    at = app([scorable(2)])
+    at.button(key="mail-open").click().run()
+
+    assert at.get("dialog")[0].proto.dialog.title == "✉ 공고 메일 보내기"  # F2
+
+
+def test_stats_dialog_has_summary_and_two_tabs(app, tmp_path):
+    text = "skills: {main: [Python]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
+    at = app([scorable(2, score="70", stack="Python, AWS, Docker", gaps="AWS 경험")])
+    at.button(key="stats-open").click().run()
+
+    html = " ".join(m.value for m in at.markdown)
+    assert "많이 찾는 기술 3개 중 <span class='jv-chip jv-mine'" in html and "**1개**" in html  # F3
+    assert [t.label for t in at.tabs][-2:] == ["많이 찾는 기술", "내가 부족한 것"]
+
+
+def test_stack_rank_shows_top_ten():
+    from agent import view
+
+    assert view.STACK_TOP == 10 and view.GAP_TOP == 10  # v0.7.1 F3
+
+
+def test_guide_has_mail_stats_and_folded_key_steps(app):
+    import app as screen
+
+    assert "**공고 메일 보내기**" in screen.GUIDE and "**기술 모아보기**" in screen.GUIDE  # F5
+    at = app([])
+    at.button(key="guide").click().run()
+    folded = [e for e in at.expander if e.label in screen.KEY_STEPS]
+    assert [e.label for e in folded] == ["🔑 제미나이 API 키 받기", "✉ Gmail 앱 비밀번호 받기"]
+    assert not any(e.proto.expanded for e in folded)  # 접혀 있음
+    steps = " ".join(screen.KEY_STEPS.values())
+    assert "aistudio.google.com" in steps and "myaccount.google.com/apppasswords" in steps and "2단계 인증" in steps
+
+
+def test_footer_shows_use_notice_and_version(app):
+    import app as screen
+
+    at = app([])
+    footer = next(m.value for m in at.markdown if "class='jv-footer'" in m.value)
+    assert "개인 사용" in footer and "공유하지 마세요" in footer and "이 PC에만" in footer  # F10
+    assert "📖 사용법" in footer and "ai-job-search" in footer and f"JOBVIS {screen.VERSION}" in footer
+
+
+def test_css_danger_hover_animations_and_reduced_motion():
+    import app as screen
+
+    for key in ("reset-open", "reset-yes", "profile-clear-all", "clear-all-yes", "key-delete", "mail-delete"):
+        assert f".st-key-{key} button:hover" in screen.CSS  # F6
+    assert all("danger" in palette for palette in screen.PALETTES.values())  # 두 테마 (N3)
+    for name in ("jv-rise", "jv-grow", "jv-fill", "jv-unfold"):  # F8, F9, F11
+        assert f"@keyframes {name}" in screen.CSS
+    assert "@property --p" in screen.CSS
+    motion = screen.CSS.split("@media (prefers-reduced-motion: reduce)")[1]
+    assert "animation: none" in motion and "transform: none" in motion  # N2
+    assert 'st-key-top-"] button' in screen.CSS  # 위 버튼은 작게 (F12)
