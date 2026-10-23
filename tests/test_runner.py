@@ -253,22 +253,14 @@ def test_load_profile_missing_file(tmp_path):
         runner.load_profile(str(tmp_path / "profile.yaml"))
 
 
-# ---- 받은함 ----
+# ---- 이미지로 다시 평가 (v0.7.4 F7, F8) ----
 
 
-def test_inbox_count_ignores_wrong_names(monkeypatch, tmp_path):
-    monkeypatch.setattr(inbox, "DIR", tmp_path)
-    (tmp_path / "saramin_123.png").write_bytes(b"x")
-    (tmp_path / "saramin_123_2.png").write_bytes(b"x")
-    (tmp_path / "memo.txt").write_bytes(b"x")
-
-    assert runner.inbox_count() == 2
-
-
-def test_inbox_count_without_folder(monkeypatch, tmp_path):
-    monkeypatch.setattr(inbox, "DIR", tmp_path / "없음")
-
-    assert runner.inbox_count() == 0
+def image_rows():
+    return [
+        {"row": 2, "source": "사람인", "id": "11", "company": "가", "experience": "신입", "check": "", "score": "70"},
+        {"row": 3, "source": "사람인", "id": "12", "company": "나", "experience": "신입", "check": "TRUE", "score": ""},
+    ]
 
 
 def test_read_inbox_without_ocr_touches_nothing(monkeypatch):
@@ -277,27 +269,55 @@ def test_read_inbox_without_ocr_touches_nothing(monkeypatch):
 
     with pytest.raises(runner.RunError, match="OCR이 설치돼 있지 않습니다"):
         runner.read_inbox()
-    job = runner.start_inbox(wait=True)
-    assert "OCR이 설치돼 있지 않습니다" in job.error  # F11
+    job = runner.start_image_score("saramin", "11", profile(), wait=True)
+    assert "OCR이 설치돼 있지 않습니다" in job.error  # v0.5.2 F11
 
 
-def test_start_inbox_reports_result(monkeypatch):
-    monkeypatch.setattr(ocr, "available", lambda: True)
-    monkeypatch.setattr(runner, "inbox_count", lambda: 1)
-    monkeypatch.setattr(sheets, "read_rows", list)
-    monkeypatch.setattr(
-        inbox, "run", lambda rows: inbox.InboxResult(read=1, skipped=[{"file": "a.png", "reason": "시트에 없는 공고"}])
+def test_image_score_rescores_only_that_posting(monkeypatch):
+    graph = FakeGraph(
+        [{"score_pick": {"current": {"company": "가"}}}, {"score_pick": {"current": None}}],
+        {"done": [{}], "skipped": [], "failed": [], "excluded": []},
     )
+    monkeypatch.setattr(ocr, "available", lambda: True)
+    monkeypatch.setattr(sheets, "read_rows", image_rows)
+    filled = [{"source": "saramin", "id": "11", "company": "가", "status": "이미지 읽음"}]
+    monkeypatch.setattr(inbox, "run", lambda rows: inbox.InboxResult(read=1, filled=filled))
+    monkeypatch.setattr(runner, "build_score_graph", lambda: graph)
 
-    job = runner.start_inbox(wait=True)
+    job = runner.start_image_score("saramin", "11", profile(), wait=True)
 
-    assert job.total == 1
-    assert job.result.headline == "이미지 1장을 읽어 공고 0건의 본문을 채웠습니다."
+    assert not job.error
+    # 점수가 있고 체크도 안 된 줄이지만 이미지를 넣은 그 공고만 평가 (다른 체크한 줄 "나"는 고르지 않음)
+    assert [row["company"] for row in graph.calls[0][0]["queue"]] == ["가"]
+    assert job.label == "이미지로 다시 평가"
+    assert job.result.headline == "이미지 1장을 읽어 본문을 채우고 공고 1건을 평가했습니다."
+    assert job.result.details[0] == "읽은 이미지 1장 / 본문을 채운 공고 1건 (이미지 읽음 1) / 건너뜀 0"
+    assert not any(line.startswith("다음:") for line in job.result.details)  # 터미널 안내는 빼고
+
+
+def test_image_score_without_text_does_not_rescore(monkeypatch):
+    monkeypatch.setattr(ocr, "available", lambda: True)
+    monkeypatch.setattr(sheets, "read_rows", image_rows)
+    skipped = [{"file": "saramin_11.png", "reason": "OCR 실패(ValueError)"}]
+    monkeypatch.setattr(inbox, "run", lambda rows: inbox.InboxResult(read=0, skipped=skipped))
+    monkeypatch.setattr(runner, "build_score_graph", lambda: pytest.fail("본문을 못 채우면 평가하지 않음"))
+
+    job = runner.start_image_score("saramin", "11", profile(), wait=True)
+
+    assert job.result.headline.startswith("이미지에서 글자를 읽지 못해 다시 평가하지 않았습니다.")
     assert job.result.problems == ["이미지 1장을 건너뛰었습니다. 자세히를 확인해 주세요."]
-    assert job.result.details == [
-        "읽은 이미지 1장 / 본문을 채운 공고 0건 / 건너뜀 1",
-        "  건너뜀: a.png (시트에 없는 공고)",
-    ]
+
+
+def test_image_score_other_posting_filled_is_not_this_one(monkeypatch):
+    monkeypatch.setattr(ocr, "available", lambda: True)
+    monkeypatch.setattr(sheets, "read_rows", image_rows)
+    filled = [{"source": "saramin", "id": "12", "company": "나", "status": "이미지 읽음"}]  # 전에 넣어 둔 다른 공고
+    monkeypatch.setattr(inbox, "run", lambda rows: inbox.InboxResult(read=1, filled=filled))
+    monkeypatch.setattr(runner, "build_score_graph", lambda: pytest.fail("이 공고 본문이 안 바뀌면 평가하지 않음"))
+
+    job = runner.start_image_score("saramin", "11", profile(), wait=True)
+
+    assert job.result.headline.startswith("이미지에서 글자를 읽지 못해")
 
 
 def test_error_text_hides_key_in_unknown_error(monkeypatch):

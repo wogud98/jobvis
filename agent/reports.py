@@ -153,10 +153,13 @@ def score_summary(result: dict) -> Summary:
     return Summary(headline, [], _failure_problem(failed, "평가하지"), score(result))
 
 
-def inbox_summary(result: inbox.InboxResult) -> Summary:
-    """받은함 결과 화면용 (F24)."""
-    filled = len(result.filled)
-    headline = f"이미지 {result.read}장을 읽어 공고 {filled}건의 본문을 채웠습니다."
-    todo = [f"본문을 채운 {filled}건은 평가 대상으로 체크했습니다. 🧮 평가를 눌러 다시 평가하세요."] if filled else []
-    problems = [f"이미지 {len(result.skipped)}장을 건너뛰었습니다. 자세히를 확인해 주세요."] if result.skipped else []
-    return Summary(headline, todo, problems, inbox_result(result))
+def image_score_summary(read: inbox.InboxResult, scored: dict | None) -> Summary:
+    """이미지로 다시 평가 결과 화면용 (v0.7.4 F7, F8). 본문을 못 채웠으면 평가하지 않았다고 알린다."""
+    problems = [f"이미지 {len(read.skipped)}장을 건너뛰었습니다. 자세히를 확인해 주세요."] if read.skipped else []
+    details = [line for line in inbox_result(read) if not line.startswith("다음:")]  # 터미널 안내는 화면에 안 보임
+    if scored is None:
+        headline = "이미지에서 글자를 읽지 못해 다시 평가하지 않았습니다. 공고 본문이 보이는 이미지인지 확인해 주세요."
+        return Summary(headline, [], problems, details)
+    summary = score_summary(scored)
+    headline = f"이미지 {read.read}장을 읽어 본문을 채우고 " + summary.headline
+    return Summary(headline, [], problems + summary.problems, details + score(scored))

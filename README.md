@@ -6,7 +6,7 @@
 
 사람인·잡코리아 채용공고를 모아 내 프로필과 비교해 점수를 매기는 개인용 도구입니다.
 
-![version](https://img.shields.io/badge/version-v0.7.3-c8f03c?style=flat)
+![version](https://img.shields.io/badge/version-v0.7.4-c8f03c?style=flat)
 ![period](https://img.shields.io/badge/기간-2026.10.19–2026.10.23-6b8afd?style=flat)
 ![python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat&logo=python&logoColor=white)
 ![type](https://img.shields.io/badge/개인_프로젝트-555?style=flat)
@@ -28,7 +28,7 @@
 
 공고 수집은 LLM 없이 하고, 평가할 때만 LLM(기본 Gemini)을 불러 항목별 점수와 강점·부족한 점을 받습니다. 모든 데이터는 내 PC에 둡니다.
 
-- 기간: 2026.10.19–2026.10.23 (v0.1–v0.7.3)
+- 기간: 2026.10.19–2026.10.23 (v0.1–v0.7.4)
 - 형태: 개인 프로젝트. AI 코딩 에이전트(Claude Code)와 함께 요구사항 → 설계 → 구현 → 테스트 순서로 개발
 - 문서: 버전마다 요구사항·설계(UML)·테스트 결과를 [docs/](docs/README.md)에 남김
 
@@ -110,7 +110,7 @@ flowchart LR
 
 - **LLM 점수가 실행마다 흔들림** → LLM은 항목 점수(0–100)만 매기고, 종합점수·별점·판정은 코드가 계산하게 나눔. 계산은 테스트로 확인함. ([v0.3 설계](docs/v0.3/02-design.md))
 - **제목만 보고 점수가 높게 나옴** → 요구 경력보다 부족하면 경력점수 상한(60/45/30), 본문 없이 채점하면 종합 최대 69로 보정하고 깎은 이유를 남김. ([v0.5 설계](docs/v0.5/02-design.md#점수-보정-f25f36))
-- **본문이 이미지인데 이미지 서버가 robots.txt로 막힘** → 우회하지 않고 받지 않음. 사용자가 직접 저장한 이미지를 받은함에 넣으면 로컬 OCR로 읽음. ([v0.4 설계](docs/v0.4/02-design.md), [v0.5 설계](docs/v0.5/02-design.md#이미지-직접-넣기-f37f46))
+- **본문이 이미지인데 이미지 서버가 robots.txt로 막힘** → 우회하지 않고 받지 않음. 사용자가 직접 저장한 이미지를 카드에 넣으면 로컬 OCR로 읽고 그 공고만 다시 평가함. ([v0.4 설계](docs/v0.4/02-design.md), [v0.5 설계](docs/v0.5/02-design.md#이미지-직접-넣기-f37f46))
 - **반 사람들이 각자 키를 넣어 써야 함** → 키는 화면에서 넣어 PC 안 파일(권한 600)에만 두고, 화면에는 끝 4자리만, 오류 문구에 키 글자가 섞이면 가림. ([v0.6 설계](docs/v0.6/02-design.md))
 - **화면 일부만 다시 그릴 때 테마가 사라짐** → Streamlit magic이 식 한 줄의 값(None)을 그린 것이 원인. if 문으로 고치고 같은 실수를 테스트로 막음. ([v0.6.2 설계](docs/v0.6.2/02-design.md))
 - **AI 에이전트와 일관되게 개발하기** → 규칙(CLAUDE.md)·테스트(686개, 외부 API 없음)·린트·CI·비밀정보 검사로 강제함. ([하네스](docs/harness.md))

@@ -513,3 +513,60 @@ def test_unscored_only_shows_only_cards_before_scoring():
     shown = view.apply(items, view.Filters([], [], unscored_only=True))
     assert [c.row for c in shown] == [3]  # 제외 공고는 평가한 것이라 뺌 (v0.7.2 F3)
     assert view.filter_labels(view.Filters([], [], unscored_only=True)) == ["평가 전 공고만"]
+
+
+# ---- 1건 묶음·엑셀·전체 복사 (v0.7.4 F1, F4, F5) ----
+
+
+def test_split_once_keeps_order_of_repeated_and_sorts_single_by_name():
+    ranked = [("Python", 3, True), ("AWS", 2, False), ("redis", 1, False), ("Airflow", 1, True)]
+
+    many, once = view.split_once(ranked, 1)
+
+    assert many == [("Python", 3, True), ("AWS", 2, False)]
+    assert once == [("Airflow", 1, True), ("redis", 1, False)]
+    assert view.split_once([], 1) == ([], [])
+
+
+def test_stats_csv_opens_in_excel_with_korean():
+    data = view.stats_csv([("Python", 3, True), ("Go", 1, False)], [("AWS 경험", 0.7, 2)])
+
+    assert data.startswith(b"\xef\xbb\xbf")  # 엑셀이 한글을 UTF-8로 읽는 BOM
+    lines = data.decode("utf-8-sig").splitlines()
+    assert lines == [
+        "구분,순위,이름,공고 수,내 기술,가중치",
+        "많이 찾는 기술,1,Python,3,O,",
+        "많이 찾는 기술,2,Go,1,,",
+        "내가 부족한 것,1,AWS 경험,2,,0.70",
+    ]
+
+
+def test_stats_csv_quotes_names_with_commas():
+    data = view.stats_csv([('C, "C++"', 2, False)], [])
+
+    assert data.decode("utf-8-sig").splitlines()[1] == '많이 찾는 기술,1,"C, ""C++""",2,,'
+
+
+def test_stats_text_groups_single_postings_in_one_line():
+    text = view.stats_text(
+        [("Python", 3, True), ("AWS", 2, False), ("Go", 1, False), ("django", 1, True)],
+        [("AWS 경험", 0.7, 2), ("Kafka", 0.2, 1)],
+        5,
+    )
+
+    assert text.splitlines() == [
+        "JOBVIS 기술 모아보기 (공고 5건 기준)",
+        "",
+        "[많이 찾는 기술]",
+        "1. Python 3건 (내 기술)",
+        "2. AWS 2건",
+        "1건씩: django (내 기술), Go",
+        "",
+        "[내가 부족한 것]",
+        "1. AWS 경험 2건",
+        "1건씩: Kafka",
+    ]
+
+
+def test_stats_text_without_items_says_none():
+    assert view.stats_text([], [], 0).splitlines()[2:] == ["[많이 찾는 기술]", "없음", "", "[내가 부족한 것]", "없음"]

@@ -2,7 +2,7 @@
 
 테마는 .streamlit/config.toml의 밝은·어두운 테마와 아래 CSS (v0.5.1 F17–F19, v0.5.3 F13–F15).
 
-수집·평가·받은함 버튼은 agent/runner.py를 별도 스레드로 돌린다 (v0.5.2). 이력서 채우기는 agent/resume.py.
+수집·평가·이미지로 다시 평가 버튼은 agent/runner.py를 별도 스레드로 돌린다 (v0.5.2). 이력서 채우기는 agent/resume.py.
 정렬·필터·카드·요약 칸은 agent/view.py, 프로필 입력란은 agent/profile_form.py, 검사는 agent/user_profile.py,
 이미지 저장은 agent/inbox.py, 메일 만들기·보내기는 agent/mail.py에 있다 (v0.7).
 """
@@ -31,7 +31,6 @@ CHECK_ERROR = "check_error"
 TOASTED = "toasted_job"  # 결과 알림을 띄운 작업 (v0.6.1 F5)
 RELOADED = "reloaded_job"  # 결과를 다시 읽은 작업 (v0.6.1 F16)
 RESET_DONE = "reset_done"  # 방금 공고를 초기화한 결과 문구 (v0.6.1 F30)
-UPLOAD_DONE = "upload_done"  # 방금 받은함에 저장한 이미지 문구 (v0.6.2 F15)
 RESET_ERROR = "reset_error"  # 초기화하지 못한 이유 (v0.6.1 F30)
 PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
 TAGLINE = "채용공고를 모아 나와 비교!"  # JOBVIS 아래 문장 (v0.5.2 F43, v0.7.2 F5)
@@ -46,7 +45,7 @@ GUIDE = """
 
 **추가**
 - **공고 보기**: 회사·직무를 누르면 원문, **자세히**는 점수·강점·부족한 점. 왼쪽 **필터**로 검색·정렬
-- **이미지 넣기**: **📷 이미지 필요** 공고는 자세히에서 공고 이미지를 끌어다 놓고 **🖼 받은함 읽기** → 다시 평가
+- **이미지 넣기**: **📷 이미지 필요** 공고는 자세히에서 이미지를 끌어다 놓고 **🖼 이미지로 다시 평가**
 - **공고 메일 보내기**: 위 ✉에서 공고를 골라 내 메일로 (Gmail 앱 비밀번호 필요)
 - **기술 모아보기**: 위 📊에서 지금 목록이 많이 찾는 기술과 내가 부족한 것 순위
 - **그 밖에**: 지원함·관심 없음, 🔄 새로고침, 사이드바 🗑 공고 초기화(DB), 다크 모드는 ⋮ → Light·Dark
@@ -63,7 +62,7 @@ KEY_STEPS = {
         "3. 나온 16자를 위 **✉ 공고 메일 보내기 → 설정**에 붙여넣고 저장합니다"
     ),
 }  # 사용법 창 아래 접힌 칸 (v0.7.1 F5)
-VERSION = "v0.7.3"
+VERSION = "v0.7.4"
 EASTER_EGG = "J.O.B.V.I.S. — Just One Better Vacancy, Intelligently Sorted"  # 맨 아래 ✦에 숨김 (v0.7.2 F7)
 FOOTER = (
     "<div><b>이용</b>개인 사용 도구입니다. 수집한 공고는 혼자 보고 다른 사람과 공유하지 마세요"
@@ -162,6 +161,16 @@ SCHEME_SYNC = """<script>
       card.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
     }, true);
   }
+  // 기술 모아보기 전체 복사: 숨긴 칸의 글을 클립보드로 (v0.7.4 F5). 버튼 글자는 콜백이 바꾼다
+  if (!window.jvCopy) {
+    window.jvCopy = true;
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest && event.target.closest(".st-key-stats-copy button");
+      const source = document.querySelector(".jv-copy-text");
+      if (!button || !source || !navigator.clipboard) return;
+      navigator.clipboard.writeText(source.dataset.text || "");
+    }, true);
+  }
 })();
 </script>"""
 
@@ -227,11 +236,13 @@ div[data-testid="stExpander"] details {
 }
 div[data-testid="stExpander"] summary { font-weight: 700; }
 /* 버튼: 테두리·그림자, 누르면 그림자만큼 눌린다 */
-div[data-testid="stButton"] button, div[data-testid="stLinkButton"] a {
+div[data-testid="stButton"] button, div[data-testid="stLinkButton"] a,
+div[data-testid="stDownloadButton"] button {
   border: 2px solid var(--jv-ink) !important; border-radius: 6px; box-shadow: 4px 4px 0 var(--jv-ink);
   font-weight: 700; transition: transform 80ms, box-shadow 80ms;
 }
-div[data-testid="stButton"] button:hover:not(:disabled), div[data-testid="stLinkButton"] a:hover {
+div[data-testid="stButton"] button:hover:not(:disabled), div[data-testid="stLinkButton"] a:hover,
+div[data-testid="stDownloadButton"] button:hover {
   transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--jv-ink);
 }
 div[data-testid="stButton"] button:active:not(:disabled) { transform: translate(4px, 4px); box-shadow: none; }
@@ -319,6 +330,15 @@ div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: v
 .jv-rank-row .jv-bar { min-width: 3em; }
 .jv-rank-row .jv-bar > div { background: var(--jv-blue); }
 .jv-rank-num { width: 3em; text-align: right; font-weight: 800; white-space: nowrap; }
+/* 1건씩 나온 것은 순위 대신 가로로 이어진 칩 묶음 (v0.7.4 F1) */
+.jv-once { margin-top: 14px; }
+.jv-once-title { font-weight: 800; margin-bottom: 6px; }
+/* 메일 창: 모두 고르기 버튼 글자 둘레 여유, 공고 줄은 한 줄 (v0.7.4 F2, F3) */
+.st-key-mail-all button { padding: 0.3rem 1rem !important; }
+.st-key-mail-list [data-testid="stCheckbox"], .st-key-mail-list label { max-width: 100%; min-width: 0; }
+.st-key-mail-list label [data-testid="stWidgetLabel"] { min-width: 0; overflow: hidden; }
+.st-key-mail-list label [data-testid="stWidgetLabel"] p { white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
 .jv-strength { color: var(--jv-sub); font-size: 0.9rem; }
 a.jv-head, a.jv-head:visited { color: inherit; text-decoration: none; }
 a.jv-head:hover { text-decoration: underline; }
@@ -441,13 +461,12 @@ def toggle_applied(row: int, applied: bool) -> None:
 
 
 def show_upload(card: view.Card) -> None:
-    """공고 이미지 넣기. 이유와 순서를 먼저 보인다 (v0.5.4 F8)."""
+    """공고 이미지 넣기. 버튼 하나로 저장 → 글자 읽기 → 이 공고 다시 평가 (v0.5.4 F8, v0.7.4 F6–F8)."""
     st.markdown("**📷 공고 이미지 넣기**")
-    st.caption(
-        f"{IMAGE_HELP}  \n"
-        "① 원문 열기 → ② 공고 이미지 저장 → ③ 여기에 끌어다 놓고 받은함에 저장 → "
-        "④ 위 받은함 카드의 🖼 받은함 읽기 → ⑤ 다시 평가"
-    )
+    if not ocr.available():  # 읽을 수 없으면 넣을 곳도 보이지 않는다 (v0.5.2 F11)
+        st.info(f"이미지 글자를 읽는 OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")
+        return
+    st.caption(f"{IMAGE_HELP}  \n① 원문 열기 → ② 공고 이미지 저장 → ③ 여기에 끌어다 놓기 → ④ 🖼 이미지로 다시 평가")
     files = st.file_uploader(
         "끌어다 놓거나 파일 고르기",
         type=list(inbox.EXTENSIONS),
@@ -455,7 +474,16 @@ def show_upload(card: view.Card) -> None:
         key=f"upload-{card.row}",
     )
     # 화면이 다시 그려질 때마다 같은 파일이 또 저장되지 않게 버튼을 눌렀을 때만 저장한다
-    if not files or not st.button("받은함에 저장", key=f"save-{card.row}"):
+    pressed = st.button(
+        "🖼 이미지로 다시 평가", type="primary", key=f"save-{card.row}", disabled=runner.running() or not files
+    )
+    if not files or not pressed:
+        return
+    problem = profile_problem()  # 평가까지 하므로 저장 전에 프로필·키를 확인한다 (F8)
+    if problem:
+        st.error(problem)
+        return
+    if need_key(f"image-{card.row}"):
         return
     saved = []
     for file in files:
@@ -463,11 +491,8 @@ def show_upload(card: view.Card) -> None:
             saved.append(inbox.save_upload(card.source_code, card.job_id, file.name, file.getvalue()).name)
         except inbox.UploadError as e:
             st.error(str(e))  # 확장자가 아니거나 10MB 초과 (F49)
-    if saved:
-        # 화면은 저장만 하고 OCR은 받은함 읽기에서 (F48). 자세히는 따로 다시 그리는 칸이라
-        # 받은함 카드가 보이게 화면 전체를 다시 그리고 결과는 알림으로 (v0.6.2 F15)
-        st.session_state[UPLOAD_DONE] = f"저장함: {', '.join(saved)}. 위 받은함 카드에서 🖼 받은함 읽기를 누르세요."
-        st.rerun(scope="app")
+    if saved:  # 진행·결과는 위 실행 칸에 (자세히는 따로 다시 그리는 칸이라 start_job이 화면 전체를 다시 그림)
+        start_job(runner.start_image_score, card.source_code, card.job_id, runner.load_profile(PROFILE))
 
 
 @st.dialog("📖 사용법", width="large")
@@ -752,19 +777,6 @@ def show_collect_card() -> None:
             start_job(runner.start_collect, state)
 
 
-def show_inbox_card() -> None:
-    """받은함은 수집 쪽 작업이라 수집 카드 아래에 둔다. 이미지가 있을 때만 (F10, v0.5.2 F38)."""
-    images = runner.inbox_count()
-    if not images:
-        return
-    with st.container(border=True, key="box-run-inbox"):
-        st.markdown(f"**받은함** <span class='jv-muted'>공고 이미지 {images}장</span>", unsafe_allow_html=True)
-        if not ocr.available():
-            st.info(f"OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")  # F11
-        elif st.button("🖼 받은함 읽기", disabled=runner.running(), key="run-inbox"):
-            start_job(runner.start_inbox)
-
-
 def profile_problem() -> str:
     """평가 전에 프로필을 확인한다. 개발자용 글(경로·명령) 대신 할 일만 (v0.6.2 F14)."""
     path = Path(PROFILE)
@@ -835,7 +847,6 @@ def show_check_error() -> None:
 
 def show_run_panel() -> None:
     show_collect_card()
-    show_inbox_card()
     if runner.running():
         show_live_job()
     show_job_result()
@@ -887,8 +898,6 @@ def show_postings() -> None:
     reload_after_job()
     if done := st.session_state.pop(RESET_DONE, None):
         st.toast(done, icon="🗑")
-    if done := st.session_state.pop(UPLOAD_DONE, None):
-        st.toast(done, icon="🖼")
     if done := st.session_state.pop(MAIL_DONE, None):
         st.toast(done, icon="✉")
     try:
@@ -1079,7 +1088,7 @@ def show_mail_settings(config: settings.MailConfig | None) -> None:
               help="이 PC에 저장한 주소·앱 비밀번호만 지웁니다. Google의 앱 비밀번호는 그대로")  # fmt: skip
 
 
-@st.dialog("✉ 공고 메일 보내기")  # 위 버튼과 같은 이름 (v0.7.1 F2)
+@st.dialog("✉ 공고 메일 보내기", width="medium")  # 위 버튼과 같은 이름 (v0.7.1 F2). 공고 줄이 한 줄에 (v0.7.4 F3)
 def mail_dialog(shown: list[view.Card]) -> None:
     """설정이 없으면 설정 칸, 있으면 지금 목록에서 골라 보내기 (v0.7 F1–F4, F8, F9, D6)."""
     if MAIL_DONE in st.session_state:  # 보냈으면 창을 닫고 알림을 띄운다
@@ -1101,7 +1110,7 @@ def mail_dialog(shown: list[view.Card]) -> None:
         return
     st.button(f"보이는 공고 모두 고르기 ({len(shown)}건)", key="mail-all", type="tertiary",
               on_click=pick_all, args=([card.row for card in shown],))  # fmt: skip
-    with st.container(height=min(60 + 36 * len(shown), 360), border=True):
+    with st.container(height=min(60 + 36 * len(shown), 360), border=True, key="mail-list"):
         for card in shown:
             st.checkbox(pick_label(card), key=f"mail-pick-{card.row}")  # 처음엔 아무것도 고르지 않음 (F2)
     count = len(picked(shown))
@@ -1129,6 +1138,15 @@ def rank_rows(items: list[tuple[str, float, str, str]]) -> str:
     )
 
 
+def once_chips(items: list[tuple[str, str]]) -> str:
+    """1건씩 나온 이름을 가로로 이어진 칩 묶음으로 (v0.7.4 F1). 없으면 빈 글."""
+    if not items:
+        return ""
+    chips = "".join(f"<span class='jv-chip {kind}' title='{escape(name)}{tip(kind)}'>{escape(name)}</span>"
+                    for name, kind in items)  # fmt: skip
+    return f"<div class='jv-once'><div class='jv-once-title'>1건씩 나온 것 {len(items)}개</div>{chips}</div>"
+
+
 @st.dialog("📊 기술 모아보기", width="large")
 def stats_dialog(shown: list[view.Card], filters: view.Filters | None, known: list[str]) -> None:
     """지금 목록의 기술 스택·부족한 점 순위 (v0.7 F10–F13). 탭 두 개, 전부 보이고 칸 안에서 스크롤 (v0.7.3 F1).
@@ -1146,19 +1164,35 @@ def stats_dialog(shown: list[view.Card], filters: view.Filters | None, known: li
             f"**{mine}개**",
             unsafe_allow_html=True,
         )
+    ranked, excluded = view.gap_rank(shown)
+    if stack or ranked:  # 엑셀 저장·전체 복사 (v0.7.4 F4, F5). 내려받아도 창은 그대로
+        save, copy = st.columns(2)
+        save.download_button("📥 엑셀로 저장", view.stats_csv(stack, ranked), file_name="jobvis-기술모아보기.csv",
+                             mime="text/csv", key="stats-csv", on_click="ignore", use_container_width=True)  # fmt: skip
+        copied = st.session_state.pop("stats-copied", False)  # 누른 뒤 한 번만 "복사됨"
+        copy.button("✓ 복사했습니다" if copied else "📋 전체 복사", key="stats-copy", use_container_width=True,
+                    on_click=lambda: st.session_state.update({"stats-copied": True}))  # fmt: skip
+        # 복사할 글은 숨긴 칸에 두고 화면 스크립트가 버튼을 누를 때 클립보드로 옮긴다.
+        # 줄바꿈을 그대로 두면 마크다운이 빈 줄에서 HTML을 끊어서 글자 참조로 바꾼다
+        text = escape(view.stats_text(stack, ranked, len(shown)), quote=True).replace("\n", "&#10;")
+        st.markdown(f"<div class='jv-copy-text' hidden data-text=\"{text}\"></div>", unsafe_allow_html=True)
     wanted, lacking = st.tabs(["많이 찾는 기술", "내가 부족한 것"])
     # 두 탭 칸 높이를 같게 해서 탭을 바꿔도 창 크기가 그대로 (v0.7.2 F11)
     with wanted, st.container(height=STATS_HEIGHT, border=False, key="stats-wanted"):
         if stack:
-            items = [(name, count, f"{count}건", "jv-mine" if mine else "jv-lack") for name, count, mine in stack]
+            many, once = view.split_once(stack, 1)  # 1건짜리는 순위 대신 아래 칩 묶음 (v0.7.4 F1)
+            items = [(name, count, f"{count}건", "jv-mine" if mine else "jv-lack") for name, count, mine in many]
             st.markdown(rank_rows(items), unsafe_allow_html=True)
+            st.markdown(once_chips([(name, "jv-mine" if mine else "jv-lack") for name, _, mine in once]),
+                        unsafe_allow_html=True)  # fmt: skip
         else:
             st.caption(EMPTY_STATS)
     with lacking, st.container(height=STATS_HEIGHT, border=False, key="stats-lacking"):
-        ranked, excluded = view.gap_rank(shown)
         if ranked:
-            items = [(name, weight, f"{count}건", "") for name, weight, count in ranked]
+            many, once = view.split_once(ranked, 2)
+            items = [(name, weight, f"{count}건", "") for name, weight, count in many]
             st.markdown(rank_rows(items), unsafe_allow_html=True)
+            st.markdown(once_chips([(name, "") for name, _, _ in once]), unsafe_allow_html=True)
             st.caption("점수가 낮은 공고에서 나온 것일수록 위 (100 − 종합점수로 가중)")
         else:
             st.caption(EMPTY_STATS)
@@ -1188,7 +1222,7 @@ def confirm_reset(rows: list[dict]) -> None:
     total, applied = runner.reset_counts(rows)
     keep = st.checkbox(f"지원한 공고는 남기기 ({applied}건)", value=True, key="reset-keep")
     removed = total - applied if keep else total
-    st.markdown(f"DB 공고 **{removed}건**과 그 원문·받은함 이미지를 지웁니다. 되돌릴 수 없습니다.")
+    st.markdown(f"DB 공고 **{removed}건**과 그 원문·공고 이미지를 지웁니다. 되돌릴 수 없습니다.")
     error = st.session_state.pop(RESET_ERROR, None)
     if error:
         st.error(error)
