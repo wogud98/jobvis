@@ -293,26 +293,14 @@ def test_failed_job_shows_error(app):
     assert "평가 결과" in at.error[0].value and "시트를 읽지 못했습니다" in at.error[0].value  # F13
 
 
-def test_inbox_without_ocr_shows_install_hint(app, monkeypatch):
-    monkeypatch.setattr(runner, "inbox_count", lambda: 2)
+def test_upload_without_ocr_shows_install_hint_only(app, monkeypatch):
     monkeypatch.setattr(ocr, "available", lambda: False)
-    at = app([])
+    at = app([scorable(2, body="본문 미확보")])
 
-    assert any("이미지 2장" in m.value for m in at.markdown)  # F10
-    assert ocr.INSTALL_HINT in at.info[0].value  # F11
-    with pytest.raises(KeyError):
-        at.button(key="run-inbox")
-
-
-def test_inbox_button_when_ocr_is_ready(app, monkeypatch):
-    started = []
-    monkeypatch.setattr(runner, "inbox_count", lambda: 1)
-    monkeypatch.setattr(ocr, "available", lambda: True)
-    monkeypatch.setattr(runner, "start_inbox", lambda: started.append(True))
-    at = app([])
-    at.button(key="run-inbox").click().run()
-
-    assert started == [True]
+    assert any(ocr.INSTALL_HINT in i.value for i in at.info)  # v0.5.2 F11
+    assert not [u for u in at.get("file_uploader") if u.key == "upload-2"]
+    assert not [b for b in at.button if b.key == "save-2"]
+    assert not any("받은함" in m.value for m in at.markdown)  # 받은함 카드·단어 없음 (v0.7.4 F6)
 
 
 # ---- v0.5.2 이력서로 채우기 ----
@@ -724,13 +712,15 @@ def test_summary_text_applies_its_filter_and_marks_tile(app):
     assert names(at) == ["회사2", "회사3", "회사4"] and at.text_input(key="search").value == ""
 
 
-def test_image_badge_and_upload_steps(app):
+def test_image_badge_and_upload_steps(app, monkeypatch):
+    monkeypatch.setattr(ocr, "available", lambda: True)
     at = app([scorable(2, body="본문 미확보"), scorable(3)])
 
     heads = {v.split("**")[1].split(" · ")[0]: v for v in (m.value for m in at.markdown) if v.startswith("**회사")}
     assert "📷 이미지 필요" in heads["회사2"] and 'title="사이트가 본문을' in heads["회사2"]  # F7
     assert "📷 이미지 필요" not in heads["회사3"]
-    assert any("④ 위 받은함 카드의 🖼 받은함 읽기" in c.value for c in at.caption)  # F8
+    assert any("③ 여기에 끌어다 놓기 → ④ 🖼 이미지로 다시 평가" in c.value for c in at.caption)  # v0.7.4 F6
+    assert at.button(key="save-2").disabled  # 이미지를 넣기 전에는 누를 수 없음
 
 
 def test_trust_badge_has_criteria_tooltip(app):
@@ -1305,15 +1295,44 @@ def test_pinned_details_are_a_fragment():
     assert "@st.fragment\ndef show_more(" in source
 
 
-def test_image_upload_saves_to_inbox_and_shows_toast(app, tmp_path):
+IMAGE_PROFILE = "skills: {main: [Python]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+
+
+def upload_image(app, monkeypatch, tmp_path, profile=IMAGE_PROFILE):
+    monkeypatch.setattr(ocr, "available", lambda: True)
+    started = []
+    monkeypatch.setattr(runner, "start_image_score", lambda *args: started.append(args))
+    if profile:
+        (tmp_path / "profile.yaml").write_text(profile, encoding="utf-8")
     at = app([scorable(2, body="본문 미확보", source="사람인")])
     uploader = next(u for u in at.get("file_uploader") if u.key == "upload-2")
     uploader.set_value(("공고.png", b"\x89PNG fake", "image/png")).run()
     at.button(key="save-2").click().run()
+    return at, started
+
+
+def test_image_upload_saves_and_rescores_that_posting(app, monkeypatch, tmp_path):
+    at, started = upload_image(app, monkeypatch, tmp_path)
 
     assert not at.exception
     assert [p.name for p in (tmp_path / "data" / "inbox").iterdir()] == ["saramin_2.png"]
-    assert any("받은함 읽기" in t.value for t in at.toast)  # 화면 전체를 다시 그린 뒤 알림 (v0.6.2 F15)
+    # 버튼 하나로 저장 → 읽기 → 그 공고만 다시 평가 (v0.7.4 F7, F8)
+    assert [(source, job_id, profile.experience.years) for source, job_id, profile in started] == [("saramin", "2", 0)]
+
+
+def test_image_upload_without_profile_saves_nothing(app, monkeypatch, tmp_path):
+    at, started = upload_image(app, monkeypatch, tmp_path, profile="")
+
+    assert any("프로필 입력이 필요합니다" in e.value for e in at.error)
+    assert started == [] and not (tmp_path / "data" / "inbox").exists()
+
+
+def test_image_upload_without_key_saves_nothing(app, monkeypatch, tmp_path):
+    monkeypatch.delenv("GOOGLE_API_KEY")
+    at, started = upload_image(app, monkeypatch, tmp_path)
+
+    assert any("입력이 필요합니다" in e.value for e in at.error)
+    assert started == [] and not (tmp_path / "data" / "inbox").exists()
 
 
 def test_page_icon_file_is_in_repo_and_image():
@@ -1582,7 +1601,64 @@ def test_stats_dialog_lists_every_skill_in_scroll_box(app):
 
     html = " ".join(m.value for m in at.markdown)
     assert "많이 찾는 기술 13개 중" in html  # 10개로 자르지 않음 (v0.7.3 F1)
-    assert html.count("class='jv-rank-row'") == 13 + 1  # 기술 13줄 + 부족한 점 1줄
+    # 공고 1건이라 모두 1건짜리: 순위 줄 없이 칩 묶음으로 (v0.7.4 F1)
+    assert html.count("class='jv-rank-row'") == 0
+    assert "1건씩 나온 것 13개" in html and "1건씩 나온 것 1개" in html
+    assert all(f">Tool{n}</span>" in html for n in range(12))
+
+
+def test_stats_dialog_ranks_only_repeated_skills_and_chips_the_rest(app, tmp_path):
+    text = "skills: {main: [Go]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
+    rows = [
+        scorable(2, score="50", stack="Python, Go, Redis", gaps="AWS 경험, Kafka"),
+        scorable(3, score="60", stack="Python, Airflow", gaps="AWS 경험"),
+    ]
+    at = app(rows)
+    at.button(key="stats-open").click().run()
+
+    html = " ".join(m.value for m in at.markdown)
+    assert html.count("class='jv-rank-row'") == 2  # Python 2건, AWS 경험 2건만 막대 (v0.7.4 F1)
+    once = html[html.index("1건씩 나온 것 3개") :]
+    # 이름순, 내 기술은 초록
+    assert once.index(">Airflow<") < once.index(">Go<") < once.index(">Redis<")
+    assert "<span class='jv-chip jv-mine' title='Go · 내 프로필에 있는 기술'>Go</span>" in once
+    assert "1건씩 나온 것 1개" in html and ">Kafka<" in html
+
+
+def test_stats_dialog_saves_csv_and_copies_text(app):
+    at = app([scorable(2, score="70", stack="Python, AWS", gaps="AWS 경험")])
+    at.button(key="stats-open").click().run()
+
+    download = at.get("download_button")[0]
+    assert download.proto.label == "📥 엑셀로 저장"  # v0.7.4 F4
+    assert at.button(key="stats-copy").label == "📋 전체 복사"  # F5
+    hidden = next(m.value for m in at.markdown if "jv-copy-text" in m.value)
+    assert "JOBVIS 기술 모아보기 (공고 1건 기준)&#10;" in hidden and "1건씩: AWS, Python" in hidden
+    assert "\n" not in hidden  # 빈 줄에서 HTML이 끊기지 않게
+
+    at.session_state["stats-copied"] = True  # 누른 뒤 다시 그린 모양 (창 안 버튼은 실제로는 창만 다시 그림)
+    at.button(key="stats-open").click().run()
+    assert at.button(key="stats-copy").label == "✓ 복사했습니다"
+
+
+def test_stats_dialog_without_postings_has_no_export_buttons(app):
+    at = app([])
+    at.button(key="stats-open").click().run()
+
+    assert not at.get("download_button")
+    assert not [b for b in at.button if b.key == "stats-copy"]
+
+
+def test_mail_dialog_is_wider_and_list_stays_one_line(app, sent, monkeypatch):
+    import app as screen
+
+    with_mail(monkeypatch)
+    at = open_mail(app([scorable(2, score="80", verdict="추천")]))
+
+    assert at.get("dialog")[0].proto.dialog.width == 2  # MEDIUM (v0.7.4 F3)
+    assert '.st-key-mail-list label [data-testid="stWidgetLabel"] p { white-space: nowrap;' in screen.CSS
+    assert ".st-key-mail-all button { padding: 0.3rem 1rem !important; }" in screen.CSS  # F2
 
 
 def test_guide_has_mail_stats_and_folded_key_steps(app):

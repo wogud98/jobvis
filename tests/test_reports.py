@@ -80,16 +80,21 @@ def test_score_summary_mixed_failures_point_to_details():
     assert summary.problems == ["2건을 평가하지 못했습니다. LLM 사용 한도를 넘었습니다. 잠시 뒤 다시 해 주세요."]
 
 
-def test_inbox_summary():
-    result = inbox.InboxResult(
-        read=3, filled=[{"status": "이미지 읽음"}], skipped=[{"file": "x.png", "reason": "이름 형식"}]
-    )
+def test_image_score_summary_joins_read_and_score():
+    read = inbox.InboxResult(read=2, filled=[{"status": "이미지 읽음"}], skipped=[{"file": "x.png", "reason": "이름"}])
 
-    summary = reports.inbox_summary(result)
+    summary = reports.image_score_summary(read, {"done": [{}], "skipped": [], "failed": [], "excluded": []})
 
-    assert summary.headline == "이미지 3장을 읽어 공고 1건의 본문을 채웠습니다."
-    assert "🧮 평가" in summary.todo[0]
+    assert summary.headline == "이미지 2장을 읽어 본문을 채우고 공고 1건을 평가했습니다."
     assert summary.problems == ["이미지 1장을 건너뛰었습니다. 자세히를 확인해 주세요."]
+    assert summary.todo == [] and "평가 대상 1 / 완료 1" in " ".join(summary.details)
+
+
+def test_image_score_summary_when_nothing_read():
+    summary = reports.image_score_summary(inbox.InboxResult(), None)
+
+    assert summary.headline.startswith("이미지에서 글자를 읽지 못해 다시 평가하지 않았습니다.")
+    assert summary.details == ["읽은 이미지 0장 / 본문을 채운 공고 0건 / 건너뜀 0"]
 
 
 def test_llm_hint():

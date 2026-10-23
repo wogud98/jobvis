@@ -26,7 +26,7 @@ from agent import (
 )
 from agent.graph import MAX_COUNT, SOURCES, build_graph, build_score_graph, recursion_limit
 
-KINDS = {"collect": "수집", "score": "평가", "inbox": "받은함 읽기"}
+KINDS = {"collect": "수집", "score": "평가", "image": "이미지로 다시 평가"}
 CAREER_ALL = "전체"
 
 
@@ -211,7 +211,15 @@ def load_profile(path: str = user_profile.DEFAULT) -> user_profile.Profile:
 
 
 def score(mode: str, profile: user_profile.Profile, on_update: Callable[[str, dict], None] | None = None) -> dict:
-    targets, skipped = scoring.select_targets(store.read_rows(), mode)
+    return _score_rows(*scoring.select_targets(store.read_rows(), mode), profile, on_update)
+
+
+def _score_rows(
+    targets: list[dict],
+    skipped: list[dict],
+    profile: user_profile.Profile,
+    on_update: Callable[[str, dict], None] | None = None,
+) -> dict:
     state = {
         "profile": user_profile.to_prompt(profile),
         "years": profile.experience.years,
@@ -243,13 +251,7 @@ def start_score(mode: str, profile: user_profile.Profile, *, wait: bool = False)
     return start("score", work, wait=wait)
 
 
-# ---- 받은함 ----
-
-
-def inbox_count() -> int:
-    """받은함에 있는 이미지 수 (이름 형식이 맞는 것만, F10)."""
-    groups, _ = inbox.scan()
-    return sum(len(files) for files in groups.values())
+# ---- 이미지로 다시 평가 ----
 
 
 def read_inbox() -> inbox.InboxResult:
@@ -258,13 +260,29 @@ def read_inbox() -> inbox.InboxResult:
     return inbox.run(store.read_rows())
 
 
-def start_inbox(*, wait: bool = False) -> Job:
+def image_score(
+    source: str, job_id: str, profile: user_profile.Profile, on_update: Callable[[str, dict], None] | None = None
+) -> tuple[inbox.InboxResult, dict | None]:
+    """넣은 이미지를 읽어 본문을 채우고 그 공고만 다시 평가한다 (v0.7.4 F7, F8).
+
+    그 공고 본문을 채우지 못했으면(글자 없음·OCR 실패) 평가하지 않고 None.
+    본문 없이 다시 채점하면 점수가 나아지지 않는다.
+    """
+    read = read_inbox()
+    if not any((item["source"], item["id"]) == (source, job_id) for item in read.filled):
+        return read, None
+    rows = [row for row in store.read_rows() if (sheets.source_code(row["source"]), row["id"]) == (source, job_id)]
+    # 본문 상태가 그대로면 inbox.run이 "평가"를 켜지 않으므로, 이 공고만 체크한 것으로 보고 고른다
+    targets, skipped = scoring.select_targets([{**row, "check": "TRUE"} for row in rows], "checked")
+    return read, _score_rows(targets, skipped, profile, on_update)
+
+
+def start_image_score(source: str, job_id: str, profile: user_profile.Profile, *, wait: bool = False) -> Job:
     def work(job: Job) -> reports.Summary:
         job.stage = "이미지를 읽는 중 (한 장에 10초 넘게 걸릴 수 있음)"
-        job.total = inbox_count()
-        return reports.inbox_summary(read_inbox())
+        return reports.image_score_summary(*image_score(source, job_id, profile, _score_progress(job)))
 
-    return start("inbox", work, wait=wait)
+    return start("image", work, wait=wait)
 
 
 # ---- DB 공고 초기화 ----

@@ -3,6 +3,8 @@
 Streamlit을 import하지 않는다. app.py는 이 결과를 그리기만 해서, 규칙은 가짜 데이터로 테스트한다 (N5).
 """
 
+import csv
+import io
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -380,6 +382,42 @@ def gap_rank(items: list[Card], top: int | None = None) -> tuple[list[tuple[str,
     rows = [{"score": "" if card.score is None else str(card.score), "gaps": ",".join(card.gaps)} for card in items]
     ranked, _, excluded = gaps.analyze(rows, top)
     return ranked, excluded
+
+
+def split_once(ranked: list[tuple], count_at: int) -> tuple[list[tuple], list[tuple]]:
+    """순위를 (2건 이상, 1건만)으로 나눈다 (v0.7.4 F1). 1건은 이름순. count_at은 공고 수가 있는 자리."""
+    many = [item for item in ranked if item[count_at] > 1]
+    once = sorted((item for item in ranked if item[count_at] <= 1), key=lambda item: item[0].casefold())
+    return many, once
+
+
+def stats_csv(stack: list[tuple[str, int, bool]], gap: list[tuple[str, float, int]]) -> bytes:
+    """기술 모아보기를 엑셀에서 바로 열리는 CSV로 (v0.7.4 F4). 한글이 깨지지 않게 UTF-8 BOM."""
+    out = io.StringIO()
+    writer = csv.writer(out)
+    writer.writerow(["구분", "순위", "이름", "공고 수", "내 기술", "가중치"])
+    for number, (name, count, mine) in enumerate(stack, 1):
+        writer.writerow(["많이 찾는 기술", number, name, count, "O" if mine else "", ""])
+    for number, (name, weight, count) in enumerate(gap, 1):
+        writer.writerow(["내가 부족한 것", number, name, count, "", f"{weight:.2f}"])
+    return out.getvalue().encode("utf-8-sig")
+
+
+def stats_text(stack: list[tuple[str, int, bool]], gap: list[tuple[str, float, int]], total: int) -> str:
+    """기술 모아보기 전체를 붙여넣기 좋은 글로 (v0.7.4 F5). 1건짜리는 한 줄로 묶는다(F1과 같게)."""
+    lines = [f"JOBVIS 기술 모아보기 (공고 {total}건 기준)"]
+    for title, ranked, mark in (
+        ("많이 찾는 기술", stack, lambda item: " (내 기술)" if item[2] else ""),
+        ("내가 부족한 것", [(name, count, False) for name, _, count in gap], lambda item: ""),
+    ):
+        lines += ["", f"[{title}]"]
+        many, once = split_once(ranked, 1)
+        lines += [f"{number}. {item[0]} {item[1]}건{mark(item)}" for number, item in enumerate(many, 1)]
+        if once:
+            lines.append(f"1건씩: {', '.join(item[0] + mark(item) for item in once)}")
+        if not ranked:
+            lines.append("없음")
+    return "\n".join(lines)
 
 
 def filter_labels(filters: Filters) -> list[str]:
