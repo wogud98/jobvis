@@ -445,6 +445,30 @@ def test_stack_rank_counts_postings_once_and_merges_case_and_spaces():
     assert view.stack_rank(items, [], top=1) == [("AWS", 2, False)]
 
 
+def test_stack_rank_shows_all_and_merges_same_words():
+    many = ", ".join(f"Tool{n}" for n in range(14))
+    items = view.cards(
+        [
+            scored(2, 80, stack=f"LLM Agent, k8s, MySQL, {many}"),
+            scored(3, 70, stack="Agentic AI, Kubernetes, SQL, JavaScript, Java"),
+        ]
+    )
+
+    ranked = view.stack_rank(items, ["쿠버네티스", "js"])
+
+    assert len(ranked) == 2 + 1 + 1 + 14 + 2  # 10개로 자르지 않고 전부 (v0.7.3 F1)
+    assert ranked[:2] == [("AI 에이전트", 2, False), ("Kubernetes", 2, True)]  # 같은 말은 대표 이름 (F2, F3)
+    names = {name: mine for name, _, mine in ranked}
+    assert {"MySQL", "SQL", "Java", "JavaScript"} <= set(names)  # 다른 기술은 따로
+    assert names["JavaScript"] and not names["Java"]
+
+
+def test_stack_chips_mark_same_words_as_mine():
+    assert view.stack_chips("k8s, Java, Postgres", ["Kubernetes", "PostgreSQL"]) == [
+        ("k8s", True), ("Java", False), ("Postgres", True),
+    ]  # fmt: skip
+
+
 def test_stack_rank_empty():
     assert view.stack_rank([], ["Python"]) == []
     assert view.stack_rank(view.cards([make_row(2)]), []) == []
@@ -453,16 +477,17 @@ def test_stack_rank_empty():
 def test_gap_rank_weights_like_gaps_command_and_counts_excluded():
     items = view.cards(
         [
-            scored(2, 40, gaps="AWS, Docker"),  # 가중 0.6
-            scored(3, 90, gaps="aws"),  # 0.1
+            scored(2, 40, gaps="Jenkins, Docker"),  # 가중 0.6
+            scored(3, 90, gaps="jenkins"),  # 0.1
             make_row(4, gaps="Kubernetes"),  # 점수 없음 → 뺌
         ]
     )
 
     ranked, excluded = view.gap_rank(items)
 
-    # 이름은 목록(점수 높은 순)에서 처음 나온 모양
-    assert [(name, round(weight, 2), count) for name, weight, count in ranked] == [("aws", 0.7, 2), ("Docker", 0.6, 1)]
+    # 사전에 없는 이름은 목록(점수 높은 순)에서 처음 나온 모양
+    ranked_rows = [(name, round(weight, 2), count) for name, weight, count in ranked]
+    assert ranked_rows == [("jenkins", 0.7, 2), ("Docker", 0.6, 1)]
     assert excluded == 1  # F12
 
 

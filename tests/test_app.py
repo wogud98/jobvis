@@ -1502,11 +1502,11 @@ def test_mail_settings_can_be_deleted(app, mail_env, tmp_path):
 
 
 def test_stats_dialog_ranks_stack_and_gaps_of_shown_cards(app, tmp_path):
-    text = "skills: {main: [Python]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
+    text = "skills: {main: [Kotlin]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
     (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
-    rows = [
-        scorable(2, score="40", verdict="보통", stack="Python, AWS", gaps="AWS 경험"),
-        scorable(3, score="80", verdict="추천", stack="python, Docker", gaps="AWS 경험, Kafka"),
+    rows = [  # Kotlin은 같은 말 사전에 없는 이름 (사전 이름은 대표 이름으로 보임, v0.7.3 F2)
+        scorable(2, score="40", verdict="보통", stack="Kotlin, AWS", gaps="AWS 경험"),
+        scorable(3, score="80", verdict="추천", stack="kotlin, Docker", gaps="AWS 경험, Kafka"),
         scorable(4, stack="<b>Go</b>"),
     ]
     at = app(rows)
@@ -1516,7 +1516,7 @@ def test_stats_dialog_ranks_stack_and_gaps_of_shown_cards(app, tmp_path):
     html = " ".join(m.value for m in at.markdown)
     assert "공고 **3건** 기준 · 필터 없음" in html  # F10
     # 이름은 목록(점수 높은 순)에서 처음 나온 모양. 대소문자 달라도 내 기술은 초록 (F11)
-    assert "<span class='jv-chip jv-mine' title='python · 내 프로필에 있는 기술'>python</span>" in html
+    assert "<span class='jv-chip jv-mine' title='kotlin · 내 프로필에 있는 기술'>kotlin</span>" in html
     assert "<span class='jv-rank-num'>2건</span>" in html
     assert "jv-chip jv-lack' title='AWS'" in html
     assert "&lt;b&gt;Go&lt;/b&gt;" in html and "<b>Go</b>" not in html  # 시트 글자 escape
@@ -1575,10 +1575,14 @@ def test_stats_dialog_has_summary_and_two_tabs(app, tmp_path):
     assert [t.label for t in at.tabs][-2:] == ["많이 찾는 기술", "내가 부족한 것"]
 
 
-def test_stack_rank_shows_top_ten():
-    from agent import view
+def test_stats_dialog_lists_every_skill_in_scroll_box(app):
+    many = ", ".join(f"Tool{n}" for n in range(12))
+    at = app([scorable(2, score="70", stack=f"Python, {many}", gaps="AWS 경험")])
+    at.button(key="stats-open").click().run()
 
-    assert view.STACK_TOP == 10 and view.GAP_TOP == 10  # v0.7.1 F3
+    html = " ".join(m.value for m in at.markdown)
+    assert "많이 찾는 기술 13개 중" in html  # 10개로 자르지 않음 (v0.7.3 F1)
+    assert html.count("class='jv-rank-row'") == 13 + 1  # 기술 13줄 + 부족한 점 1줄
 
 
 def test_guide_has_mail_stats_and_folded_key_steps(app):

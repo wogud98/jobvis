@@ -93,6 +93,7 @@ LLM은 항목별 점수(0–100)만 매기고, 나머지는 코드가 계산합�
 | `agent/graph.py` | LangGraph 흐름 두 개(수집, 평가)와 채점 프롬프트 |
 | `agent/scoring.py` | LLM 응답 검증, 종합점수·별점·판정 계산, 점수 보정·신뢰·신입 제외, 평가할 줄 고르기 |
 | `agent/gaps.py` | 부족한 점 가중 집계 |
+| `agent/skills.py`, `agent/skill_aliases.yaml` | 같은 기술의 다른 이름 묶기(같은 말 사전). 기술 모아보기·내 기술 판단에 씀 |
 | `agent/reports.py` | 실행 결과 요약 글 (터미널 출력, 화면 알림) |
 | `agent/view.py` | 화면 카드·정렬·필터·차트 자료·요약 칸·기술 모아보기 집계·오류 문구 |
 | `agent/mail.py` | 고른 공고 메일 만들기, Gmail(SMTP)로 보내기 |

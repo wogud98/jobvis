@@ -63,7 +63,7 @@ KEY_STEPS = {
         "3. 나온 16자를 위 **✉ 공고 메일 보내기 → 설정**에 붙여넣고 저장합니다"
     ),
 }  # 사용법 창 아래 접힌 칸 (v0.7.1 F5)
-VERSION = "v0.7.2"
+VERSION = "v0.7.3"
 EASTER_EGG = "J.O.B.V.I.S. — Just One Better Vacancy, Intelligently Sorted"  # 맨 아래 ✦에 숨김 (v0.7.2 F7)
 FOOTER = (
     "<div><b>이용</b>개인 사용 도구입니다. 수집한 공고는 혼자 보고 다른 사람과 공유하지 마세요"
@@ -1131,7 +1131,10 @@ def rank_rows(items: list[tuple[str, float, str, str]]) -> str:
 
 @st.dialog("📊 기술 모아보기", width="large")
 def stats_dialog(shown: list[view.Card], filters: view.Filters | None, known: list[str]) -> None:
-    """지금 목록의 기술 스택·부족한 점 순위 (v0.7 F10–F13). 탭 두 개, 각 위 10개 (v0.7.1 F3). LLM 안 부름 (N5)."""
+    """지금 목록의 기술 스택·부족한 점 순위 (v0.7 F10–F13). 탭 두 개, 전부 보이고 칸 안에서 스크롤 (v0.7.3 F1).
+
+    LLM 안 부름 (N5).
+    """
     labels = view.filter_labels(filters) if filters else []
     where = f"필터 {escape(', '.join(labels))}" if labels else "필터 없음"
     st.markdown(f"공고 **{len(shown)}건** 기준 · {where}", unsafe_allow_html=True)

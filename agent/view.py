@@ -12,7 +12,7 @@ import gspread
 import requests
 import sqlalchemy.exc
 
-from agent import gaps, postings, scoring, sheets, store
+from agent import gaps, postings, scoring, sheets, skills, store
 
 UNKNOWN_SOURCE = "미상"  # 출처 칸이 빈 예전 줄 (F6)
 BLANK_EXPERIENCE = "(없음)"  # 경력 칸이 빈 줄의 필터 값
@@ -100,11 +100,11 @@ def split_items(text: str) -> list[str]:
 
 
 def _skill_key(name: str) -> str:
-    return re.sub(r"\s+", "", name).casefold()
+    return skills.key(name)  # 띄어쓰기·대소문자, 같은 말 사전 (v0.7.3 F2, F3)
 
 
 def stack_chips(stack: str, known: list[str]) -> list[tuple[str, bool]]:
-    """기술스택 칩 [(기술, 내 프로필에 있는지)] (v0.5.3 F4). 대소문자·공백 무시."""
+    """기술스택 칩 [(기술, 내 프로필에 있는지)] (v0.5.3 F4). 대소문자·공백 무시, 같은 말은 같게 (v0.7.3 F3)."""
     mine = {_skill_key(name) for name in known}
     return [(item, _skill_key(item) in mine) for item in split_items(stack)]
 
@@ -349,14 +349,12 @@ def summary(items: list[Card]) -> list[tuple[str, int, str]]:
     ]
 
 
-STACK_TOP, GAP_TOP = 10, 10  # 기술 모아보기 순위 개수 (v0.7 F11, F12, v0.7.1 F3)
+def stack_rank(items: list[Card], known: list[str], top: int | None = None) -> list[tuple[str, int, bool]]:
+    """기술 스택 순위 [(기술, 나온 공고 수, 내 프로필에 있는지)] (v0.7 F11, D8, N5). 기본은 전부 (v0.7.3 F1).
 
-
-def stack_rank(items: list[Card], known: list[str], top: int = STACK_TOP) -> list[tuple[str, int, bool]]:
-    """기술 스택 순위 [(기술, 나온 공고 수, 내 프로필에 있는지)] (v0.7 F11, D8, N5).
-
-    띄어쓰기·대소문자만 다른 이름은 같은 기술로 묶고, 한 공고 안에서는 한 번만 센다. 이름은 처음 나온 모양.
-    같은 수면 이름 순. 내 기술 판단은 자세히의 기술 칩(stack_chips)과 같다.
+    띄어쓰기·대소문자만 다른 이름과 같은 말 사전에 있는 이름은 같은 기술로 묶고(v0.7.3 F2), 한 공고 안에서는
+    한 번만 센다. 이름은 사전에 있으면 대표 이름, 없으면 처음 나온 모양. 같은 수면 이름 순.
+    내 기술 판단은 자세히의 기술 칩(stack_chips)과 같다.
     """
     mine = {_skill_key(name) for name in known}
     names: dict[str, str] = {}
@@ -366,7 +364,7 @@ def stack_rank(items: list[Card], known: list[str], top: int = STACK_TOP) -> lis
         seen = set()
         for item in split_items("" if stack == NONE else stack):
             key = _skill_key(item)
-            names.setdefault(key, item)
+            names.setdefault(key, skills.display(item))
             if key not in seen:
                 seen.add(key)
                 counts[key] = counts.get(key, 0) + 1
@@ -374,8 +372,8 @@ def stack_rank(items: list[Card], known: list[str], top: int = STACK_TOP) -> lis
     return [(names[key], counts[key], key in mine) for key in ranked[:top]]
 
 
-def gap_rank(items: list[Card], top: int = GAP_TOP) -> tuple[list[tuple[str, float, int]], int]:
-    """부족한 점 순위 ([(이름, 가중 합, 공고 수)], 점수 없어 뺀 공고 수) (v0.7 F12, D7).
+def gap_rank(items: list[Card], top: int | None = None) -> tuple[list[tuple[str, float, int]], int]:
+    """부족한 점 순위 ([(이름, 가중 합, 공고 수)], 점수 없어 뺀 공고 수) (v0.7 F12, D7). 기본은 전부 (v0.7.3 F1).
 
     v0.3 --gaps와 같은 함수(gaps.analyze)를 써서 (100 − 종합점수)로 가중한다.
     """
