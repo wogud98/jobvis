@@ -34,7 +34,7 @@ RESET_DONE = "reset_done"  # 방금 공고를 초기화한 결과 문구 (v0.6.1
 UPLOAD_DONE = "upload_done"  # 방금 받은함에 저장한 이미지 문구 (v0.6.2 F15)
 RESET_ERROR = "reset_error"  # 초기화하지 못한 이유 (v0.6.1 F30)
 PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
-TAGLINE = "채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다"  # JOBVIS 아래 문장 (v0.5.2 F43)
+TAGLINE = "채용공고를 모아 나와 비교!"  # JOBVIS 아래 문장 (v0.5.2 F43, v0.7.2 F5)
 SORTS = {"점수 높은 순": "score_desc", "점수 낮은 순": "score_asc", "마감 임박 순": "deadline"}  # F40, v0.5.3 F8
 TRUST_CLASS = {"높음": "high", "보통": "mid", "낮음": "low"}  # 신뢰 배지 색 (F5)
 
@@ -63,14 +63,17 @@ KEY_STEPS = {
         "3. 나온 16자를 위 **✉ 공고 메일 보내기 → 설정**에 붙여넣고 저장합니다"
     ),
 }  # 사용법 창 아래 접힌 칸 (v0.7.1 F5)
-VERSION = "v0.7.1"
+VERSION = "v0.7.2"
+EASTER_EGG = "J.O.B.V.I.S. — Just One Better Vacancy, Intelligently Sorted"  # 맨 아래 ✦에 숨김 (v0.7.2 F7)
 FOOTER = (
-    "개인 사용 도구입니다. 수집한 공고는 혼자 보는 용도로만 쓰고 다른 사람과 공유하지 마세요(사람인·잡코리아 약관). "
-    "데이터는 이 PC에만 저장되고, 평가·이력서 채우기 때만 LLM 제공자(기본 Gemini)로 보냅니다.<br>"
-    "도움말은 위 📖 사용법 · 공고 출처 사람인·잡코리아 공개 페이지 · "
-    "참고 <a href='https://github.com/MadsLorentzen/ai-job-search' target='_blank' rel='noopener noreferrer'>"
-    f"ai-job-search</a> (MIT) · JOBVIS {VERSION}"
-)  # 화면 맨 아래 이용 안내 (v0.7.1 F10). 고정된 글이라 사용자 입력은 없다
+    "<div><b>이용</b>개인 사용 도구입니다. 수집한 공고는 혼자 보고 다른 사람과 공유하지 마세요"
+    "(사람인·잡코리아 약관)</div>"
+    "<div><b>데이터</b>이 PC에만 저장됩니다. 평가·이력서 채우기 때만 LLM 제공자(기본 Gemini)로 보냅니다</div>"
+    "<div><b>도움말</b>위 📖 사용법 · 공고 출처 사람인·잡코리아 공개 페이지 · 참고 "
+    "<a href='https://github.com/MadsLorentzen/ai-job-search' target='_blank' rel='noopener noreferrer'>"
+    f"ai-job-search</a> (MIT) · JOBVIS {VERSION}</div>"
+    f"<div class='jv-egg'>✦<span>{EASTER_EGG}</span></div>"
+)  # 화면 맨 아래 이용 안내. 내용별 세 줄 (v0.7.1 F10, v0.7.2 F7). 고정된 글이라 사용자 입력은 없다
 MINE_TIP = "내 프로필에 있는 기술"  # 초록 칩 도움말 (v0.7.1 F7)
 RESUME_HELP = (
     f"PDF(글자 있는 것)·Word·txt·md. 파일 글자(앞 {resume.MAX_TEXT:,}자)가 LLM 제공자(기본 Gemini)로 전송됩니다. "
@@ -147,6 +150,18 @@ SCHEME_SYNC = """<script>
   };
   sync();
   if (!window.jvSchemeSync) window.jvSchemeSync = setInterval(sync, 300);
+  // 자세히를 열 때 카드 윗단까지 움직여 아래 공간을 넓힌다. 그러면 자세히가 아래로 열린다 (v0.7.2 F8)
+  if (!window.jvMoreScroll) {
+    window.jvMoreScroll = true;
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest && event.target.closest('div[class*="st-key-more-"] button');
+      if (!button || button.getAttribute("aria-expanded") === "true") return;  // 닫을 때는 그대로
+      const card = button.closest('div[class*="st-key-box-card-"], div[class*="st-key-box-dim-card-"]');
+      if (!card) return;
+      const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;  // N2
+      card.scrollIntoView({ block: "start", behavior: still ? "auto" : "smooth" });
+    }, true);
+  }
 })();
 </script>"""
 
@@ -241,12 +256,16 @@ div[data-testid="stAlert"] > div {
 }
 /* 필터 사이드바와 자세히 창도 굵은 테두리 (v0.5.4 F1, F5) */
 section[data-testid="stSidebar"] { border-right: 3px solid var(--jv-ink); background: var(--jv-paper); }
-section[data-testid="stSidebar"] div[class*="st-key-box-filter"] { padding: 16px; }
+/* 높이 900px 창에서 스크롤이 생기지 않게 여백을 줄인다 (v0.7.2 F2) */
+section[data-testid="stSidebar"] div[class*="st-key-box"] { padding: 12px 14px; }
+section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] { padding-top: 0; padding-bottom: 1rem; }
 div[data-testid="stPopoverBody"] { border: 3px solid var(--jv-ink) !important; box-shadow: 6px 6px 0 var(--jv-ink);
   max-height: 75vh; overflow-y: auto;
   /* 자세히 창 위 사선 띠 (F26) */
   background: repeating-linear-gradient(135deg, var(--jv-lime) 0 10px, var(--jv-ink) 10px 13px) top / 100% 12px
-    no-repeat, var(--jv-card) !important; }
+    no-repeat, var(--jv-card) !important;
+  /* 띠가 창 위에 고정되면 내리는 글이 그 밑으로 지나가 겹쳐 보인다. 글과 같이 올라가게 (v0.7.2 F10) */
+  background-attachment: local, local !important; }
 /* 고르기 칸의 키워드 아무 데나 눌러도 지워지게, 삭제 버튼이 키워드 전체를 덮는다 (v0.5.1 F22) */
 div[data-testid="stMultiSelect"] [data-tag] {
   position: relative; cursor: pointer; padding-right: 22px; border: 2px solid var(--jv-ink); border-radius: 999px;
@@ -260,13 +279,11 @@ div[data-testid="stMultiSelect"] [data-tag] > button[aria-label^="Remove"] svg {
 div[data-testid="stMultiSelect"] [data-tag]:hover { filter: brightness(0.88); text-decoration: line-through; }
 div[data-testid="stMetricValue"] { font-size: 2.4rem; font-weight: 900; color: var(--jv-text); }
 /* 제목은 라임 글자 + 검정 테두리·그림자 (v0.6.1 F26, F1·F19를 바꿈) */
-.jv-hero h1 { margin: 0; padding: 0; font-size: 4rem; font-weight: 900; color: var(--jv-title);
+.jv-hero h1 { margin: 0; padding: 0; white-space: nowrap; font-size: clamp(3.6rem, 6vw, 5.2rem);  /* v0.7.2 F6 */
+  font-weight: 900; color: var(--jv-title);
   letter-spacing: 0.01em; line-height: 1.05; -webkit-text-stroke: 2px var(--jv-title-edge);
   text-shadow: 4px 4px 0 var(--jv-title-edge); }
-.jv-kicker { display: inline-block; margin-bottom: 8px; padding: 2px 10px; border: 2px solid var(--jv-ink);
-  background: var(--jv-card); box-shadow: 3px 3px 0 var(--jv-ink); font-size: 0.75rem; font-weight: 800;
-  letter-spacing: 0.08em; }
-.jv-hero p { margin: 4px 0 0; color: var(--jv-sub); font-weight: 600; }
+.jv-hero p { margin: 6px 0 0; color: var(--jv-sub); font-weight: 600; white-space: nowrap; }  /* 한 줄 (v0.7.2 F5) */
 /* 점수는 도넛 원 (F26). --p가 채울 비율, 없으면 빈 원 */
 .jv-score { width: 3.6rem; height: 3.6rem; border-radius: 50%; border: 2px solid var(--jv-ink);
   display: grid; place-items: center; font-size: 1.3rem; line-height: 1; color: var(--jv-text);
@@ -325,6 +342,11 @@ div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-profile-"]) { fl
 div[class*="st-key-box-profile-"] { height: 100%; }
 div[data-testid="stLayoutWrapper"]:has(> div[class*="st-key-box-summary-"]) { flex: 1 1 auto; }
 div[class*="st-key-box-summary-"] { height: 100%; }
+/* 보통 버튼은 마우스를 올리면 바탕이 살짝 라임 빛 (v0.7.2 F9). 지우는 버튼 빨강이 아래에서 이긴다 */
+button[data-testid="stBaseButton-secondary"]:hover:not(:disabled), button[data-testid="stPopoverButton"]:hover {
+  background: color-mix(in srgb, var(--jv-lime) 22%, var(--jv-card)) !important; }
+/* 자세히를 누르면 카드 윗단이 위 메뉴에 가리지 않는 곳까지 움직인다 (v0.7.2 F8) */
+div[class*="st-key-box-card-"], div[class*="st-key-box-dim-card-"] { scroll-margin-top: 4.5rem; }
 /* 지우는 버튼은 마우스를 올리면 빨강 (v0.7.1 F6) */
 .st-key-reset-open button:hover:not(:disabled), .st-key-reset-yes button:hover:not(:disabled),
 .st-key-profile-clear-all button:hover:not(:disabled), .st-key-clear-all-yes button:hover:not(:disabled),
@@ -342,6 +364,12 @@ div[class*="st-key-top-"] button:hover:not(:disabled) { box-shadow: 4px 4px 0 va
 .jv-footer { margin-top: 2.5rem; padding-top: 0.8rem; border-top: 2px solid var(--jv-ink); color: var(--jv-muted);
   font-size: 0.8rem; line-height: 1.6; }
 .jv-footer a { color: var(--jv-muted); }
+.jv-footer > div + div { margin-top: 2px; }
+.jv-footer b { display: inline-block; width: 3.6em; color: var(--jv-text); }
+/* 이스터에그: 맨 아래 ✦에 마우스를 올리면 나타난다 (v0.7.2 F7) */
+.jv-footer .jv-egg { margin-top: 1.6rem; text-align: center; cursor: default; }
+.jv-egg span { margin-left: 8px; opacity: 0; transition: opacity 0.3s; }
+.jv-egg:hover span { opacity: 1; }
 /* 움직임 (v0.7.1 F8, F9, F11). 운영체제 "움직임 줄이기"면 모두 끈다 (N2) */
 @property --p { syntax: "<number>"; inherits: false; initial-value: 0; }
 @keyframes jv-rise { from { opacity: 0; transform: translateY(6px); } }
@@ -692,17 +720,6 @@ def start_job(starter, *args) -> None:
     st.rerun()
 
 
-KEYWORD_PICKS = 8  # 키워드 칸 아래 추천 버튼 수 (v0.7.1 F1)
-
-
-def pick_keyword() -> None:
-    """추천 버튼을 누르면 키워드 칸에 넣고 버튼은 비운다. 같은 말을 다시 눌러도 들어간다 (v0.7.1 D1)."""
-    word = st.session_state.get("keyword-pick")
-    if word:
-        st.session_state["collect-keyword"] = word
-    st.session_state["keyword-pick"] = None
-
-
 def show_collect_card() -> None:
     busy = runner.running()  # 한 번에 하나만 (F12)
     with st.container(border=True, key="box-run-collect"):
@@ -711,14 +728,10 @@ def show_collect_card() -> None:
             raw = user_profile.read_raw(PROFILE)
         except user_profile.ProfileError:
             raw = None
-        # 글자 칸은 Enter 없이 다른 곳을 눌러도 남는다. 아래 추천 버튼을 누르면 칸에 들어간다 (v0.7.1 F1)
+        # 글자 칸은 Enter 없이 다른 곳을 눌러도 남는다 (v0.7.1 F1). 추천 키워드 버튼은 없앰 (v0.7.2 F4)
         keyword = st.text_input(
             "키워드 *", key="collect-keyword", placeholder="예: 백엔드 신입", help="사이트 검색창에 넣을 말 (F3)"
         )
-        st.pills(
-            "추천 키워드", runner.keyword_options(raw)[:KEYWORD_PICKS], key="keyword-pick", on_change=pick_keyword,
-            label_visibility="collapsed",
-        )  # fmt: skip
         left, right = st.columns(2)
         locations = left.multiselect(
             "지역", runner.REGION_NAMES, default=runner.default_regions(raw), placeholder="전체",
@@ -788,7 +801,7 @@ def start_score(mode: str) -> None:
 
 
 def show_score_bar(rows: list[dict]) -> None:
-    """사이드바 맨 위 평가 줄 (v0.5.2 F38, v0.7.1 F4). 카드를 내리며 체크해도 늘 보인다."""
+    """사이드바 필터 아래 평가 줄 (v0.5.2 F38, v0.7.1 F4, v0.7.2 F1). 카드를 내리며 체크해도 늘 보인다."""
     busy = runner.running()
     checked, unscored = runner.score_targets(rows, "checked"), runner.score_targets(rows, "all")
     with st.container(border=True, key="box-score-bar"):
@@ -800,10 +813,10 @@ def show_score_bar(rows: list[dict]) -> None:
             )
             show_check_error()
             return
-        st.markdown("**평가** <span class='jv-muted'>카드의 평가 칸을 체크하고 누릅니다</span>", unsafe_allow_html=True)
+        st.markdown("**평가**")  # 안내 글은 버튼 도움말로 (v0.7.2 F2)
         if st.button(
             f"🧮 체크한 공고 평가 ({checked}건)", type="primary", disabled=busy or not checked,
-            key="run-score", use_container_width=True,
+            key="run-score", use_container_width=True, help="카드의 평가 칸을 체크하고 누릅니다",
         ):  # fmt: skip
             start_score("checked")
         if st.button(
@@ -828,25 +841,33 @@ def show_run_panel() -> None:
     show_job_result()
 
 
-FILTER_KEYS = {"search": "", "sources": [], "experiences": [], "scored-only": False, "recommended-only": False,
-               "applied-only": False, "image-only": False, "hidden-only": False}  # fmt: skip
-TILE_FILTERS = (None, "scored-only", "recommended-only", "image-only")  # 요약 칸 순서대로 켤 필터 (v0.5.4 F12)
+# 보기 칸 하나로 고르는 목록. 값은 켤 view.Filters 칸 (v0.7.2 F3, 토글 다섯 개를 합침)
+VIEWS = {
+    "전체": None, "평가된 공고": "scored_only", "평가 전 공고": "unscored_only", "추천 이상": "recommended_only",
+    "지원한 공고": "applied_only", "이미지 필요": "image_only", "관심 없음": "hidden_only",
+}  # fmt: skip
+FILTER_KEYS = {"search": "", "sources": [], "experiences": [], "view": "전체"}
+TILE_VIEWS = ("전체", "평가된 공고", "추천 이상", "이미지 필요")  # 요약 칸 순서대로 고를 보기 (v0.5.4 F12)
+
+
+def pick_view() -> dict:
+    """보기 칸 (v0.7.2 F3). 기본은 전체(평가 전 포함, v0.5.2 F32), 관심 없음으로 뺀 공고는 관심 없음에서만."""
+    chosen = st.selectbox(
+        "보기", list(VIEWS), key="view", help="이미지 필요: " + IMAGE_HELP + " 관심 없음: 뺀 공고, 되돌리기로 다시 넣음"
+    )
+    return {VIEWS[chosen]: True} if VIEWS[chosen] else {}
 
 
 def pick_tile(index: int) -> None:
-    """요약 칸의 보기를 누르면 필터를 모두 풀고 그 칸의 필터만 켠다. 전체 공고는 모두 풀기만 (v0.5.4 F12)."""
+    """요약 칸의 보기를 누르면 필터를 모두 풀고 보기 칸을 그 칸으로 바꾼다 (v0.5.4 F12, v0.7.2 F3)."""
     st.session_state.update(FILTER_KEYS)
-    if TILE_FILTERS[index]:
-        st.session_state[TILE_FILTERS[index]] = True
+    st.session_state["view"] = TILE_VIEWS[index]
 
 
 def tile_on(index: int) -> bool:
     """지금 필터가 그 칸을 누른 상태와 같은지. 초록 테두리로 보인다."""
     state = {key: st.session_state.get(key, empty) for key, empty in FILTER_KEYS.items()}
-    wanted = dict(FILTER_KEYS)
-    if TILE_FILTERS[index]:
-        wanted[TILE_FILTERS[index]] = True
-    return state == wanted
+    return state == {**FILTER_KEYS, "view": TILE_VIEWS[index]}
 
 
 def reload_after_job() -> None:
@@ -899,11 +920,9 @@ def show_postings() -> None:
             st.button(f"{note} →", key=f"tile-{index}", on_click=pick_tile, args=(index,), type="tertiary")
 
     sources, experiences = view.options(items)
-    with st.sidebar:  # 필터 위. 대상 수는 필터와 상관없이 전체 시트 기준 (F38, v0.7.1 F4)
-        show_score_bar(rows)
     # 필터는 왼쪽 사이드바에 고정한다. 목록을 내려도 보이고 « 로 접는다 (v0.5.4 F1)
     with st.sidebar, st.container(border=True, key="box-filter"):  # 메인 카드와 같은 모양 (v0.6.1 F20)
-        st.markdown("#### 필터 <span class='jv-muted'>📋 공고 목록에 적용</span>", unsafe_allow_html=True)
+        st.markdown("#### 필터")  # 옆 설명 글은 없앰 (v0.7.2 F12)
         filters = view.Filters(
             query=st.text_input("검색", placeholder="회사명·직무", key="search"),  # v0.5.3 F10
             # 처음엔 비워 두고 "전체"로 보인다. 고른 것이 있을 때만 거른다 (v0.5.2 F29)
@@ -913,14 +932,10 @@ def show_postings() -> None:
             ),
             # 점수 정렬에서 평가 전은 늘 아래 (F40). 마감 임박 순은 점수와 상관없이 (v0.5.3 F8)
             sort=SORTS[st.selectbox("정렬", list(SORTS))],
-            scored_only=st.toggle("평가된 공고만 보기", key="scored-only"),  # 기본은 전체 (v0.5.2 F32)
-            recommended_only=st.toggle("추천 이상만 보기", key="recommended-only"),  # 강력 추천 + 추천 (v0.5.4 F12)
-            applied_only=st.toggle("지원한 공고만 보기", key="applied-only"),  # v0.5.3 F11
-            image_only=st.toggle("이미지 필요한 공고만 보기", key="image-only", help=IMAGE_HELP),  # v0.5.4 F2
-            hidden_only=st.toggle(
-                "관심 없는 공고만 보기", key="hidden-only", help="관심 없음으로 뺀 공고. 되돌리기로 목록에 다시 넣음"
-            ),
+            **pick_view(),
         )
+    with st.sidebar:  # 필터 아래. 대상 수는 필터와 상관없이 전체 시트 기준 (F38, v0.7.2 F1)
+        show_score_bar(rows)
     show_reset(rows)
     shown = view.apply(items, filters)
     known = my_skills()
@@ -950,6 +965,7 @@ MAIL_DONE = "mail_done"  # 방금 보낸 결과 문구 (알림)
 MAIL_ERROR = "mail_error"  # 보내지·저장하지 못한 이유 (창에 다시 보임)
 MAIL_NOTE = "mail_note"  # 창 안 안내 (저장함, 시험 메일 보냄, 지움)
 MAIL_SETTINGS = "mail_settings"  # 메일 창에서 설정 칸을 보일지
+STATS_HEIGHT = 400  # 기술 모아보기 탭 칸 높이. 위 10개 + 안내 두 줄이 들어감 (v0.7.2 F11)
 EMPTY_STATS = "모을 공고가 없습니다. 필터를 바꾸거나 평가를 먼저 해 주세요"  # v0.7 F13
 
 
@@ -1128,13 +1144,14 @@ def stats_dialog(shown: list[view.Card], filters: view.Filters | None, known: li
             unsafe_allow_html=True,
         )
     wanted, lacking = st.tabs(["많이 찾는 기술", "내가 부족한 것"])
-    with wanted:
+    # 두 탭 칸 높이를 같게 해서 탭을 바꿔도 창 크기가 그대로 (v0.7.2 F11)
+    with wanted, st.container(height=STATS_HEIGHT, border=False, key="stats-wanted"):
         if stack:
             items = [(name, count, f"{count}건", "jv-mine" if mine else "jv-lack") for name, count, mine in stack]
             st.markdown(rank_rows(items), unsafe_allow_html=True)
         else:
             st.caption(EMPTY_STATS)
-    with lacking:
+    with lacking, st.container(height=STATS_HEIGHT, border=False, key="stats-lacking"):
         ranked, excluded = view.gap_rank(shown)
         if ranked:
             items = [(name, weight, f"{count}건", "") for name, weight, count in ranked]
@@ -1153,10 +1170,11 @@ def show_reset(rows: list[dict]) -> None:
             return
     except store.StorageError:
         return
-    with st.sidebar, st.container(border=True, key="box-reset"):
-        st.markdown("#### 공고 초기화 <span class='jv-muted'>DB</span>", unsafe_allow_html=True)
-        st.caption("모은 공고를 지우고 처음부터 다시 수집합니다. 프로필·키는 그대로.")
-        clicked = st.button("🗑 공고 초기화", key="reset-open", disabled=runner.running(), use_container_width=True)
+    with st.sidebar:  # 카드 없이 버튼 하나, 설명은 도움말로 (v0.7.2 F2)
+        clicked = st.button(
+            "🗑 공고 초기화", key="reset-open", disabled=runner.running(), use_container_width=True,
+            help="DB에 모은 공고를 지우고 처음부터 다시 수집합니다. 프로필·키는 그대로",
+        )  # fmt: skip
         if clicked or RESET_ERROR in st.session_state:  # 못 지운 이유를 창에 다시 보인다 (키 창과 같음)
             confirm_reset(rows)
 
@@ -1537,7 +1555,7 @@ def main() -> None:
         tools = st.container(horizontal=True, horizontal_alignment="right", wrap=False, key="top-tools")
         main_actions = st.container(horizontal=True, horizontal_alignment="right", wrap=False, key="top-actions")
     title.markdown(
-        f'<div class="jv-hero"><span class="jv-kicker">✦ AI 취업 비서</span><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',
+        f'<div class="jv-hero"><h1>JOBVIS</h1><p>{TAGLINE}</p></div>',  # 위 표시는 없앰 (v0.7.2 F6)
         unsafe_allow_html=True,
     )  # F20
     key_button(tools)

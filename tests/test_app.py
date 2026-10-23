@@ -74,7 +74,7 @@ def test_postings_tab_shows_guide_summary_and_scored_cards(app):
     assert "평가 전" in heads[2]  # 점수 순, 평가 전은 뒤
     assert len(at.get("popover")) == 3  # 자세히 (F4, v0.5.4 F5)
 
-    at.toggle(key="scored-only").set_value(True).run()  # 평가된 공고만 보기 (F32)
+    at.selectbox(key="view").set_value("평가된 공고").run()  # 평가된 공고만 보기 (F32, v0.7.2 F3)
     assert sum("회사" in m.value for m in at.markdown) == 2
 
 
@@ -181,8 +181,7 @@ def test_run_panel_shows_collect_and_score_cards(app):
     assert at.button(key="run-score-all").label == "평가 전 전부 평가 (2건)"  # --score all (F7)
     assert not [r for r in at.radio if r.label == "대상"]  # 수집 옆 평가 카드 없음 (v0.5.2 F38)
     assert at.text_input(key="collect-keyword").label == "키워드 *"  # Enter 없이 남는 글자 칸 (v0.7.1 F1)
-    picks = at.button_group(key="keyword-pick").options
-    assert picks == runner.JOB_NAMES[:8]  # 프로필이 없으면 직무 이름 앞 8개 (F3, v0.7.1 F1)
+    assert at.text_input(key="collect-keyword").placeholder == "예: 백엔드 신입"
     assert any("수집 카드에 키워드를 넣고" in m.value for m in at.markdown)  # 사용법 창 (F15, v0.5.4 F9)
 
 
@@ -466,13 +465,15 @@ def test_score_bar_buttons_start_score(app, monkeypatch, tmp_path, key, mode):
     assert started == [mode]  # F38
 
 
-def test_score_bar_sits_at_top_of_sidebar(app):
+def test_score_bar_sits_below_filters_in_sidebar(app):
     at = app([scorable(2), make_row(3, score="70", verdict="추천", trust="높음", body="글자")])
 
     texts = [m.value for m in at.sidebar.markdown]
     bar = next(i for i, v in enumerate(texts) if v.startswith("**평가**"))
     filters = next(i for i, v in enumerate(texts) if v.startswith("#### 필터"))
-    assert bar < filters  # 사이드바 맨 위, 필터 위 (v0.7.1 F4)
+    assert filters < bar  # 사이드바 필터 아래 (v0.7.1 F4, v0.7.2 F1)
+    assert texts[bar] == "**평가**"  # 안내 글은 버튼 도움말로 (v0.7.2 F2)
+    assert at.sidebar.button(key="run-score").help == "카드의 평가 칸을 체크하고 누릅니다"
     assert not any(v.startswith("**평가**") for v in (m.value for m in at.main.markdown))
     assert at.sidebar.button(key="run-score-all").label == "평가 전 전부 평가 (1건)"
 
@@ -519,7 +520,8 @@ def test_no_pager_for_ten_or_fewer(app):
 def test_hero_tagline(app):
     at = app([])
 
-    assert any("채용공고를 한곳에 모아 보고, 내 프로필과 얼마나 맞는지 확인합니다" in m.value for m in at.markdown)
+    hero = next(m.value for m in at.markdown if "jv-hero" in m.value and "<h1>" in m.value)
+    assert "<p>채용공고를 모아 나와 비교!</p>" in hero and "AI 취업 비서" not in hero  # v0.7.2 F5, F6
 
 
 # ---- v0.5.2 관심 없는 공고 빼기 ----
@@ -537,12 +539,12 @@ def test_hide_card_moves_it_to_hidden_view_and_back(app, monkeypatch):
     assert written == [(3, True)]  # 시트 "관심없음" 칸에 씀 (F44)
     assert names(at) == ["회사2"]
     assert any("평가할 공고가 없습니다" in m.value for m in at.markdown)  # 평가 대상에서도 빠짐 (v0.6.2 F17)
-    next(t for t in at.toggle if t.label == "관심 없는 공고만 보기").set_value(True).run()
+    at.selectbox(key="view").set_value("관심 없음").run()
     assert names(at) == ["회사3"] and at.button(key="hide-3").label == "되돌리기"
 
     at.button(key="hide-3").click().run()
     assert written[-1] == (3, False) and names(at) == []
-    next(t for t in at.toggle if t.label == "관심 없는 공고만 보기").set_value(False).run()
+    at.selectbox(key="view").set_value("전체").run()
     assert names(at) == ["회사2", "회사3"]
 
 
@@ -655,7 +657,7 @@ def test_apply_button_marks_card_and_applied_filter(app, monkeypatch):
     assert at.button(key="apply-3").label == "✓ 지원함"
     head = next(m.value for m in at.markdown if m.value.startswith("**회사3"))
     assert 'jv-high">지원함<' in head
-    next(t for t in at.toggle if t.label == "지원한 공고만 보기").set_value(True).run()
+    at.selectbox(key="view").set_value("지원한 공고").run()
     assert names(at) == ["회사3"]
 
     at.button(key="apply-3").click().run()
@@ -695,11 +697,12 @@ def test_css_follows_theme_and_guide_mentions_theme(app):
 def test_filters_live_in_sidebar(app):
     at = app([scored(2)])
 
-    labels = [w.label for w in at.sidebar.toggle]
-    assert labels == ["평가된 공고만 보기", "추천 이상만 보기", "지원한 공고만 보기",
-                      "이미지 필요한 공고만 보기", "관심 없는 공고만 보기"]  # F1, F2  # fmt: skip
+    assert not at.sidebar.toggle  # 토글 다섯 개는 보기 칸 하나로 (v0.7.2 F3)
     assert [w.label for w in at.sidebar.text_input] == ["검색"]
-    assert [w.label for w in at.sidebar.selectbox] == ["정렬"]
+    assert [w.label for w in at.sidebar.selectbox] == ["정렬", "보기"]
+    assert at.selectbox(key="view").options == [
+        "전체", "평가된 공고", "평가 전 공고", "추천 이상", "지원한 공고", "이미지 필요", "관심 없음",
+    ]  # fmt: skip
 
 
 def test_summary_text_applies_its_filter_and_marks_tile(app):
@@ -710,11 +713,11 @@ def test_summary_text_applies_its_filter_and_marks_tile(app):
     assert "box-summary-0-on" in [c.key for c in at.get("flex_container") if getattr(c, "key", None)]
 
     at.button(key="tile-2").click().run()  # 추천 이상 (F12)
-    assert names(at) == ["회사2"] and at.toggle(key="recommended-only").value
+    assert names(at) == ["회사2"] and at.selectbox(key="view").value == "추천 이상"
     assert "box-summary-2-on" in [c.key for c in at.get("flex_container") if getattr(c, "key", None)]
 
     at.button(key="tile-3").click().run()  # 이미지 필요만, 앞 필터는 풀림 (F3)
-    assert names(at) == ["회사4"] and not at.toggle(key="recommended-only").value
+    assert names(at) == ["회사4"] and at.selectbox(key="view").value == "이미지 필요"
 
     at.text_input(key="search").set_value("회사").run()
     at.button(key="tile-0").click().run()  # 전체 공고: 모두 풂
@@ -919,7 +922,8 @@ def test_title_is_lime_with_dark_edge_and_large():
 
     assert "--jv-title: light-dark(#c8f53a, #c8f53a);" in screen.css()  # 라임 제목 (v0.6.1 F26, F1을 바꿈)
     assert "-webkit-text-stroke: 2px var(--jv-title-edge)" in screen.CSS  # 검정 테두리로 두 테마 모두 읽힘
-    assert "font-size: 4rem; font-weight: 900; color: var(--jv-title)" in screen.CSS  # F19
+    assert "white-space: nowrap; font-size: clamp(3.6rem, 6vw, 5.2rem);" in screen.CSS  # 한 줄, 더 크게 (v0.7.2 F6)
+    assert "font-weight: 900; color: var(--jv-title)" in screen.CSS  # F19
     assert "--jv-highlight) 58%" not in screen.CSS  # 제목 뒤 형광 줄 없음 (F19)
 
 
@@ -980,7 +984,7 @@ def test_resume_box_is_open_for_empty_profile_and_folded_otherwise(app, tmp_path
 def test_sidebar_filter_is_a_card_and_selected_tile_is_marked():
     import app as screen
 
-    assert 'st-key-box-filter"] { padding: 16px; }' in screen.CSS  # v0.6.1 F20
+    assert 'section[data-testid="stSidebar"] div[class*="st-key-box"] { padding: 12px 14px; }' in screen.CSS  # v0.7.2
     assert "background: var(--jv-paper); }" in screen.CSS
     assert '[class*="-on"] { border-width: 5px !important;' in screen.CSS  # 초록 대신 굵은 테두리 (F15)
 
@@ -1532,27 +1536,16 @@ def test_stats_dialog_shows_filters_and_empty_message(app):
 # ---- v0.7.1 화면 보완 (F1–F12) ----
 
 
-def test_keyword_pick_fills_text_box_and_typed_keyword_stays(app, monkeypatch):
+def test_keyword_text_box_stays_without_suggestion_buttons(app, monkeypatch):
     started = []
     monkeypatch.setattr(runner, "start_collect", lambda state: started.append(state))
     at = app([])
-    at.text_input(key="collect-keyword").input("데이터 엔지니어").run()  # Enter 없이 다른 곳을 눌러도 남음 (F1)
+    at.text_input(key="collect-keyword").input("데이터 엔지니어").run()  # Enter 없이 다른 곳을 눌러도 남음 (v0.7.1 F1)
+
     assert at.text_input(key="collect-keyword").value == "데이터 엔지니어"
-    at.button_group(key="keyword-pick").set_value(runner.JOB_NAMES[1]).run()
-
-    assert at.text_input(key="collect-keyword").value == runner.JOB_NAMES[1]  # 추천을 누르면 칸에 들어감
-    assert at.button_group(key="keyword-pick").value is None  # 같은 말을 다시 누를 수 있게 비움 (D1)
+    assert "keyword-pick" not in [w.key for w in at.get("button_group")]  # 추천 키워드 버튼 없음 (v0.7.2 F4)
     at.button(key="run-collect").click().run()
-    assert started[0]["keyword"] == runner.JOB_NAMES[1]
-
-
-def test_keyword_picks_put_profile_jobs_and_main_skills_first(app, tmp_path):
-    text = "skills: {main: [Python, Kotlin]}\nexperience: {years: 0}\ndirection: {jobs: [백엔드 개발]}\n"
-    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
-    at = app([])
-
-    picks = at.button_group(key="keyword-pick").options
-    assert picks[:3] == ["백엔드 개발", "Python", "Kotlin"] and len(picks) == 8  # 최대 8개 (F1)
+    assert started[0]["keyword"] == "데이터 엔지니어"
 
 
 def test_top_buttons_have_clear_names_and_dialog_titles(app):
@@ -1622,3 +1615,61 @@ def test_css_danger_hover_animations_and_reduced_motion():
     motion = screen.CSS.split("@media (prefers-reduced-motion: reduce)")[1]
     assert "animation: none" in motion and "transform: none" in motion  # N2
     assert 'st-key-top-"] button' in screen.CSS  # 위 버튼은 작게 (F12)
+
+
+# ---- v0.7.2 화면 다듬기 2 (F1–F9) ----
+
+
+def test_view_select_shows_unscored_cards_only(app):
+    at = app([scorable(2, score="80"), scorable(3), scorable(4)])
+    at.selectbox(key="view").set_value("평가 전 공고").run()  # v0.7.2 F3
+
+    assert names(at) == ["회사3", "회사4"]
+
+
+def test_reset_is_one_button_with_help(app, monkeypatch):
+    at = db_app(app, monkeypatch, [scorable(2)])
+
+    button = at.sidebar.button(key="reset-open")
+    assert button.label == "🗑 공고 초기화" and "처음부터 다시 수집" in button.help  # v0.7.2 F2
+    assert "box-reset" not in [c.key for c in at.get("flex_container") if getattr(c, "key", None)]
+
+
+def test_footer_is_three_lines_with_easter_egg():
+    import app as screen
+
+    assert [part.split("</b>")[0] for part in screen.FOOTER.split("<div><b>")[1:]] == ["이용", "데이터", "도움말"]
+    assert f"<div class='jv-egg'>✦<span>{screen.EASTER_EGG}</span></div>" in screen.FOOTER  # v0.7.2 F7
+    assert ".jv-egg:hover span { opacity: 1; }" in screen.CSS and "opacity: 0;" in screen.CSS
+
+
+def test_more_button_scrolls_card_up_and_buttons_tint_on_hover():
+    import app as screen
+
+    script = screen.SCHEME_SYNC
+    assert 'aria-expanded") === "true") return' in script  # 닫을 때는 움직이지 않음 (v0.7.2 F8)
+    assert 'scrollIntoView({ block: "start"' in script and "prefers-reduced-motion: reduce" in script  # N2
+    assert "scroll-margin-top: 4.5rem" in screen.CSS
+    tint = screen.CSS.index('button[data-testid="stBaseButton-secondary"]:hover:not(:disabled)')
+    assert tint < screen.CSS.index(".st-key-reset-open button:hover")  # 지우는 버튼 빨강이 이김 (F9)
+
+
+def test_stats_tabs_have_same_height_and_filter_title_is_plain(app):
+    at = app([scorable(2, score="70", stack="Python", gaps="AWS 경험")])
+
+    assert "#### 필터" in [m.value for m in at.sidebar.markdown]  # 옆 설명 글 없음 (v0.7.2 F12)
+    at.button(key="stats-open").click().run()
+    boxes = [c for c in at.get("flex_container") if getattr(c, "key", None) in ("stats-wanted", "stats-lacking")]
+    assert len(boxes) == 2  # 두 탭 칸 모두 같은 높이(STATS_HEIGHT) 칸 안에 (v0.7.2 F11)
+
+
+def test_years_slider_goes_to_ten_unless_saved_value_is_larger(app, tmp_path):
+    at = app([])
+    slider = next(s for s in at.slider if s.label.startswith("경력"))
+    assert slider.max == 10  # v0.7.2 F13
+
+    text = "skills: {main: [Python]}\nexperience: {years: 12}\ndirection: {jobs: [백엔드 개발]}\n"
+    (tmp_path / "profile.yaml").write_text(text, encoding="utf-8")
+    at = app([])
+    slider = next(s for s in at.slider if s.label.startswith("경력"))
+    assert slider.max == 12 and slider.value == 12  # 저장된 값은 그대로

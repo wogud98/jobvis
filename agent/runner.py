@@ -111,12 +111,6 @@ JOB_NAMES = list(codes.JOBS)  # 직무 추천 검색어 (F2)
 SOURCE_NAMES = {module.NAME: code for code, module in SOURCES.items()}  # 화면 이름 → 코드
 
 
-def keyword_options(profile: dict | None) -> list[str]:
-    """키워드 추천 검색어: 프로필 희망 직무·주력 기술을 앞에, 그 뒤 직무 이름 (F3)."""
-    values = profile_form.to_form(profile)
-    return list(dict.fromkeys(values[("direction", "jobs")] + values[("skills", "main")] + JOB_NAMES))
-
-
 def region_names(value: list[str] | str | None) -> list[str]:
     """지역 입력을 이름 목록으로. 터미널은 "서울,경기"처럼 쉼표로 받는다. 빈칸·겹친 이름은 뺀다 (v0.6.1 F29)."""
     names = value.split(",") if isinstance(value, str) else value or []

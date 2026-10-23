@@ -479,3 +479,12 @@ def test_filter_labels_lists_only_what_is_on():
     assert view.filter_labels(filters) == [
         "검색 '백엔드'", "출처 사람인", "경력 신입·무관", "평가된 공고만", "지원한 공고만",
     ]  # F10  # fmt: skip
+
+
+def test_unscored_only_shows_only_cards_before_scoring():
+    rows = [scored(2, 80), make_row(3), make_row(4, verdict=view.scoring.EXCLUDED)]
+    items = view.cards(rows)
+
+    shown = view.apply(items, view.Filters([], [], unscored_only=True))
+    assert [c.row for c in shown] == [3]  # 제외 공고는 평가한 것이라 뺌 (v0.7.2 F3)
+    assert view.filter_labels(view.Filters([], [], unscored_only=True)) == ["평가 전 공고만"]
