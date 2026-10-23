@@ -396,6 +396,18 @@ div[class*="st-key-top-"] button:hover:not(:disabled) { box-shadow: 4px 4px 0 va
 @keyframes jv-grow { from { transform: scaleX(0); } }
 @keyframes jv-fill { from { --p: 0; } }
 @keyframes jv-unfold { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0); } }
+/* 기술 모아보기 탭: 글자만 있던 기본 탭을 크게, 고른 탭은 라임으로 채운 버튼처럼 (v0.7.4 보완) */
+div[data-testid="stDialog"] div[role="tablist"] { gap: 0.5rem; border: none; box-shadow: none; }
+div[data-testid="stDialog"] div[role="tablist"]::after,
+div[data-testid="stDialog"] div[role="tablist"] .react-aria-SelectionIndicator { display: none; }
+div[data-testid="stDialog"] div[data-testid="stTab"] {
+  flex: 1; justify-content: center; padding: 0.45rem 1rem; height: auto;
+  border: 2px solid var(--jv-ink); border-radius: 6px; background: var(--jv-card); }
+div[data-testid="stDialog"] div[data-testid="stTab"] p { font-size: 1rem; font-weight: 700; }
+div[data-testid="stDialog"] div[data-testid="stTab"]:hover { background: var(--jv-field); }
+div[data-testid="stDialog"] div[data-testid="stTab"][aria-selected="true"] {
+  background: var(--jv-lime); box-shadow: 3px 3px 0 var(--jv-ink); }
+div[data-testid="stDialog"] div[data-testid="stTab"][aria-selected="true"] p { color: var(--jv-lime-text); }
 div[data-testid="stTabPanel"] { animation: jv-rise 0.2s ease-out; }
 .jv-bar > div { transform-origin: left; animation: jv-grow 0.4s ease-out; }
 .jv-score { animation: jv-fill 0.4s ease-out; }
@@ -1176,7 +1188,8 @@ def stats_dialog(shown: list[view.Card], filters: view.Filters | None, known: li
         # 줄바꿈을 그대로 두면 마크다운이 빈 줄에서 HTML을 끊어서 글자 참조로 바꾼다
         text = escape(view.stats_text(stack, ranked, len(shown)), quote=True).replace("\n", "&#10;")
         st.markdown(f"<div class='jv-copy-text' hidden data-text=\"{text}\"></div>", unsafe_allow_html=True)
-    wanted, lacking = st.tabs(["많이 찾는 기술", "내가 부족한 것"])
+    # 탭 이름에 개수를 붙여 누르기 전에 양을 보인다. 모양은 CSS에서 버튼처럼 (v0.7.4 보완)
+    wanted, lacking = st.tabs([f"많이 찾는 기술 {len(stack)}", f"내가 부족한 것 {len(ranked)}"])
     # 두 탭 칸 높이를 같게 해서 탭을 바꿔도 창 크기가 그대로 (v0.7.2 F11)
     with wanted, st.container(height=STATS_HEIGHT, border=False, key="stats-wanted"):
         if stack:
