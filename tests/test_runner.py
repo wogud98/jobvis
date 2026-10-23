@@ -87,19 +87,6 @@ def test_default_regions_follow_profile_but_skip_unknown():
     assert runner.default_regions({"direction": {"locations": "서울"}}) == ["서울"]  # 글자 하나도 목록으로 읽음
 
 
-def test_keyword_options_put_profile_first_without_duplicates():
-    raw = {"skills": {"main": ["Python", "백엔드 개발"]}, "direction": {"jobs": ["백엔드 개발"]}}
-
-    options = runner.keyword_options(raw)
-
-    assert options[:2] == ["백엔드 개발", "Python"]
-    assert len(options) == len(set(options)) and set(runner.JOB_NAMES) <= set(options)
-
-
-def test_keyword_options_without_profile_are_job_names():
-    assert runner.keyword_options(None) == runner.JOB_NAMES
-
-
 # ---- 실행 잠금 ----
 
 

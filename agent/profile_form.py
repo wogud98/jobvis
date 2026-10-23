@@ -8,7 +8,7 @@ from dataclasses import dataclass
 
 from agent import user_profile
 
-SLIDER_MAX = 30  # 경력 슬라이더 최댓값 (v0.5 F18). 파일 값이 더 크면 그 값까지 늘린다
+SLIDER_MAX = 10  # 경력 슬라이더 최댓값 (v0.5 F18, v0.7.2 F13 30→10). 파일 값이 더 크면 그 값까지 늘린다
 
 # 추천 목록 (F10, F11). 코드에 고정. 목록에 없는 값은 화면에서 직접 입력해 추가한다
 SKILLS = [

@@ -81,6 +81,7 @@ class Filters:
     applied_only: bool = False  # 지원한 공고만 (v0.5.3 F11)
     image_only: bool = False  # 이미지를 넣어야 하는 공고만 (v0.5.4 F2)
     recommended_only: bool = False  # 강력 추천 + 추천만 (v0.5.4 F12)
+    unscored_only: bool = False  # 평가 전 공고만 (v0.7.2 F3)
 
 
 def _score(value: str) -> int | None:
@@ -287,6 +288,7 @@ def apply(items: list[Card], filters: Filters, today: date | None = None) -> lis
         if (not filters.sources or card.source in filters.sources)
         and (not filters.experiences or set(career_groups(card.experience)) & set(filters.experiences))
         and (not filters.scored_only or card.score is not None)
+        and (not filters.unscored_only or card.verdict == NOT_SCORED)  # 제외 공고는 평가한 것
         and card.hidden == filters.hidden_only
         and (not filters.applied_only or card.applied)
         and (not filters.image_only or card.can_upload)
@@ -393,6 +395,7 @@ def filter_labels(filters: Filters) -> list[str]:
         labels.append("경력 " + "·".join(filters.experiences))
     toggles = (
         (filters.scored_only, "평가된 공고만"),
+        (filters.unscored_only, "평가 전 공고만"),
         (filters.recommended_only, "추천 이상만"),
         (filters.applied_only, "지원한 공고만"),
         (filters.image_only, "이미지 필요한 공고만"),
