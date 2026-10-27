@@ -21,9 +21,12 @@ _EXPERIENCE = re.compile(
 _PERIOD = re.compile(r'"applicationPeriod"\s*:\s*\{[^{}]*?"end"\s*:\s*(null|"[^"]*")')
 
 
-def search_url(keyword: str, filters: dict) -> str:
+def search_url(keyword: str, filters: dict, page: int = 1) -> str:
     # 지역·직무·경력은 주소에 넣지 않고 받은 목록에서 거른다 (설계 "검색 주소와 조건")
-    return f"{BASE}/Search/?{urlencode({'stext': keyword, 'tabType': 'recruit'})}"
+    params = {"stext": keyword, "tabType": "recruit"}
+    if page > 1:
+        params["Page_No"] = page  # 다음 쪽 (v0.7.6 F2)
+    return f"{BASE}/Search/?{urlencode(params)}"
 
 
 def detail_url(job_id: str) -> str:

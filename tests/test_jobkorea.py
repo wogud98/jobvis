@@ -92,3 +92,9 @@ def test_detail_url_and_parse_detail():
 
 def test_parse_detail_without_body_area_is_empty():
     assert jobkorea.parse_detail("<html><body></body></html>").text == ""
+
+
+def test_search_url_next_page():
+    assert parse_qs(urlsplit(jobkorea.search_url("FDE", {}, page=3)).query) == {
+        "stext": ["FDE"], "tabType": ["recruit"], "Page_No": ["3"],
+    }  # v0.7.6 F2  # fmt: skip

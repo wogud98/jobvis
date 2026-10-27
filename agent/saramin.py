@@ -17,8 +17,10 @@ PAGE_SIZE = 40  # 검색 결과 1페이지 개수
 EXPERIENCE_CODES = {"신입": "1", "경력": "2"}
 
 
-def search_url(keyword: str, filters: dict) -> str:
+def search_url(keyword: str, filters: dict, page: int = 1) -> str:
     params = {"searchword": keyword, "recruitPageCount": PAGE_SIZE, "sort": "RD"}  # 등록일순
+    if page > 1:
+        params["recruitPage"] = page  # 다음 쪽 (v0.7.6 F2)
     if filters.get("region_codes"):
         params["loc_mcd"] = ",".join(filters["region_codes"])  # 여러 지역은 쉼표로 (v0.6.1 F29)
     if filters.get("job_code"):
