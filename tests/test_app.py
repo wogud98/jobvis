@@ -90,6 +90,19 @@ def test_filters_start_empty_meaning_all(app):
     assert sum(m.value.startswith("**회사") for m in at.markdown) == 1
 
 
+def test_region_filter_in_sidebar(app):
+    rows = [make_row(2, location="서울 강남구"), make_row(3, location="경기 성남시"), make_row(4, location="서울 중구")]
+    at = app(rows)
+
+    names = [m.label for m in at.sidebar.multiselect]
+    assert names == ["출처", "지역", "경력"]  # 출처와 경력 사이 (v0.7.5 F1)
+    region = at.multiselect(key="regions")
+    assert region.value == [] and region.options == ["서울", "경기"]
+    region.set_value(["경기"]).run()
+    heads = [m.value for m in at.markdown if m.value.startswith("**회사")]
+    assert len(heads) == 1 and heads[0].startswith("**회사3")
+
+
 def test_unscored_card_shows_dash_and_sheet_text_is_escaped(app):
     at = app([make_row(2, company="<b>회사</b>")])  # 평가 전도 기본으로 보임 (F32)
 

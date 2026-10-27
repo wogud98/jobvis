@@ -570,3 +570,52 @@ def test_stats_text_groups_single_postings_in_one_line():
 
 def test_stats_text_without_items_says_none():
     assert view.stats_text([], [], 0).splitlines()[2:] == ["[많이 찾는 기술]", "없음", "", "[내가 부족한 것]", "없음"]
+
+
+# ---- 지역 필터 (v0.7.5 F1–F3) ----
+
+
+@pytest.mark.parametrize(
+    ("location", "group"),
+    [
+        ("서울 강남구", "서울"),
+        ("서울 강남구 외 1", "서울"),  # 잡코리아는 첫 지역만
+        ("서울특별시 중구", "서울"),
+        ("서울전체", "서울"),
+        ("경기 광주시", "경기"),  # 광주광역시가 아님
+        ("광주광역시 북구", "광주"),
+        ("경상남도 창원시", "경남"),
+        ("전북특별자치도 전주시", "전북"),
+        ("세종특별자치시", "세종"),
+        ("전국", "전국"),
+        ("미국 캘리포니아", "기타"),
+        ("", "미상"),
+        ("   ", "미상"),
+    ],
+)
+def test_region_group(location, group):
+    assert view.region_group(location) == group
+
+
+def test_region_filter_lists_only_found_groups_in_order():
+    rows = [
+        make_row(2, location="부산 해운대구"),
+        make_row(3, location="서울 강남구"),
+        make_row(4, location="해외"),
+        make_row(5),  # 지역 칸 빈 줄
+        make_row(6, location="경기 성남시 분당구"),
+    ]
+    items = view.cards(rows)
+
+    assert view.regions(items) == ["서울", "경기", "부산", "기타", "미상"]
+    assert [c.row for c in view.apply(items, view.Filters([], []))] == [2, 3, 4, 5, 6]  # 비면 전체
+    assert [c.row for c in view.apply(items, view.Filters([], [], regions=["서울", "경기"]))] == [3, 6]
+    assert [c.row for c in view.apply(items, view.Filters([], [], regions=["미상"]))] == [5]
+    assert view.apply(items, view.Filters(["잡코리아"], [], regions=["서울"])) == []  # 다른 필터와 함께
+    assert view.regions([]) == []
+
+
+def test_filter_labels_include_regions():
+    filters = view.Filters(["사람인"], ["신입"], regions=["서울", "경기"])
+
+    assert view.filter_labels(filters) == ["출처 사람인", "지역 서울·경기", "경력 신입"]

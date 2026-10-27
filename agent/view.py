@@ -14,12 +14,21 @@ import gspread
 import requests
 import sqlalchemy.exc
 
-from agent import gaps, postings, scoring, sheets, skills, store
+from agent import gaps, postings, profile_form, scoring, sheets, skills, store
 
 UNKNOWN_SOURCE = "미상"  # 출처 칸이 빈 예전 줄 (F6)
 BLANK_EXPERIENCE = "(없음)"  # 경력 칸이 빈 줄의 필터 값
 CAREER_GROUPS = ("신입", "경력", "무관")  # 경력 필터 보기 (v0.5.2 F30)
 OTHER_CAREER = "기타"  # 묶음으로 나누지 못한 경력 글자 (예: 인턴)
+# 지역 필터 보기: 시·도 묶음, 프로필 희망 지역과 같은 순서 (v0.7.5 F1)
+REGION_GROUPS = (*(name for name in profile_form.LOCATIONS if name != "재택·원격"), "전국")
+OTHER_REGION = "기타"  # 시·도로 묶지 못한 지역 글자 (예: 해외)
+BLANK_REGION = "미상"  # 지역 칸이 빈 줄
+# 줄이지 않은 도 이름. "서울특별시"처럼 앞 두 글자가 묶음 이름인 것은 그대로 맞는다 (v0.7.5 F2)
+_LONG_REGIONS = {
+    "충청북도": "충북", "충청남도": "충남", "전라북도": "전북",
+    "전라남도": "전남", "경상북도": "경북", "경상남도": "경남",
+}  # fmt: skip
 NOT_SCORED = "평가 전"
 NONE = "없음"  # 빈 칸 표시 (F3)
 PREVIEW = 600  # 평가 전 카드에 보일 원문 글자 수 (v0.5.2 F31)
@@ -84,6 +93,7 @@ class Filters:
     image_only: bool = False  # 이미지를 넣어야 하는 공고만 (v0.5.4 F2)
     recommended_only: bool = False  # 강력 추천 + 추천만 (v0.5.4 F12)
     unscored_only: bool = False  # 평가 전 공고만 (v0.7.2 F3)
+    regions: list[str] = field(default_factory=list)  # REGION_GROUPS 중에서 (v0.7.5 F1)
 
 
 def _score(value: str) -> int | None:
@@ -275,6 +285,21 @@ def career_groups(experience: str) -> list[str]:
     return [group for group in CAREER_GROUPS if group in groups] or [OTHER_CAREER]
 
 
+def region_group(location: str) -> str:
+    """지역 글자의 첫 낱말을 시·도 묶음으로 (v0.7.5 F2). "서울 강남구 외 1" → 서울, 빈 칸은 미상, 못 묶으면 기타."""
+    words = location.split()
+    if not words:
+        return BLANK_REGION
+    first = _LONG_REGIONS.get(words[0], words[0])
+    return next((name for name in REGION_GROUPS if first.startswith(name)), OTHER_REGION)
+
+
+def regions(items: list[Card]) -> list[str]:
+    """지역 필터에 보일 묶음. 정해진 순서로 있는 것만 (v0.7.5 F1)."""
+    found = {region_group(card.info.get("지역", "")) for card in items}
+    return [name for name in (*REGION_GROUPS, OTHER_REGION, BLANK_REGION) if name in found]
+
+
 def options(items: list[Card]) -> tuple[list[str], list[str]]:
     """필터에 보일 (출처 목록, 경력 묶음 목록). 출처는 나온 순서, 경력은 정해진 순서로 있는 것만."""
     sources = list(dict.fromkeys(card.source for card in items))
@@ -289,6 +314,7 @@ def apply(items: list[Card], filters: Filters, today: date | None = None) -> lis
         for card in items
         if (not filters.sources or card.source in filters.sources)
         and (not filters.experiences or set(career_groups(card.experience)) & set(filters.experiences))
+        and (not filters.regions or region_group(card.info.get("지역", "")) in filters.regions)
         and (not filters.scored_only or card.score is not None)
         and (not filters.unscored_only or card.verdict == NOT_SCORED)  # 제외 공고는 평가한 것
         and card.hidden == filters.hidden_only
@@ -427,6 +453,8 @@ def filter_labels(filters: Filters) -> list[str]:
         labels.append(f"검색 '{filters.query.strip()}'")
     if filters.sources:
         labels.append("출처 " + "·".join(filters.sources))
+    if filters.regions:
+        labels.append("지역 " + "·".join(filters.regions))
     if filters.experiences:
         labels.append("경력 " + "·".join(filters.experiences))
     toggles = (

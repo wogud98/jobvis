@@ -948,6 +948,8 @@ def show_postings() -> None:
             query=st.text_input("검색", placeholder="회사명·직무", key="search"),  # v0.5.3 F10
             # 처음엔 비워 두고 "전체"로 보인다. 고른 것이 있을 때만 거른다 (v0.5.2 F29)
             sources=st.multiselect("출처", sources, placeholder="전체", key="sources"),
+            # 시·도로 묶은 지역. 수집 카드의 지역과 달리 이미 모은 공고를 거른다 (v0.7.5 F1)
+            regions=st.multiselect("지역", view.regions(items), placeholder="전체", key="regions"),
             experiences=st.multiselect(
                 "경력", experiences, placeholder="전체", help="신입·경력·무관으로 묶음", key="experiences"
             ),
