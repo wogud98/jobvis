@@ -47,7 +47,7 @@ class Fakes:
         def fake_get_text(url):
             self.requested.append(url)
             kind, source, key = url.split(":", 2)
-            value = self.lists[source] if kind == "search" else self.details.get(key, Detail(LONG))
+            value = self._page(source, int(key)) if kind == "search" else self.details.get(key, Detail(LONG))
             if isinstance(value, Exception):
                 raise value
             return (source, value) if kind == "search" else value
@@ -88,11 +88,18 @@ class Fakes:
         monkeypatch.setattr(graph, "init_chat_model", lambda *a, **k: pytest.fail("수집에서 LLM을 부르면 안 됨"))
 
     def _search_url(self, source):
-        def search_url(keyword, filters):
+        def search_url(keyword, filters, page=1):
             self.search_filters[source] = (keyword, filters.get("region_codes"), filters.get("career"))
-            return f"search:{source}:{keyword}"
+            return f"search:{source}:{page}"
 
         return search_url
+
+    def _page(self, source, page):
+        """목록이 {쪽: 공고들}이면 쪽마다, 아니면 첫 쪽만 있고 다음 쪽은 비어 있다."""
+        value = self.lists[source]
+        if isinstance(value, dict):
+            return value.get(page, [])
+        return value if page == 1 else []
 
     @staticmethod
     def _list(value):
@@ -686,3 +693,110 @@ def test_same_run_second_site_is_saved_when_first_detail_fails(monkeypatch, tmp_
     assert ids(result["saved"]) == [("jobkorea", "2")]
     assert fakes.rows[0][5] == "2"
     assert_counts_add_up(result)
+
+
+# ---- 이미 있는 공고 빼고 개수 채우기 (v0.7.6 F1–F5) ----
+
+
+def searched(fakes, source="saramin"):
+    return [url for url in fakes.requested if url.startswith(f"search:{source}:")]
+
+
+def test_existing_postings_do_not_use_up_count(monkeypatch, tmp_path):
+    page1 = [make_job("saramin", str(i), title=f"s{i}") for i in (1, 2, 3)]
+    page2 = [make_job("saramin", str(i), title=f"s{i}") for i in (4, 5, 6)]
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": {1: page1, 2: page2, 3: [make_job("saramin", "7", title="s7")]}},
+        existing=({("saramin", "1"), ("saramin", "2")}, set(), {}),
+    )
+
+    result = run(sources=["saramin"], count=3)
+
+    assert ids(result["saved"]) == [("saramin", "3"), ("saramin", "4"), ("saramin", "5")]  # 새 공고 3건 (F1)
+    assert ids(result["skipped"]) == [("saramin", "1"), ("saramin", "2")]
+    assert result["fetched"] == {"saramin": 5}  # 가져옴 = 새로 저장 + 건너뜀 (F4)
+    assert searched(fakes) == ["search:saramin:1", "search:saramin:2"]  # 채우면 다음 쪽은 읽지 않음
+    assert "detail:saramin:1" not in fakes.requested
+    assert_counts_add_up(result)
+
+
+def test_same_name_posting_is_also_skipped_before_counting(monkeypatch, tmp_path):
+    name = (graph.sheets.normalize_company("회사1"), graph.sheets.normalize("백엔드 개발자"))
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": {1: [make_job("saramin", "1")], 2: [make_job("saramin", "2", title="다른 공고")]}},
+        existing=(set(), {name}, {}),
+    )
+
+    result = run(sources=["saramin"], count=1)
+
+    assert ids(result["saved"]) == [("saramin", "2")]
+    assert ids(result["skipped"]) == [("saramin", "1")]
+    assert searched(fakes) == ["search:saramin:1", "search:saramin:2"]
+
+
+def test_reads_at_most_max_pages(monkeypatch, tmp_path):
+    pages = {p: [make_job("saramin", f"{p}-{i}", title=f"{p}-{i}") for i in range(2)] for p in range(1, 6)}
+    old = {("saramin", job["id"]) for jobs in pages.values() for job in jobs}
+    fakes = Fakes(monkeypatch, tmp_path, {"saramin": pages}, existing=(old, set(), {}))
+
+    result = run(sources=["saramin"], count=5)
+
+    assert searched(fakes) == [f"search:saramin:{p}" for p in range(1, graph.MAX_PAGES + 1)]  # F2
+    assert result.get("saved", []) == []
+    assert len(result["skipped"]) == 2 * graph.MAX_PAGES
+    assert_counts_add_up(result)
+
+
+def test_stops_when_next_page_is_empty_or_repeats(monkeypatch, tmp_path):
+    job = make_job("saramin", "1")
+    fakes = Fakes(monkeypatch, tmp_path, {"saramin": {1: [job], 2: [job], 3: [make_job("saramin", "9")]}})
+
+    result = run(sources=["saramin"], count=5)
+
+    assert ids(result["saved"]) == [("saramin", "1")]  # 모자라도 있는 만큼 저장
+    assert searched(fakes) == ["search:saramin:1", "search:saramin:2"]  # 같은 쪽이 다시 오면 멈춤 (F3)
+    assert result["fetched"] == {"saramin": 1}
+
+    fakes = Fakes(monkeypatch, tmp_path, {"saramin": [job], "jobkorea": []})  # 다음 쪽이 비면 멈춤
+    fakes.lists["jobkorea"] = [make_job("jobkorea", "2", title="다른 공고")]
+    result = run(count=5)
+
+    assert searched(fakes) == ["search:saramin:1", "search:saramin:2"]
+    assert searched(fakes, "jobkorea") == ["search:jobkorea:1", "search:jobkorea:2"]
+
+
+def test_next_page_error_keeps_first_page_postings(monkeypatch, tmp_path):
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {
+            "saramin": {1: [make_job("saramin", "1")], 2: ConnectionError("끊김")},
+            "jobkorea": {1: [make_job("jobkorea", "2", title="b")], 2: crawler.Disallowed("www.jobkorea.co.kr")},
+        },
+    )
+
+    result = run(count=5)
+
+    assert ids(result["saved"]) == [("saramin", "1"), ("jobkorea", "2")]  # F5
+    assert [(f["source"], f["step"], f["error"]) for f in result["failed"]] == [("saramin", "목록", "ConnectionError")]
+    assert result.get("blocked", []) == []  # robots 금지 다음 쪽은 조용히 멈추고 우회하지 않음
+    assert searched(fakes, "jobkorea") == ["search:jobkorea:1", "search:jobkorea:2"]
+    assert_counts_add_up(result)
+
+
+def test_first_page_filtered_by_location_reads_next_page(monkeypatch, tmp_path):
+    busan = [make_job("jobkorea", str(i), title=f"j{i}", location="부산 해운대구") for i in range(3)]
+    fakes = Fakes(
+        monkeypatch,
+        tmp_path,
+        {"saramin": [], "jobkorea": {1: busan, 2: [make_job("jobkorea", "9", title="j9")]}},
+    )
+
+    result = run(sources=["jobkorea"], count=2, locations=["서울"])
+
+    assert ids(result["saved"]) == [("jobkorea", "9")]  # 잡코리아는 받은 뒤 지역으로 거르므로 다음 쪽도 봄
+    assert searched(fakes, "jobkorea") == ["search:jobkorea:1", "search:jobkorea:2", "search:jobkorea:3"]

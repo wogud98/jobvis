@@ -128,3 +128,9 @@ def test_search_url_without_region_has_no_loc_mcd():
     query = parse_qs(urlsplit(saramin.search_url("백엔드", {"region_codes": []})).query)
 
     assert "loc_mcd" not in query
+
+
+def test_search_url_next_page():
+    assert "recruitPage" not in parse_qs(urlsplit(saramin.search_url("백엔드", {})).query)  # 첫 쪽은 그대로
+    query = parse_qs(urlsplit(saramin.search_url("백엔드", {}, page=2)).query)
+    assert query["recruitPage"] == ["2"] and query["recruitPageCount"] == ["40"]  # v0.7.6 F2

@@ -1,6 +1,7 @@
 """LangGraph 흐름 두 개.
 
 수집: 사이트별 공고 가져오기 -> 중복 거르기 -> (꺼내기 -> 상세 본문 -> 저장) 반복. LLM을 부르지 않는다.
+가져오기는 이미 있는 공고를 빼고 개수를 채운다(다음 쪽까지).
 평가: (꺼내기 -> LLM 채점 -> 시트에 결과 쓰기) 반복. 저장해 둔 원문이 있으면 원문으로 채점한다.
 """
 
@@ -16,6 +17,7 @@ from langgraph.graph import END, START, StateGraph
 from agent import codes, crawler, jobkorea, ocr, postings, saramin, scoring, sheets, store
 
 MAX_COUNT = 30  # 사이트당 최대 개수 (F7)
+MAX_PAGES = 3  # 이미 있는 공고를 빼고 개수를 채우려고 읽는 검색 결과 최대 쪽 수 (v0.7.6 F2)
 SOURCES = {module.SOURCE: module for module in (saramin, jobkorea)}  # 수집 순서이자 사이트 간 중복 때 남는 순서
 MAX_BODY = 6000  # LLM에 넘기는 원문 최대 글자 수 (F16)
 
@@ -80,25 +82,65 @@ def _keep(job: dict, state: State, source: str) -> bool:
     return source == saramin.SOURCE or codes.matches_location(job["location"], state.get("locations"))
 
 
+def _known(job: dict, keys: tuple) -> bool:
+    """시트에 이미 있어 dedupe가 건너뛸 공고인지. 본문 미확보 줄을 채울 공고는 남긴다 (v0.5 F46)."""
+    ids, names, missing = keys
+    name = _name(job)
+    return (job["source"], job["id"]) in ids or (name in names and name not in missing)
+
+
+def _fetch_site(state: State, source: str, keys: list) -> tuple[list[dict], list[dict], dict | None]:
+    """한 사이트에서 새 공고를 개수만큼 모은다. 이미 있는 공고는 세지 않고 다음 쪽을 읽는다 (v0.7.6 F1–F3).
+
+    돌려주는 값: 새 공고, 이미 있어 건너뛴 공고, 다음 쪽에서 난 실패(있으면). 첫 쪽 오류는 그대로 올린다.
+    keys는 시트 키를 한 번만 읽으려고 함께 쓰는 칸이다. 공고가 하나라도 남을 때 읽는다.
+    """
+    module, count = SOURCES[source], state["count"]
+    jobs, skipped, seen = [], [], set()
+    for page in range(1, MAX_PAGES + 1):
+        try:
+            found = module.parse_list(crawler.get_text(module.search_url(state["keyword"], state, page)))
+        except crawler.Disallowed:
+            if page == 1:
+                raise
+            break  # 다음 쪽이 robots 금지면 우회하지 않고 멈춘다
+        except Exception as e:
+            if page == 1:
+                raise
+            return jobs, skipped, _failure({"source": source}, "목록", e)  # 앞 쪽에서 모은 공고는 그대로
+        if page == 1 and not found:
+            raise crawler.StructureChanged(module.NAME)
+        found = [job for job in found if (job["source"], job["id"]) not in seen]
+        if not found:
+            break  # 마지막 쪽을 넘었거나 사이트가 같은 쪽을 다시 줌
+        seen.update((job["source"], job["id"]) for job in found)
+        for job in (job for job in found if _keep(job, state, source)):
+            if not keys:
+                keys.append(store.existing_keys())
+            (skipped if _known(job, keys[0]) else jobs).append(job)
+            if len(jobs) == count:
+                return jobs, skipped, None
+    return jobs, skipped, None
+
+
 def fetch(state: State) -> State:
-    fetched, queue, blocked, failed = {}, [], [], []
+    fetched, queue, blocked, failed, skipped, keys = {}, [], [], [], [], []
     for source in state["sources"]:
-        module = SOURCES[source]
         fetched[source] = 0
         try:
-            jobs = module.parse_list(crawler.get_text(module.search_url(state["keyword"], state)))
-            if not jobs:
-                raise crawler.StructureChanged(module.NAME)
+            jobs, known, error = _fetch_site(state, source, keys)
         except (crawler.Blocked, crawler.Disallowed, crawler.StructureChanged) as e:
             blocked.append(_blocked(source, e))  # 그 사이트만 멈추고 다음 사이트는 계속 (F20, N4)
             continue
         except Exception as e:  # 연결 오류 등
             failed.append(_failure({"source": source}, "목록", e))
             continue
-        jobs = [job for job in jobs if _keep(job, state, source)][: state["count"]]
-        fetched[source] = len(jobs)
+        if error:
+            failed.append(error)
+        fetched[source] = len(jobs) + len(known)
         queue.extend(jobs)
-    return {"fetched": fetched, "queue": queue, "blocked": blocked, "failed": failed}
+        skipped.extend(known)
+    return {"fetched": fetched, "queue": queue, "blocked": blocked, "failed": failed, "skipped": skipped}
 
 
 def _name(job: dict) -> tuple[str, str]:
