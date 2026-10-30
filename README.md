@@ -36,13 +36,30 @@
 
 모두 가짜 데이터로 만든 화면입니다.
 
-| 공고 | 자세히 |
-| :---: | :---: |
-| <img src="docs/images/1-postings.png" width="420"/> | <img src="docs/images/2-detail.png" width="420"/> |
-| 수집 조건, 요약 칸, 사이드바 필터(지역 고르기) | 항목별 점수, 강점·부족한 점, 기술스택 |
-| **프로필** | **기술 모아보기** |
-| <img src="docs/images/3-profile.png" width="420"/> | <img src="docs/images/4-stats.png" width="420"/> |
-| 점수 항목별 입력, 이력서로 채우기 | 많이 찾는 기술, 내가 부족한 것 순위 |
+<table>
+  <tr>
+    <th>수집</th>
+    <th>공고</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/1-collect.png" width="420"/><br>수집 조건, 요약 칸, 사이드바 필터</td>
+    <td align="center"><img src="docs/images/2-postings.png" width="420"/><br>점수·판정·마감 D-n이 보이는 공고 카드</td>
+  </tr>
+  <tr>
+    <th>자세히</th>
+    <th>프로필</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/3-detail.png" width="420"/><br>항목별 점수, 강점·부족한 점, 기술스택</td>
+    <td align="center"><img src="docs/images/4-profile.png" width="420"/><br>점수 항목별 입력, 이력서로 채우기</td>
+  </tr>
+  <tr>
+    <th colspan="2">기술 모아보기</th>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><img src="docs/images/5-stats.png" width="420"/><br>많이 찾는 기술, 내가 부족한 것 순위</td>
+  </tr>
+</table>
 
 ## ◆ 주요 기능
 
