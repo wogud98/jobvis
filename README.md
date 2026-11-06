@@ -75,9 +75,15 @@
 ### Docker (코드 없이 쓰기)
 
 1. [Docker Desktop](https://www.docker.com/products/docker-desktop/)을 설치하고 켭니다.
-2. 시작 파일 세 개(`JOBVIS 시작.bat`, `JOBVIS 끄기.bat`, `compose.yml`)를 한 폴더에 둡니다. 저장소의 [`start/`](start/) 폴더와 같습니다.
-3. **`JOBVIS 시작.bat`** 을 더블클릭합니다. 처음 한 번 OCR을 함께 받을지 묻고, 이미지를 받느라 몇 분 걸립니다. 준비되면 브라우저가 http://localhost:8501 을 엽니다.
+2. 이 저장소의 **Code → Download ZIP**으로 받아 압축을 풀고 [`start/`](start/) 폴더를 엽니다. 폴더 안 세 파일(`JOBVIS 시작.bat`, `JOBVIS 끄기.bat`, `compose.yml`)이 **한 폴더에 함께** 있어야 합니다. bat 파일만 따로 옮기면 실행되지 않습니다. 저장소 코드와 `.env`는 필요 없습니다.
+3. **`JOBVIS 시작.bat`** 을 더블클릭합니다. 처음 한 번 OCR을 함께 받을지 묻고, 이미지를 받느라 몇 분 걸립니다(인터넷 필요). 준비되면 브라우저가 http://localhost:8501 을 엽니다.
 4. 오른쪽 위 **🔑 키 넣기**에 Gemini API 키를 넣습니다. 끌 때는 **`JOBVIS 끄기.bat`**.
+
+**Windows가 실행을 막을 때** (스마트 앱 컨트롤·SmartScreen 알림, 또는 눌러도 반응 없음)
+
+1. 받은 zip을 오른쪽 클릭 → **속성** → 맨 아래 **차단 해제** 체크 → 확인. 그다음 다시 압축을 풀고 실행합니다.
+2. 그래도 막히면 `start` 폴더 빈 곳에서 Shift+오른쪽 클릭 → **터미널에서 열기** → `docker compose -f compose.yml up -d` 를 입력하고 http://localhost:8501 을 엽니다.
+3. 스마트 앱 컨트롤 자체는 끄지 않습니다. 한 번 끄면 Windows를 다시 설치하기 전까지 다시 켤 수 없습니다.
 
 명령으로 켜고 끄기, 데이터 지우기는 [docs/docker.md](docs/docker.md)에 있습니다.
 
