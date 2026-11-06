@@ -67,12 +67,14 @@ classDiagram
     class app {
         +RESUME_HELP
         +show_resume_fill(values, fill)
+        +resume_error_text(error, pdfs) str
     }
     app --> resume
     resume ..> LLM : init_chat_model(llm_model())
 ```
 
 - `messages(text, pdfs)`는 테스트에서 가짜 LLM 없이 메시지 모양을 확인하려고 따로 둔다. `ask`는 `(messages | llm)` 대신 `llm.invoke(messages(...))`로 부른다.
+- `app.resume_error_text(error, pdfs)`가 D4 문구를 고른다. 키 가림은 `runner.error_text`에 맡긴다.
 - 글자가 없고 그림 PDF만 있으면 글자 블록은 "# 이력서·포트폴리오"만 담는다.
 
 ## 테스트 (N4)
