@@ -15,7 +15,7 @@ from pathlib import Path
 import streamlit as st
 from dotenv import load_dotenv
 
-from agent import inbox, mail, ocr, profile_form, resume, runner, scoring, settings, store, user_profile, view
+from agent import inbox, mail, ocr, profile_form, reports, resume, runner, scoring, settings, store, user_profile, view
 
 PROFILE = user_profile.DEFAULT
 ICON = str(Path(__file__).parent / "assets" / "icon.png")
@@ -76,9 +76,9 @@ FOOTER = (
 )  # 화면 맨 아래 이용 안내. 내용별 세 줄 (v0.7.1 F10, v0.7.2 F7). 고정된 글이라 사용자 입력은 없다
 MINE_TIP = "내 프로필에 있는 기술"  # 초록 칩 도움말 (v0.7.1 F7)
 RESUME_HELP = (
-    f"PDF(글자 있는 것)·Word·txt·md. 파일 글자(앞 {resume.MAX_TEXT:,}자)가 LLM 제공자(기본 Gemini)로 전송됩니다. "
-    "파일은 저장하지 않습니다."
-)  # 이력서 채우기 도움말 (v0.5.2 N2, N3, v0.6.1 F10)
+    f"PDF·Word·txt·md. 파일 글자(앞 {resume.MAX_TEXT:,}자)가 LLM 제공자(기본 Gemini)로 전송됩니다. "
+    f"글자가 그림인 PDF({resume.MAX_PDF_PAGES}쪽까지)는 파일 전체가 전송됩니다. 파일은 저장하지 않습니다."
+)  # 이력서 채우기 도움말 (v0.5.2 N2, N3, v0.6.1 F10, v0.7.8 F6)
 TRUST_HELP = (
     "점수를 매길 때 공고 원문을 얼마나 읽었는지입니다. "
     "높음: 원문을 다 읽음 · 보통: 이미지 일부를 못 읽음 · "
@@ -1426,20 +1426,20 @@ def show_resume_fill(values: dict, fill: dict | None) -> None:
         return
     if need_key("resume"):
         return
-    text, skipped = resume.read_files([(file.name, file.getvalue()) for file in files])
+    text, pdfs, skipped = resume.read_files([(file.name, file.getvalue()) for file in files])
     for name, reason in skipped:  # 그 파일만 건너뜀 (F21)
         st.warning(f"{name}: {reason}")
-    if not text:
+    if not text and not pdfs:
         st.error("글자를 읽을 수 있는 파일이 없습니다.")
         return
     try:
         with st.spinner("LLM이 이력서를 읽는 중"):
-            found = resume.ask(text)
+            found = resume.ask(text, pdfs)
     except resume.ResumeError as e:  # 아무 칸도 바꾸지 않음 (F21)
         st.error(f"이력서를 읽지 못했습니다: {e}")
         return
     except Exception as e:  # LLM 키·네트워크 오류. 키는 보이지 않는다
-        st.error(runner.error_text(e))
+        st.error(resume_error_text(e, pdfs))
         return
     merged, filled = resume.merge(values, found, overwrite)
     if not filled:
@@ -1449,6 +1449,16 @@ def show_resume_fill(values: dict, fill: dict | None) -> None:
     st.session_state.pop(CLEARED, None)  # 이력서로 채우면 비운 표시는 버린다 (v0.5.5 F1)
     st.session_state[FILL] = {"values": merged, "filled": filled, "missing": resume.missing(merged, found)}
     st.rerun()
+
+
+def resume_error_text(error: Exception, pdfs: list) -> str:
+    """이력서 LLM 오류 문구. 키·모델·한도 오류는 그 안내, 그림 PDF를 보냈으면 PDF 안내 (v0.7.8 F5, D4).
+
+    예외 메시지에는 파일 내용이 섞일 수 있어 예외 이름만 쓴다 (N2).
+    """
+    if pdfs and not reports.llm_hint([cls.__name__ for cls in type(error).__mro__]):
+        return f"이 모델은 그림 PDF를 읽지 못함 ({type(error).__name__}). 글자가 있는 PDF·Word로 올려 주세요."
+    return runner.error_text(error)
 
 
 def show_missing(labels: list[str]) -> None:

@@ -1266,7 +1266,7 @@ def test_score_without_key_asks_for_key_and_opens_key_dialog(app, no_key, monkey
 
 
 def test_resume_fill_without_key_does_not_call_llm(app, no_key, monkeypatch):
-    monkeypatch.setattr(resume, "ask", lambda text: pytest.fail("키 없이 LLM을 부르지 않음"))
+    monkeypatch.setattr(resume, "ask", lambda *args: pytest.fail("키 없이 LLM을 부르지 않음"))
     at = app([])
     uploader = next(u for u in at.get("file_uploader") if u.key == "resume-files")
     uploader.set_value(("이력서.txt", "Python 백엔드 2년".encode(), "text/plain")).run()
@@ -1277,6 +1277,68 @@ def test_resume_fill_without_key_does_not_call_llm(app, no_key, monkeypatch):
     ]  # pydantic 오류 글 대신 (v0.6.2 F14)
     at.button(key="key-ask-resume").click().run()
     assert len(at.get("dialog")) == 1
+
+
+# ---- v0.7.8 그림 PDF 이력서 ----
+
+
+def blank_pdf() -> bytes:
+    from io import BytesIO
+
+    from pypdf import PdfWriter
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=612, height=792)
+    out = BytesIO()
+    writer.write(out)
+    return out.getvalue()
+
+
+def fill_with(at, files):
+    uploader = next(u for u in at.get("file_uploader") if u.key == "resume-files")
+    uploader.set_value(*files).run()
+    at.button(key="resume-fill").click().run()
+    return at
+
+
+def test_resume_fill_sends_image_pdf_to_llm(app, monkeypatch):
+    calls = []
+
+    def fake_ask(text, pdfs=()):
+        calls.append((text, [name for name, _ in pdfs]))
+        return {"skills": {"main": ["C++"]}}
+
+    monkeypatch.setattr(resume, "ask", fake_ask)
+    at = fill_with(app([]), [("scan.pdf", blank_pdf(), "application/pdf")])
+
+    assert not at.exception and not at.error and not at.warning  # 건너뛰지 않음 (F1)
+    assert calls == [("", ["scan.pdf"])]
+    assert at.session_state["profile_fill"]["values"][("skills", "main")] == ["C++"]
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (type("BadRequest", (Exception,), {}), "이 모델은 그림 PDF를 읽지 못함 (BadRequest)"),
+        (type("FakeAuthenticationError", (Exception,), {}), "LLM API 키가 맞지 않습니다"),
+    ],
+)
+def test_resume_fill_image_pdf_model_error(app, monkeypatch, error, expected):
+    def fake_ask(text, pdfs=()):
+        raise error("파일 내용 %PDF secret")
+
+    monkeypatch.setattr(resume, "ask", fake_ask)
+    at = fill_with(app([]), [("scan.pdf", blank_pdf(), "application/pdf")])
+
+    assert len(at.error) == 1 and expected in at.error[0].value  # F5
+    assert "secret" not in at.error[0].value  # 예외 메시지는 쓰지 않음 (N2)
+    assert "profile_fill" not in at.session_state  # 아무 칸도 바꾸지 않음
+
+
+def test_resume_help_says_image_pdf_is_sent_whole(app):
+    uploader = next(u for u in app([]).get("file_uploader") if u.key == "resume-files")
+
+    assert "글자가 그림인 PDF(10쪽까지)는 파일 전체가 전송됩니다" in uploader.proto.help  # F6
 
 
 def test_key_label_follows_model(monkeypatch):

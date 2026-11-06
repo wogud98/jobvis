@@ -1,9 +1,11 @@
 """이력서·포트폴리오 파일에서 프로필 입력란을 채운다 (v0.5.2 F16–F22).
 
 파일 글자 뽑기 → LLM 한 번 → 프로필 칸 JSON → 입력란 값에 합치기. 저장은 사용자가 "저장"을 눌러야 한다 (F18).
+글자가 그림인 PDF는 파일째 같은 LLM 호출에 넣는다 (v0.7.8).
 올린 파일은 디스크에 저장하지 않고, 뽑은 글자와 LLM 응답은 로그·오류 메시지에 쓰지 않는다 (N2).
 """
 
+import base64
 from io import BytesIO
 from pathlib import PurePath
 
@@ -18,10 +20,15 @@ from agent.graph import llm_model
 EXTENSIONS = (".pdf", ".docx", ".txt", ".md")  # F16
 MAX_FILE = 10 * 1024 * 1024  # 파일당 10MB (F16)
 MAX_TEXT = 20_000  # LLM에 보내는 글자 수 (F22)
+MAX_PDF_PAGES = 10  # 파일째 보내는 그림 PDF 쪽 수 (v0.7.8 F3)
 
 
 class ResumeError(Exception):
     """파일을 읽지 못했거나 LLM 응답이 형식에 맞지 않음. 이유만 담고 파일 내용은 담지 않는다 (N2)."""
+
+
+class ImagePdf(ResumeError):
+    """글자가 그림인 PDF(1–10쪽). 건너뛰지 않고 파일째 LLM에 보낸다 (v0.7.8 F1, D1)."""
 
 
 def _need(module: str, package: str):
@@ -37,7 +44,13 @@ def _need(module: str, package: str):
 def _pdf(data: bytes) -> str:
     PdfReader = _need("pypdf", "pypdf").PdfReader  # noqa: N806
 
-    return "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(data)).pages)
+    pages = PdfReader(BytesIO(data)).pages
+    text = "\n".join(page.extract_text() or "" for page in pages)
+    if pages and not text.strip():  # 쪽은 있는데 글자가 없음 = 그림 글자 (v0.7.8 F1, F3)
+        if len(pages) > MAX_PDF_PAGES:
+            raise ResumeError(f"{MAX_PDF_PAGES}쪽 초과 (그림 PDF)")
+        raise ImagePdf("그림 PDF")
+    return text
 
 
 def _docx(data: bytes) -> str:
@@ -78,15 +91,22 @@ def extract(name: str, data: bytes) -> str:
     return text
 
 
-def read_files(files: list[tuple[str, bytes]]) -> tuple[str, list[tuple[str, str]]]:
-    """(합친 글자 앞 MAX_TEXT자, 건너뛴 [(파일 이름, 이유)]). 파일마다 이름을 제목으로 붙인다."""
-    parts, skipped = [], []
+def read_files(
+    files: list[tuple[str, bytes]],
+) -> tuple[str, list[tuple[str, bytes]], list[tuple[str, str]]]:
+    """(합친 글자 앞 MAX_TEXT자, 파일째 보낼 그림 PDF [(이름, 바이트)], 건너뛴 [(파일 이름, 이유)]).
+
+    파일마다 이름을 제목으로 붙인다 (v0.7.8 D2).
+    """
+    parts, pdfs, skipped = [], [], []
     for name, data in files:
         try:
             parts.append(f"# 파일: {name}\n{extract(name, data).strip()}")
+        except ImagePdf:
+            pdfs.append((name, data))
         except ResumeError as e:
             skipped.append((name, str(e)))
-    return "\n\n".join(parts)[:MAX_TEXT], skipped
+    return "\n\n".join(parts)[:MAX_TEXT], pdfs, skipped
 
 
 # ---- LLM ----
@@ -162,10 +182,22 @@ def parse(text: str) -> dict:
     return found.model_dump()
 
 
-def ask(text: str) -> dict:
-    """글자를 LLM에 한 번 보내 프로필 칸을 받는다. 모델은 LLM_MODEL (v0.3과 같음)."""
+def messages(text: str, pdfs: list[tuple[str, bytes]] = ()) -> list:
+    """LLM에 보낼 메시지. 그림 PDF는 LangChain 표준 파일 블록으로 같은 사람 메시지에 넣는다 (v0.7.8 D3)."""
+    system, human = prompt.format_messages(text=text)
+    if not pdfs:
+        return [system, human]
+    content = [{"type": "text", "text": human.content}]
+    for name, data in pdfs:
+        content.append({"type": "text", "text": f"# 파일: {name}"})
+        content.append({"type": "file", "base64": base64.b64encode(data).decode(), "mime_type": "application/pdf"})
+    return [system, human.model_copy(update={"content": content})]
+
+
+def ask(text: str, pdfs: list[tuple[str, bytes]] = ()) -> dict:
+    """글자(와 그림 PDF)를 LLM에 한 번 보내 프로필 칸을 받는다. 모델은 LLM_MODEL (v0.3과 같음)."""
     llm = init_chat_model(llm_model(), max_tokens=4096)
-    return parse((prompt | llm).invoke({"text": text}).text)
+    return parse(llm.invoke(messages(text, pdfs)).text)
 
 
 # ---- 입력란에 합치기 ----
