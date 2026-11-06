@@ -165,7 +165,7 @@ def test_unknown_posting_and_ocr_failure_are_skipped_and_left_in_inbox(folders, 
     result = inbox.run([sheet_row()])
 
     assert result.skipped == [
-        {"file": "saramin_1_2.png", "reason": "OCR 실패(RuntimeError)"},
+        {"file": "saramin_1_2.png", "reason": "글자 읽기 실패(RuntimeError)"},
         {"file": "saramin_999.png", "reason": "시트에 없는 공고"},
     ]
     left = sorted(p.name for p in (folders / "inbox").iterdir() if p.is_file())

@@ -87,7 +87,7 @@ def test_report_prints_counts_per_site_and_failures(capsys):
     assert "잡코리아 가져옴 2 / 새로 저장 1 / 건너뜀 1 / 실패 0" in out  # OCR 실패는 줄을 저장했으므로 셈에서 뺌
     assert "잡코리아 수집 멈춤: www.jobkorea.co.kr 차단 (HTTP 429)" in out
     assert "실패(본문): 사람인 | 회사3 | 백엔드 (CrawlError)" in out
-    assert "실패(OCR): 잡코리아 | 회사5 | AI (RuntimeError)" in out
+    assert "실패(이미지 글자 읽기): 잡코리아 | 회사5 | AI (RuntimeError)" in out
     assert "본문 미확보 1건: 공고 이미지를 data/inbox/나 화면 카드에 넣고 --inbox를 실행하세요" in out
 
 

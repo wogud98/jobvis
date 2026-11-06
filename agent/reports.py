@@ -50,13 +50,17 @@ def _failure_problem(failed: list[dict], what: str) -> list[str]:
     ]
 
 
+STEP_NAMES = {"OCR": "이미지 글자 읽기"}  # 사용자에게 보이는 단계 이름. 안쪽 값 "OCR"은 그대로 둔다
+
+
 def _failures(failed: list[dict]) -> list[str]:
     lines = []
     for job in failed:
         site = SOURCES[job["source"]].NAME if job.get("source") else ""
         # 목록 실패는 회사·제목이 빈칸이라 사이트 이름만 남는다.
         where = " | ".join(part for part in (site, job["company"], job["title"]) if part)
-        lines.append(redact(f"  실패({job['step']}): {where} ({job['error']})"))  # v0.6.1 F12
+        step = STEP_NAMES.get(job["step"], job["step"])
+        lines.append(redact(f"  실패({step}): {where} ({job['error']})"))  # v0.6.1 F12
     return lines
 
 

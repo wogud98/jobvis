@@ -252,7 +252,7 @@ def test_collect_without_ocr_says_so(monkeypatch):
     job = runner.start_collect(runner.collect_state("백엔드"), wait=True)
 
     first = job.result.details[0]
-    assert first.startswith("이미지 OCR 없음") and ocr.INSTALL_HINT in first
+    assert first.startswith("이미지 글자 읽기 없음") and ocr.INSTALL_HINT in first
     assert not job.result.todo and not job.result.problems  # 참고라 자세히에만
 
 
@@ -338,10 +338,10 @@ def test_read_inbox_without_ocr_touches_nothing(monkeypatch):
     monkeypatch.setattr(ocr, "available", lambda: False)
     monkeypatch.setattr(sheets, "read_rows", lambda: pytest.fail("OCR 없으면 시트도 읽지 않음"))
 
-    with pytest.raises(runner.RunError, match="OCR이 설치돼 있지 않습니다"):
+    with pytest.raises(runner.RunError, match="이미지 글자 읽기 기능이 설치돼 있지 않습니다"):
         runner.read_inbox()
     job = runner.start_image_score("saramin", "11", profile(), wait=True)
-    assert "OCR이 설치돼 있지 않습니다" in job.error  # v0.5.2 F11
+    assert "이미지 글자 읽기 기능이 설치돼 있지 않습니다" in job.error  # v0.5.2 F11
 
 
 def test_image_score_rescores_only_that_posting(monkeypatch):

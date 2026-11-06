@@ -91,7 +91,7 @@ def run(rows: list[dict]) -> InboxResult:
             try:
                 texts.append(ocr.read(file.read_bytes()))
             except Exception as e:  # 그 파일만 건너뛰고 받은함에 남긴다 (F43)
-                result.skipped.append({"file": file.name, "reason": f"OCR 실패({type(e).__name__})"})
+                result.skipped.append({"file": file.name, "reason": f"글자 읽기 실패({type(e).__name__})"})
                 continue
             read_files.append(file)
         if not read_files:

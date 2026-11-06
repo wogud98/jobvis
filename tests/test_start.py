@@ -90,9 +90,7 @@ def test_bat_files_never_touch_keys():
 
 def test_install_hint_points_to_start_file_on_base_image(monkeypatch):
     monkeypatch.setenv("JOBVIS_IMAGE", "base")
-    assert (
-        ocr.install_hint() == f"OCR을 쓰려면 `JOBVIS 시작.bat`을 다시 열고 OCR 포함을 고르세요({ocr.OCR_EXTRA} 더 받음)"
-    )
+    assert ocr.install_hint() == f"쓰려면 `JOBVIS 시작.bat`을 다시 열고 묻는 말에 Y를 누르세요({ocr.OCR_EXTRA} 더 받음)"
 
     monkeypatch.delenv("JOBVIS_IMAGE")
     assert "requirements-ocr.txt" in ocr.install_hint()  # 파이썬으로 직접 실행하는 사람 (F10)

@@ -226,7 +226,7 @@ def start_collect(state: dict, *, wait: bool = False) -> Job:
         job.stage = "공고 목록을 가져오는 중"
         summary = reports.collect_summary(collect(state, _collect_progress(job)))
         if not ocr.available():  # 할 일이 아니라 참고라 자세히에만
-            summary.details.insert(0, f"이미지 OCR 없음: 글자 본문만 저장했습니다. {ocr.INSTALL_HINT}")
+            summary.details.insert(0, f"이미지 글자 읽기 없음: 공고의 글자 부분만 저장했습니다. {ocr.INSTALL_HINT}")
         return summary
 
     return start("collect", work, wait=wait)
@@ -292,7 +292,7 @@ def start_score(mode: str, profile: user_profile.Profile, *, wait: bool = False)
 
 def read_inbox() -> inbox.InboxResult:
     if not ocr.available():  # 아무 파일도 건드리지 않는다 (v0.5 F44, v0.5.2 F11)
-        raise RunError(f"OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")
+        raise RunError(f"이미지 글자 읽기 기능이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")
     return inbox.run(store.read_rows())
 
 
