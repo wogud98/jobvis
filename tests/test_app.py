@@ -1766,3 +1766,24 @@ def test_years_slider_goes_to_ten_unless_saved_value_is_larger(app, tmp_path):
     at = app([])
     slider = next(s for s in at.slider if s.label.startswith("경력"))
     assert slider.max == 12 and slider.value == 12  # 저장된 값은 그대로
+
+
+# ---- 앱이 꺼져 끊긴 작업 알림 (v0.7.7 F4, F5) ----
+
+
+def test_interrupted_collect_is_shown_and_stays_in_session(app, running_mark):
+    running_mark.parent.mkdir(parents=True)
+    running_mark.write_text("collect\n10:11:40\n", encoding="utf-8")
+
+    at = app()
+
+    texts = [w.value for w in at.warning]
+    assert any("지난 수집 작업(10:11:40 시작)이 끝나지 않고 멈췄습니다" in text for text in texts)
+    assert not running_mark.exists()
+    at.run()  # 다시 그려도 이 창에서는 계속 보임
+    assert any("지난 수집 작업" in w.value for w in at.warning)
+
+
+def test_no_interrupted_notice_without_mark(app):
+    at = app()
+    assert not any("끝나지 않고 멈췄습니다" in w.value for w in at.warning)

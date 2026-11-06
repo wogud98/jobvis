@@ -30,6 +30,7 @@ LAST_SEEN = "last_seen"  # 이 화면을 열기 전 마지막으로 연 시각 (
 CHECK_ERROR = "check_error"
 TOASTED = "toasted_job"  # 결과 알림을 띄운 작업 (v0.6.1 F5)
 RELOADED = "reloaded_job"  # 결과를 다시 읽은 작업 (v0.6.1 F16)
+INTERRUPTED = "interrupted_job"  # 앱이 꺼져 끊긴 지난 작업 안내 (v0.7.7 F4)
 RESET_DONE = "reset_done"  # 방금 공고를 초기화한 결과 문구 (v0.6.1 F30)
 RESET_ERROR = "reset_error"  # 초기화하지 못한 이유 (v0.6.1 F30)
 PAGE, PAGE_FILTERS = "page", "page_filters"  # 지금 쪽 번호, 그 쪽을 고를 때의 필터 (v0.5.2 F41)
@@ -857,7 +858,16 @@ def show_check_error() -> None:
         st.error(error)
 
 
+def show_interrupted() -> None:
+    """앱이 강제 종료돼 지난 작업이 끊겼으면 알린다. 새 작업을 시작하면 사라진다 (v0.7.7 F4, F5)."""
+    if note := runner.interrupted():
+        st.session_state[INTERRUPTED] = note
+    if st.session_state.get(INTERRUPTED) and runner.current() is None:
+        st.warning(st.session_state[INTERRUPTED], icon="⚠️")
+
+
 def show_run_panel() -> None:
+    show_interrupted()
     show_collect_card()
     if runner.running():
         show_live_job()
