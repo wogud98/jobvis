@@ -477,7 +477,7 @@ def show_upload(card: view.Card) -> None:
     """공고 이미지 넣기. 버튼 하나로 저장 → 글자 읽기 → 이 공고 다시 평가 (v0.5.4 F8, v0.7.4 F6–F8)."""
     st.markdown("**📷 공고 이미지 넣기**")
     if not ocr.available():  # 읽을 수 없으면 넣을 곳도 보이지 않는다 (v0.5.2 F11)
-        st.info(f"이미지 글자를 읽는 OCR이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")
+        st.info(f"이미지 글자 읽기 기능이 설치돼 있지 않습니다. {ocr.INSTALL_HINT}")
         return
     st.caption(f"{IMAGE_HELP}  \n① 원문 열기 → ② 공고 이미지 저장 → ③ 여기에 끌어다 놓기 → ④ 🖼 이미지로 다시 평가")
     files = st.file_uploader(

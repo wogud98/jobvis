@@ -89,7 +89,7 @@ def run_collect(state: dict) -> None:
         print(NOTICE)  # 첫 실행 안내 (N6)
     state["ocr_ready"] = ocr.available()
     if not state["ocr_ready"]:
-        print(f"이미지 OCR 없음: 글자 본문만 저장합니다. {ocr.INSTALL_HINT}")
+        print(f"이미지 글자 읽기 없음: 공고의 글자 부분만 저장합니다. {ocr.INSTALL_HINT}")
     print_report(runner.collect(state))
 
 

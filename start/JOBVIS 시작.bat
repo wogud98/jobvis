@@ -8,12 +8,12 @@ title JOBVIS 시작
 set "SETTINGS=jobvis.env"
 rem 같은 폴더의 compose.yml만 쓴다. 없으면 Docker가 위 폴더의 compose 파일을 찾아 엉뚱한 이미지를 받는다
 if not exist "compose.yml" (
-    echo compose.yml이 이 파일과 같은 폴더에 없습니다.
-    echo 시작 파일 묶음을 다시 풀거나, 저장소라면 main 브랜치로 받아 주세요.
+    echo 시작 파일 묶음이 다 풀리지 않았습니다.
+    echo 받은 압축 파일을 다시 풀어 주세요.
     goto fail
 )
 
-echo [1/4] Docker 확인 중...
+echo [1/4] 실행 준비 확인 중 (Docker)...
 docker info >nul 2>&1
 if errorlevel 1 (
     echo.
@@ -25,27 +25,27 @@ if errorlevel 1 (
 if not exist "%SETTINGS%" (
     call :ask_ocr
 ) else (
-    choice /c YN /t 5 /d N /m "OCR 설정을 바꿀까요? 5초 안에 Y, 그대로면 기다리세요"
+    choice /c YN /t 5 /d N /m "이미지 글자 읽기 설정을 바꿀까요? 바꾸려면 5초 안에 Y, 그대로면 기다리세요"
     if not errorlevel 2 call :ask_ocr
 )
 
-echo [2/4] 8501 포트 확인 중...
+echo [2/4] 화면 주소 확인 중...
 docker compose -f compose.yml --env-file "%SETTINGS%" ps --status running --services 2>nul | findstr /x "app" >nul
 if errorlevel 1 (
     netstat -ano | findstr /r /c:":8501 .*LISTENING" >nul
     if not errorlevel 1 (
         echo.
-        echo 8501 포트를 다른 프로그램이 쓰고 있습니다.
-        echo 다른 JOBVIS 창이나 streamlit을 끄거나 PC를 다시 켠 뒤 실행하세요.
+        echo 다른 프로그램이 JOBVIS 화면 주소를 쓰고 있습니다.
+        echo 켜 둔 JOBVIS 창을 끄거나 PC를 다시 켠 뒤 실행하세요.
         goto fail
     )
 )
 
-echo [3/4] 이미지 받는 중... 처음에는 몇 분 걸립니다.
+echo [3/4] JOBVIS 프로그램 받는 중... 처음에는 몇 분 걸립니다.
 docker compose -f compose.yml --env-file "%SETTINGS%" pull
 if errorlevel 1 (
     echo.
-    echo 이미지를 받지 못했습니다. 인터넷 연결을 확인하고 다시 실행하세요.
+    echo JOBVIS 프로그램을 받지 못했습니다. 인터넷 연결을 확인하고 다시 실행하세요.
     goto fail
 )
 
@@ -53,7 +53,7 @@ echo [4/4] JOBVIS 켜는 중... 화면이 준비될 때까지 기다립니다.
 docker compose -f compose.yml --env-file "%SETTINGS%" up -d --wait
 if errorlevel 1 (
     echo.
-    echo JOBVIS를 켜지 못했습니다. 아래 기록을 확인하세요.
+    echo JOBVIS를 켜지 못했습니다. 아래 기록을 캡처해 알려 주세요.
     docker compose -f compose.yml --env-file "%SETTINGS%" logs --tail 30 app
     goto fail
 )
@@ -67,15 +67,15 @@ exit /b 0
 
 :ask_ocr
 echo.
-echo 공고 본문이 이미지인 경우 글자를 읽는 OCR을 같이 받을 수 있습니다(약 560MB 더).
+echo 공고 본문이 이미지일 때 이미지 속 글자를 읽는 기능을 같이 받을 수 있습니다(약 560MB 더).
 echo 나중에 이 파일을 다시 열어 바꿀 수 있습니다.
-choice /c YN /m "OCR도 받을까요"
+choice /c YN /m "이미지 글자 읽기도 받을까요"
 if errorlevel 2 (
     > "%SETTINGS%" echo JOBVIS_TAG=latest
-    echo OCR 없이 씁니다.
+    echo 이미지 글자 읽기 없이 씁니다.
 ) else (
     > "%SETTINGS%" echo JOBVIS_TAG=ocr
-    echo OCR 포함으로 씁니다.
+    echo 이미지 글자 읽기를 넣어 씁니다.
 )
 exit /b 0
 
