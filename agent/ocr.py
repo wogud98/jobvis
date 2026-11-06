@@ -14,6 +14,9 @@ MAX_IMAGES = 10  # 공고당 최대 장수 (F12)
 MAX_WIDTH = 1280  # 이보다 넓으면 비율대로 줄인다 (v0.7.7 F2)
 PIECE = 1600  # 세로로 이보다 길면 이 높이씩 잘라 읽는다 (v0.7.7 F1)
 OVERLAP = 80  # 자른 경계에 걸친 줄이 끊기지 않게 조각끼리 겹치는 높이 (v0.7.7 F1)
+DET_MODEL = "PP-OCRv5_mobile_det"  # 글자 찾기 모델 (v0.7.9 F1)
+REC_MODEL = "korean_PP-OCRv5_mobile_rec"  # 한국어 글자 읽기 모델 (v0.7.9 F1)
+DET_SIDE = 960  # 글자 찾기 때 긴 변 최대 px (v0.7.9 F2)
 OCR_EXTRA = "약 560MB"  # OCR 이미지를 고르면 더 받는 크기 (v0.6.2 N2, 03-test.md 실측)
 
 
@@ -40,18 +43,28 @@ def size(image: bytes) -> tuple[int, int]:
         return picture.size
 
 
+# PaddleOCR 설정. 바꾸면 Docker 빌드(scripts/warm_ocr.py)가 새 모델을 미리 받는다
+MODEL_OPTIONS = {
+    "lang": "korean",
+    "text_detection_model_name": DET_MODEL,
+    "text_recognition_model_name": REC_MODEL,
+    "text_det_limit_type": "max",
+    "text_det_limit_side_len": DET_SIDE,
+    "enable_mkldnn": False,
+    "use_doc_orientation_classify": False,
+    "use_doc_unwarping": False,
+    "use_textline_orientation": False,
+}
+
+
 @functools.cache
 def _model():
     from paddleocr import PaddleOCR
 
     # 윈도우에서 가속 옵션(mkldnn) 오류가 나서 끈다. 모델은 처음 부를 때 한 번만 만든다.
-    return PaddleOCR(
-        lang="korean",
-        enable_mkldnn=False,
-        use_doc_orientation_classify=False,
-        use_doc_unwarping=False,
-        use_textline_orientation=False,
-    )
+    # 큰 글자 찾기 모델(server)은 이미지 1MP당 약 5GB를 써 앱이 강제 종료됐다. 가벼운(mobile) 모델로 바꾸고
+    # 글자 찾기는 긴 변을 960px로 줄여 한다. 재리 PC 실측 1920×9964 이미지 1GB 아래, 글자 수 비슷 (v0.7.9 F1, F2)
+    return PaddleOCR(**MODEL_OPTIONS)
 
 
 def pieces(height: int) -> list[tuple[int, int]]:

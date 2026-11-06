@@ -92,3 +92,28 @@ def test_read_small_image_unchanged(monkeypatch):
 def test_read_empty_result(monkeypatch):
     monkeypatch.setattr(ocr, "_model", lambda: FakeModel([]))
     assert ocr.read(_png(800, 3000)) == ""
+
+
+# ---- 가벼운 모델 (v0.7.9 F1, F2) ----
+
+
+def test_model_uses_light_detection_and_size_limit(monkeypatch):
+    import sys
+    import types
+
+    made = []
+    fake = types.ModuleType("paddleocr")
+    fake.PaddleOCR = lambda **options: made.append(options) or "model"
+    monkeypatch.setitem(sys.modules, "paddleocr", fake)
+    ocr._model.cache_clear()
+    try:
+        assert ocr._model() == "model" and ocr._model() == "model"
+    finally:
+        ocr._model.cache_clear()
+
+    assert len(made) == 1  # 처음 한 번만 만든다
+    options = made[0]
+    assert options["text_detection_model_name"] == "PP-OCRv5_mobile_det"  # server 모델은 1MP당 약 5GB
+    assert options["text_recognition_model_name"] == "korean_PP-OCRv5_mobile_rec"
+    assert (options["text_det_limit_type"], options["text_det_limit_side_len"]) == ("max", 960)
+    assert options["lang"] == "korean" and options["enable_mkldnn"] is False  # 기존 설정 유지
