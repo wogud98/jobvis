@@ -117,6 +117,77 @@ def test_second_start_while_running_is_refused():
     )  # 끝나면 다시 실행 가능
 
 
+# ---- 앱이 꺼져 끊긴 작업 알림 (v0.7.7 F4, F5) ----
+
+
+def test_running_mark_exists_only_while_job_runs(running_mark):
+    release, seen = threading.Event(), []
+
+    def work(job):
+        seen.append(running_mark.read_text(encoding="utf-8"))
+        release.wait(5)
+        return reports.Summary("끝")
+
+    job = runner.start("collect", work)
+    try:
+        for _ in range(100):
+            if seen:
+                break
+            threading.Event().wait(0.05)
+        assert seen and seen[0].startswith("collect\n")
+        assert runner.interrupted() is None  # 이 앱에서 돌고 있으면 끊긴 것이 아님
+    finally:
+        release.set()
+    for _ in range(100):
+        if job.finished:
+            break
+        threading.Event().wait(0.05)
+    assert job.finished and not running_mark.exists()
+    assert runner.interrupted() is None
+
+
+def test_error_end_also_removes_mark(running_mark):
+    def work(job):
+        raise RuntimeError("실패")
+
+    assert runner.start("score", work, wait=True).error
+    assert not running_mark.exists() and runner.interrupted() is None  # 오류도 끝난 것 (F5)
+
+
+def test_mark_left_by_killed_app_is_told_once(running_mark):
+    running_mark.parent.mkdir(parents=True)
+    running_mark.write_text("collect\n10:11:40\n", encoding="utf-8")  # 앱이 죽어 지워지지 못한 표시
+
+    note = runner.interrupted()
+
+    assert "지난 수집 작업(10:11:40 시작)이 끝나지 않고 멈췄습니다" in note
+    assert "메모리" in note and "다시 실행" in note
+    assert not running_mark.exists() and runner.interrupted() is None  # 한 번만
+
+
+@pytest.mark.parametrize("content", ["", "이상한 값", "\xff"])
+def test_broken_mark_is_ignored(running_mark, content):
+    running_mark.parent.mkdir(parents=True)
+    running_mark.write_text(content, encoding="utf-8")
+    assert runner.interrupted() is None  # 줄이 모자라면 알리지 않음
+
+
+def test_unknown_kind_mark_still_told(running_mark):
+    running_mark.parent.mkdir(parents=True)
+    running_mark.write_text("other\n09:00:00\n", encoding="utf-8")
+    assert runner.interrupted().startswith("지난 작업(09:00:00 시작)이 끝나지 않고 멈췄습니다")
+
+
+def test_mark_write_failure_does_not_stop_job(monkeypatch, tmp_path):
+    blocker = tmp_path / "file"
+    blocker.write_text("")
+    monkeypatch.setattr(runner, "RUNNING", blocker / "running.txt")  # 폴더 자리에 파일이 있어 못 씀
+
+    job = runner.start("collect", lambda job: reports.Summary("끝"), wait=True)
+
+    assert job.result.headline == "끝" and runner.interrupted() is None
+
+
 def test_error_in_work_becomes_message_without_details():
     def work(job):
         raise KeyError("/home/me/service_account.json")

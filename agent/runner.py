@@ -9,6 +9,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 
 from agent import (
     codes,
@@ -52,6 +53,8 @@ class Job:
 
 _lock = threading.Lock()
 _job: Job | None = None
+# 실행 중 표시. 정상으로 끝나면 지운다. 앱이 강제 종료되면(메모리 부족 등) 남아 다음 화면이 알린다 (v0.7.7 F4)
+RUNNING = Path("data/running.txt")  # data/는 .gitignore와 Docker 볼륨에 들어 있다
 
 
 def current() -> Job | None:
@@ -61,6 +64,37 @@ def current() -> Job | None:
 
 def running() -> bool:
     return _job is not None and not _job.finished
+
+
+def _mark(job: Job) -> None:
+    try:
+        RUNNING.parent.mkdir(parents=True, exist_ok=True)
+        RUNNING.write_text(f"{job.kind}\n{job.started}\n", encoding="utf-8")
+    except OSError:
+        pass  # 표시를 못 남겨도 실행은 한다
+
+
+def _unmark() -> None:
+    try:
+        RUNNING.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def interrupted() -> str | None:
+    """지난 작업이 끝나지 못하고 앱이 꺼졌으면 알릴 문구. 한 번 알리면 표시를 지운다 (v0.7.7 F4, F5)."""
+    if running():
+        return None
+    try:
+        kind, started = RUNNING.read_text(encoding="utf-8").split("\n")[:2]
+    except (OSError, ValueError):
+        return None
+    _unmark()
+    name = " ".join(filter(None, ["지난", KINDS.get(kind), "작업"]))
+    return (
+        f"{name}({started} 시작)이 끝나지 않고 멈췄습니다. "
+        "메모리가 모자라 앱이 다시 켜졌을 수 있습니다. 그때까지 저장한 공고는 남아 있으니 다시 실행해 주세요."
+    )
 
 
 def error_text(error: Exception) -> str:
@@ -88,6 +122,7 @@ def start(kind: str, work: Callable[[Job], reports.Summary], *, wait: bool = Fal
             raise RunError(f"{_job.label}을 실행하는 중입니다. 끝난 뒤 다시 눌러 주세요.")
         job = Job(kind)
         _job = job
+        _mark(job)
 
     def target() -> None:
         try:
@@ -95,6 +130,7 @@ def start(kind: str, work: Callable[[Job], reports.Summary], *, wait: bool = Fal
         except Exception as e:  # 화면이 꺼지지 않게 모든 오류를 문구로 남긴다 (F13)
             job.error = error_text(e)
         finally:
+            _unmark()  # 오류로 끝나도 끝난 것이라 지운다. 프로세스가 죽을 때만 남는다 (F5)
             job.finished = True
 
     thread = threading.Thread(target=target, name=f"jobvis-{kind}", daemon=True)
